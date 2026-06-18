@@ -38,6 +38,8 @@ export default function FacilityChatPage() {
   const [troubleDesc, setTroubleDesc] = useState('')
   const [troublePriority, setTroublePriority] = useState<'low'|'medium'|'high'|'urgent'>('medium')
   const [activeTab, setActiveTab] = useState<'chat' | 'photos'>('chat')
+  const [inputText, setInputText] = useState('')
+  const [sending, setSending] = useState(false)
 
   useEffect(() => {
     const init = async () => {
@@ -74,7 +76,13 @@ export default function FacilityChatPage() {
           .order('created_at'),
       ])
 
-      setRecords((recRes.data as unknown as CleaningRecord[]) || [])
+      // 同じroom_idの重複レコードを除去（最新1件のみ残す）
+      const raw = (recRes.data as unknown as CleaningRecord[]) || []
+      const seen = new Map<string, CleaningRecord>()
+      for (const r of raw) {
+        if (!seen.has(r.room_id)) seen.set(r.room_id, r)
+      }
+      setRecords(Array.from(seen.values()))
       setMessages(msgRes.data || [])
       setLoading(false)
     }
@@ -155,6 +163,14 @@ export default function FacilityChatPage() {
     setTroubleDesc('')
   }
 
+  const sendMessage = async () => {
+    if (!inputText.trim() || sending) return
+    setSending(true)
+    await addMessage('note', inputText.trim())
+    setInputText('')
+    setSending(false)
+  }
+
   const formatTime = (iso: string) =>
     new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
 
@@ -202,21 +218,58 @@ export default function FacilityChatPage() {
             </div>
 
             {/* チャットメッセージ */}
-            {messages.map(msg => (
-              <div key={msg.id} className="flex justify-center">
-                <div className={`rounded-2xl px-3 py-2 text-sm max-w-[85%] text-center ${
-                  msg.type === 'status_update'
-                    ? msg.content.includes('完了') ? 'bg-green-500 text-white' : 'bg-yellow-400 text-white'
-                    : 'bg-white/90 text-gray-600'
-                }`}>
-                  <p>{msg.content}</p>
-                  <p className={`text-xs mt-0.5 ${
-                    msg.type === 'status_update' ? 'text-white/70' : 'text-gray-400'
-                  }`}>{formatTime(msg.created_at)}</p>
+            {messages.map(msg => {
+              const isNote = msg.type === 'note'
+              const isStatusUpdate = msg.type === 'status_update'
+              return (
+                <div key={msg.id} className={`flex ${isNote ? 'justify-end' : 'justify-center'}`}>
+                  {isNote ? (
+                    // 自分のメッセージ（右寄せ・緑）
+                    <div className="max-w-[75%]">
+                      <div className="bg-[#00b900] text-white rounded-2xl rounded-tr-sm px-4 py-2 text-sm">
+                        <p>{msg.content}</p>
+                      </div>
+                      <p className="text-xs text-white/60 text-right mt-0.5">{formatTime(msg.created_at)}</p>
+                    </div>
+                  ) : (
+                    // システムメッセージ（中央）
+                    <div className={`rounded-2xl px-3 py-2 text-sm max-w-[85%] text-center ${
+                      isStatusUpdate
+                        ? msg.content.includes('完了') ? 'bg-green-500 text-white' : 'bg-yellow-400 text-white'
+                        : 'bg-white/90 text-gray-600'
+                    }`}>
+                      <p>{msg.content}</p>
+                      <p className={`text-xs mt-0.5 ${isStatusUpdate ? 'text-white/70' : 'text-gray-400'}`}>
+                        {formatTime(msg.created_at)}
+                      </p>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
             <div ref={bottomRef} />
+          </div>
+
+          {/* テキスト入力欄（LINE風） */}
+          <div className="bg-[#f0f0f0] border-t px-2 py-2 flex gap-2 items-end">
+            <textarea
+              value={inputText}
+              onChange={e => setInputText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
+              placeholder="メッセージを入力..."
+              rows={1}
+              className="flex-1 bg-white rounded-2xl px-4 py-2 text-sm resize-none outline-none max-h-24"
+              style={{ minHeight: '36px' }}
+            />
+            <button
+              onClick={sendMessage}
+              disabled={!inputText.trim() || sending}
+              className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                inputText.trim() ? 'bg-[#00b900] text-white' : 'bg-gray-300 text-gray-400'
+              }`}
+            >
+              ▶
+            </button>
           </div>
 
           {/* 下部アクションエリア（LINE風） */}
