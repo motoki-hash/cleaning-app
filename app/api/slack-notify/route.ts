@@ -1,20 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
-  const { status, facilityName, roomNumber, area } = await req.json()
+  const { status, facilityName, roomNumber, area, requestType, requestTime, message } = await req.json()
 
   const webhookUrl = process.env.SLACK_WEBHOOK_URL
   if (!webhookUrl) return NextResponse.json({ error: 'no webhook' }, { status: 500 })
 
-  const statusLabel: Record<string, string> = {
-    in_progress: '🧹 清掃開始',
-    completed: '✅ 清掃完了',
+  let text = ''
+
+  if (status === 'request') {
+    const timeText = requestTime ? `（${requestTime}）` : ''
+    text = `📨 ${requestType}依頼${timeText}\n📍 ${area} / ${facilityName} ${roomNumber}号室`
+    if (message) text += `\n💬 ${message}`
+  } else {
+    const statusLabel: Record<string, string> = {
+      in_progress: '🧹 清掃開始',
+      completed: '✅ 清掃完了',
+    }
+    const label = statusLabel[status]
+    if (!label) return NextResponse.json({ ok: true })
+    text = `${label}\n📍 ${area} / ${facilityName} ${roomNumber}号室`
   }
-
-  const label = statusLabel[status]
-  if (!label) return NextResponse.json({ ok: true })
-
-  const text = `${label}\n📍 ${area} / ${facilityName} ${roomNumber}号室`
 
   const res = await fetch(webhookUrl, {
     method: 'POST',

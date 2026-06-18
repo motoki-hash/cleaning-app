@@ -257,6 +257,19 @@ export default function FacilityChatPage() {
                 )
               }
 
+              // アーリー/レイト依頼メッセージ（回答ボタン付き）
+              if (msg.type === 'early_late_request') {
+                return (
+                  <div key={msg.id} className="flex justify-center">
+                    <div className="bg-white rounded-2xl px-4 py-3 text-sm max-w-[90%] shadow-sm border border-blue-200">
+                      <p className="text-blue-700 font-medium whitespace-pre-wrap">{msg.content}</p>
+                      <p className="text-xs text-gray-400 mt-1">{formatTime(msg.created_at)}</p>
+                      <RequestReplyButtons messageId={msg.id} facilityId={facilityId} />
+                    </div>
+                  </div>
+                )
+              }
+
               return (
                 <div key={msg.id} className="flex justify-center">
                   <div className={`rounded-2xl px-3 py-2 text-sm max-w-[85%] text-center ${
@@ -404,6 +417,61 @@ export default function FacilityChatPage() {
       ) : (
         <PhotosTab records={records} />
       )}
+    </div>
+  )
+}
+
+function RequestReplyButtons({ messageId, facilityId }: { messageId: string; facilityId: string }) {
+  const [status, setStatus] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const reply = async (answer: 'accepted' | 'declined' | 'hold') => {
+    setSaving(true)
+    // chat_messagesからearly_late_requestを探して更新
+    const { data: msg } = await supabase
+      .from('chat_messages').select('cleaning_record_id, content').eq('id', messageId).single()
+
+    // early_late_requestsテーブルを更新（facility_idとcontentで特定）
+    const { data: req } = await supabase
+      .from('early_late_requests')
+      .select('id')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (req) {
+      await supabase.from('early_late_requests').update({
+        status: answer,
+        responded_at: new Date().toISOString(),
+      }).eq('id', req.id)
+    }
+
+    const label = answer === 'accepted' ? '✅ 受けます' : answer === 'declined' ? '❌ 受けれません' : '⏸ 保留します'
+    await supabase.from('chat_messages').insert({
+      facility_id: facilityId,
+      type: 'status_update',
+      content: label,
+      sender_id: null,
+      sender_name: null,
+    })
+
+    setStatus(answer)
+    setSaving(false)
+  }
+
+  if (status) {
+    const label = status === 'accepted' ? '✅ 受けます' : status === 'declined' ? '❌ 受けれません' : '⏸ 保留'
+    return <p className="text-xs font-medium mt-2 text-gray-600">回答済み: {label}</p>
+  }
+
+  return (
+    <div className="flex gap-2 mt-2">
+      <button onClick={() => reply('accepted')} disabled={saving}
+        className="flex-1 bg-green-500 text-white text-xs py-1.5 rounded-lg font-medium">受ける</button>
+      <button onClick={() => reply('declined')} disabled={saving}
+        className="flex-1 bg-red-500 text-white text-xs py-1.5 rounded-lg font-medium">受けれない</button>
+      <button onClick={() => reply('hold')} disabled={saving}
+        className="flex-1 bg-gray-400 text-white text-xs py-1.5 rounded-lg font-medium">保留</button>
     </div>
   )
 }
