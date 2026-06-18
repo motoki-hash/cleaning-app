@@ -19,6 +19,8 @@ type ChatMessage = {
   content: string
   created_at: string
   cleaning_record_id: string | null
+  sender_id: string | null
+  sender_name: string | null
 }
 
 export default function FacilityChatPage() {
@@ -40,15 +42,20 @@ export default function FacilityChatPage() {
   const [activeTab, setActiveTab] = useState<'chat' | 'photos'>('chat')
   const [inputText, setInputText] = useState('')
   const [sending, setSending] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [currentUserName, setCurrentUserName] = useState<string>('清掃員')
 
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
 
+      setCurrentUserId(user.id)
+
       const { data: cleaner } = await supabase
-        .from('cleaners').select('id').eq('user_id', user.id).single()
+        .from('cleaners').select('id, name').eq('user_id', user.id).single()
       if (!cleaner) { setLoading(false); return }
+      if (cleaner.name) setCurrentUserName(cleaner.name)
 
       const today = new Date().toISOString().split('T')[0]
 
@@ -99,6 +106,8 @@ export default function FacilityChatPage() {
       cleaning_record_id: recordId || null,
       type,
       content,
+      sender_id: type === 'note' ? currentUserId : null,
+      sender_name: type === 'note' ? currentUserName : null,
     }).select().single()
     if (data) setMessages(prev => [...prev, data as ChatMessage])
   }
@@ -221,29 +230,45 @@ export default function FacilityChatPage() {
             {messages.map(msg => {
               const isNote = msg.type === 'note'
               const isStatusUpdate = msg.type === 'status_update'
-              return (
-                <div key={msg.id} className={`flex ${isNote ? 'justify-end' : 'justify-center'}`}>
-                  {isNote ? (
-                    // 自分のメッセージ（右寄せ・緑）
-                    <div className="max-w-[75%]">
-                      <div className="bg-[#00b900] text-white rounded-2xl rounded-tr-sm px-4 py-2 text-sm">
+              const isMyMessage = isNote && msg.sender_id === currentUserId
+
+              if (isNote) {
+                return (
+                  <div key={msg.id} className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'} items-end gap-2`}>
+                    {!isMyMessage && (
+                      <div className="w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs flex-shrink-0">
+                        {(msg.sender_name || '?').slice(0, 1)}
+                      </div>
+                    )}
+                    <div className={`max-w-[70%] ${isMyMessage ? 'items-end' : 'items-start'} flex flex-col`}>
+                      {!isMyMessage && (
+                        <p className="text-xs text-gray-500 mb-0.5 ml-1">{msg.sender_name || '清掃員'}</p>
+                      )}
+                      <div className={`rounded-2xl px-4 py-2 text-sm ${
+                        isMyMessage ? 'bg-[#00b900] text-white rounded-tr-sm' : 'bg-white text-gray-800 rounded-tl-sm'
+                      }`}>
                         <p>{msg.content}</p>
                       </div>
-                      <p className="text-xs text-white/60 text-right mt-0.5">{formatTime(msg.created_at)}</p>
-                    </div>
-                  ) : (
-                    // システムメッセージ（中央）
-                    <div className={`rounded-2xl px-3 py-2 text-sm max-w-[85%] text-center ${
-                      isStatusUpdate
-                        ? msg.content.includes('完了') ? 'bg-green-500 text-white' : 'bg-yellow-400 text-white'
-                        : 'bg-white/90 text-gray-600'
-                    }`}>
-                      <p>{msg.content}</p>
-                      <p className={`text-xs mt-0.5 ${isStatusUpdate ? 'text-white/70' : 'text-gray-400'}`}>
+                      <p className={`text-xs mt-0.5 ${isMyMessage ? 'text-white/60 text-right' : 'text-gray-400 ml-1'}`}>
                         {formatTime(msg.created_at)}
                       </p>
                     </div>
-                  )}
+                  </div>
+                )
+              }
+
+              return (
+                <div key={msg.id} className="flex justify-center">
+                  <div className={`rounded-2xl px-3 py-2 text-sm max-w-[85%] text-center ${
+                    isStatusUpdate
+                      ? msg.content.includes('完了') ? 'bg-green-500 text-white' : 'bg-yellow-400 text-white'
+                      : 'bg-white/90 text-gray-600'
+                  }`}>
+                    <p>{msg.content}</p>
+                    <p className={`text-xs mt-0.5 ${isStatusUpdate ? 'text-white/70' : 'text-gray-400'}`}>
+                      {formatTime(msg.created_at)}
+                    </p>
+                  </div>
                 </div>
               )
             })}
