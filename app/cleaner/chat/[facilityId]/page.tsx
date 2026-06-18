@@ -22,6 +22,13 @@ type ChatMessage = {
   sender_id: string | null
   sender_name: string | null
 }
+type EarlyLateRequest = {
+  id: string
+  type: string
+  requested_time: string | null
+  message: string | null
+  status: string
+}
 
 export default function FacilityChatPage() {
   const router = useRouter()
@@ -44,6 +51,8 @@ export default function FacilityChatPage() {
   const [sending, setSending] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentUserName, setCurrentUserName] = useState<string>('清掃員')
+  const [pendingRequests, setPendingRequests] = useState<EarlyLateRequest[]>([])
+  const requestRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
     const init = async () => {
@@ -69,8 +78,8 @@ export default function FacilityChatPage() {
       const roomIds = (roomsRes.data || []).map(r => r.id)
       if (roomIds.length === 0) { setLoading(false); return }
 
-      // 部屋IDで清掃レコードとチャットを取得
-      const [recRes, msgRes] = await Promise.all([
+      // 部屋IDで清掃レコード・チャット・依頼を取得
+      const [recRes, msgRes, reqRes] = await Promise.all([
         supabase.from('cleaning_records')
           .select('id, status, started_at, completed_at, room_id, rooms(id, room_number)')
           .eq('cleaner_id', cleaner.id)
@@ -81,6 +90,10 @@ export default function FacilityChatPage() {
           .select('*')
           .eq('facility_id', facilityId)
           .order('created_at'),
+        supabase.from('early_late_requests')
+          .select('id, type, requested_time, message, status')
+          .in('room_id', roomIds)
+          .eq('status', 'pending'),
       ])
 
       // 同じroom_idの重複レコードを除去（最新1件のみ残す）
@@ -91,6 +104,7 @@ export default function FacilityChatPage() {
       }
       setRecords(Array.from(seen.values()))
       setMessages(msgRes.data || [])
+      setPendingRequests((reqRes.data as EarlyLateRequest[]) || [])
       setLoading(false)
     }
     init()
@@ -210,6 +224,30 @@ export default function FacilityChatPage() {
         </div>
       </header>
 
+      {/* 未回答の依頼バナー */}
+      {pendingRequests.length > 0 && (
+        <div
+          onClick={() => {
+            const firstRequestMsg = messages.find(m => m.type === 'early_late_request')
+            if (firstRequestMsg) {
+              requestRefs.current[firstRequestMsg.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }
+          }}
+          className="bg-orange-500 text-white px-4 py-2 flex items-center gap-2 cursor-pointer active:bg-orange-600"
+        >
+          <span className="text-sm">🔔</span>
+          <div className="flex-1">
+            <p className="text-xs font-bold">
+              未回答の依頼が {pendingRequests.length}件あります
+            </p>
+            <p className="text-xs opacity-80">
+              {pendingRequests.map(r => r.type === 'early_checkin' ? 'アーリーチェックイン' : 'レイトチェックアウト').join('・')}
+            </p>
+          </div>
+          <span className="text-white/70 text-sm">›</span>
+        </div>
+      )}
+
       {activeTab === 'chat' ? (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* チャットエリア（スクロール可能） */}
@@ -260,11 +298,13 @@ export default function FacilityChatPage() {
               // アーリー/レイト依頼メッセージ（回答ボタン付き）
               if (msg.type === 'early_late_request') {
                 return (
-                  <div key={msg.id} className="flex justify-center">
-                    <div className="bg-white rounded-2xl px-4 py-3 text-sm max-w-[90%] shadow-sm border border-blue-200">
+                  <div key={msg.id} className="flex justify-center" ref={el => { requestRefs.current[msg.id] = el }}>
+                    <div className="bg-white rounded-2xl px-4 py-3 text-sm max-w-[90%] shadow-sm border border-orange-300">
+                      <p className="text-orange-600 font-bold text-xs mb-1">🔔 依頼</p>
                       <p className="text-blue-700 font-medium whitespace-pre-wrap">{msg.content}</p>
                       <p className="text-xs text-gray-400 mt-1">{formatTime(msg.created_at)}</p>
-                      <RequestReplyButtons messageId={msg.id} facilityId={facilityId} />
+                      <RequestReplyButtons messageId={msg.id} facilityId={facilityId}
+                        onReplied={() => setPendingRequests(prev => prev.slice(1))} />
                     </div>
                   </div>
                 )
@@ -421,7 +461,7 @@ export default function FacilityChatPage() {
   )
 }
 
-function RequestReplyButtons({ messageId, facilityId }: { messageId: string; facilityId: string }) {
+function RequestReplyButtons({ messageId, facilityId, onReplied }: { messageId: string; facilityId: string; onReplied?: () => void }) {
   const [status, setStatus] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -457,6 +497,7 @@ function RequestReplyButtons({ messageId, facilityId }: { messageId: string; fac
 
     setStatus(answer)
     setSaving(false)
+    onReplied?.()
   }
 
   if (status) {
