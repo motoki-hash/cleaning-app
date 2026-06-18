@@ -147,6 +147,17 @@ export default function AdminPage() {
         sender_name: '管理者',
       })
 
+      // 清掃員全員にプッシュ通知
+      fetch('/api/push-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `📨 ${typeLabel}依頼`,
+          body: `${facility?.name} ${room?.room_number}号室${reqDate && reqTime ? `（${reqDate} ${reqTime}）` : ''}`,
+          url: `/cleaner`,
+        }),
+      })
+
       // Slack通知
       fetch('/api/slack-notify', {
         method: 'POST',

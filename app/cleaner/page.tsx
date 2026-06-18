@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { usePushNotification } from '@/lib/usePushNotification'
 
 type Facility = { id: string; name: string; area: string }
 type CleaningRecord = {
@@ -16,11 +17,15 @@ export default function CleanerHome() {
   const [facilities, setFacilities] = useState<Facility[]>([])
   const [records, setRecords] = useState<CleaningRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  usePushNotification(currentUserId)
 
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
+      setCurrentUserId(user.id)
 
       const { data: cleaner } = await supabase
         .from('cleaners').select('id').eq('user_id', user.id).single()
