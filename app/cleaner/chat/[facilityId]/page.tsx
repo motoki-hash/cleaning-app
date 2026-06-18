@@ -224,9 +224,10 @@ export default function FacilityChatPage() {
         </div>
       </header>
 
-      {/* 未回答の依頼バナー */}
+      {/* 未回答の依頼バナー（スクロールしても固定） */}
       {pendingRequests.length > 0 && (
         <div
+          style={{ position: 'sticky', top: '52px', zIndex: 20 }}
           onClick={() => {
             const firstRequestMsg = messages.find(m => m.type === 'early_late_request')
             if (firstRequestMsg) {

@@ -58,6 +58,7 @@ export default function AdminPage() {
   const [reqFacility, setReqFacility] = useState('')
   const [reqRoom, setReqRoom] = useState('')
   const [reqType, setReqType] = useState<'early_checkin' | 'late_checkout'>('early_checkin')
+  const [reqDate, setReqDate] = useState(new Date().toISOString().split('T')[0])
   const [reqTime, setReqTime] = useState('')
   const [reqMessage, setReqMessage] = useState('')
   const [reqSaving, setReqSaving] = useState(false)
@@ -125,7 +126,7 @@ export default function AdminPage() {
     const { data } = await supabase.from('early_late_requests').insert({
       room_id: reqRoom,
       type: reqType,
-      requested_time: reqTime || null,
+      requested_time: reqDate && reqTime ? `${reqDate} ${reqTime}` : reqDate || reqTime || null,
       message: reqMessage || null,
       status: 'pending',
     }).select('id').single()
@@ -133,7 +134,8 @@ export default function AdminPage() {
     if (data) {
       // チャットメッセージとして施設に通知
       const typeLabel = reqType === 'early_checkin' ? 'アーリーチェックイン' : 'レイトチェックアウト'
-      const timeText = reqTime ? `（${reqTime}）` : ''
+      const dateTimeText = reqDate && reqTime ? `（${reqDate} ${reqTime}）` : reqDate ? `（${reqDate}）` : reqTime ? `（${reqTime}）` : ''
+      const timeText = dateTimeText
       const content = `📨 ${typeLabel}依頼${timeText}：${room?.room_number}号室${reqMessage ? '\n' + reqMessage : ''}`
 
       await supabase.from('chat_messages').insert({
@@ -155,7 +157,7 @@ export default function AdminPage() {
           roomNumber: room?.room_number || '',
           area: facility?.area || '',
           requestType: typeLabel,
-          requestTime: reqTime,
+          requestTime: reqDate && reqTime ? `${reqDate} ${reqTime}` : reqDate || reqTime,
           message: reqMessage,
         }),
       })
@@ -172,6 +174,7 @@ export default function AdminPage() {
     setReqSaving(false)
     setShowRequestForm(false)
     setReqRoom('')
+    setReqDate(new Date().toISOString().split('T')[0])
     setReqTime('')
     setReqMessage('')
     setTab('requests')
@@ -376,9 +379,18 @@ export default function AdminPage() {
                   <option value="">号室を選択</option>
                   {reqFilteredRooms.map(r => <option key={r.id} value={r.id}>{r.room_number}号室</option>)}
                 </select>
-                <input type="time" value={reqTime} onChange={e => setReqTime(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  placeholder="希望時間（任意）" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">希望日付</label>
+                    <input type="date" value={reqDate} onChange={e => setReqDate(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">希望時間</label>
+                    <input type="time" value={reqTime} onChange={e => setReqTime(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                </div>
                 <textarea value={reqMessage} onChange={e => setReqMessage(e.target.value)}
                   placeholder="メッセージ（任意）"
                   className="w-full border rounded-lg px-3 py-2 text-sm h-20 resize-none" />
