@@ -4,14 +4,15 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
+type Room = { id: string; room_number: string }
 type CleaningRecord = {
   id: string
   status: string
   started_at: string | null
   completed_at: string | null
-  rooms: { id: string; room_number: string } | null
+  room_id: string
+  rooms: Room | null
 }
-
 type ChatMessage = {
   id: string
   type: string
@@ -29,14 +30,14 @@ export default function FacilityChatPage() {
   const [facility, setFacility] = useState<{ name: string; area: string } | null>(null)
   const [records, setRecords] = useState<CleaningRecord[]>([])
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [cleanerId, setCleanerId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState<string | null>(null)
+  const [selectedRecord, setSelectedRecord] = useState<string | null>(null)
   const [showTroubleForm, setShowTroubleForm] = useState<string | null>(null)
   const [troubleTitle, setTroubleTitle] = useState('')
   const [troubleDesc, setTroubleDesc] = useState('')
   const [troublePriority, setTroublePriority] = useState<'low'|'medium'|'high'|'urgent'>('medium')
-  const [activeTab, setActiveTab] = useState<'tasks' | 'photos'>('tasks')
+  const [activeTab, setActiveTab] = useState<'chat' | 'photos'>('chat')
 
   useEffect(() => {
     const init = async () => {
@@ -46,18 +47,26 @@ export default function FacilityChatPage() {
       const { data: cleaner } = await supabase
         .from('cleaners').select('id').eq('user_id', user.id).single()
       if (!cleaner) { setLoading(false); return }
-      setCleanerId(cleaner.id)
 
       const today = new Date().toISOString().split('T')[0]
-      const [facRes, recRes, msgRes] = await Promise.all([
+
+      // まず施設情報と部屋IDを取得
+      const [facRes, roomsRes] = await Promise.all([
         supabase.from('facilities').select('name, area').eq('id', facilityId).single(),
+        supabase.from('rooms').select('id, room_number').eq('facility_id', facilityId),
+      ])
+      setFacility(facRes.data)
+
+      const roomIds = (roomsRes.data || []).map(r => r.id)
+      if (roomIds.length === 0) { setLoading(false); return }
+
+      // 部屋IDで清掃レコードとチャットを取得
+      const [recRes, msgRes] = await Promise.all([
         supabase.from('cleaning_records')
-          .select('id, status, started_at, completed_at, rooms(id, room_number)')
+          .select('id, status, started_at, completed_at, room_id, rooms(id, room_number)')
           .eq('cleaner_id', cleaner.id)
           .eq('scheduled_date', today)
-          .in('room_id',
-            (await supabase.from('rooms').select('id').eq('facility_id', facilityId)).data?.map(r => r.id) || []
-          )
+          .in('room_id', roomIds)
           .order('created_at'),
         supabase.from('chat_messages')
           .select('*')
@@ -65,7 +74,6 @@ export default function FacilityChatPage() {
           .order('created_at'),
       ])
 
-      setFacility(facRes.data)
       setRecords((recRes.data as unknown as CleaningRecord[]) || [])
       setMessages(msgRes.data || [])
       setLoading(false)
@@ -74,8 +82,8 @@ export default function FacilityChatPage() {
   }, [facilityId, router])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, records])
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+  }, [messages])
 
   const addMessage = async (type: string, content: string, recordId?: string) => {
     const { data } = await supabase.from('chat_messages').insert({
@@ -87,277 +95,280 @@ export default function FacilityChatPage() {
     if (data) setMessages(prev => [...prev, data as ChatMessage])
   }
 
-  const updateStatus = async (recordId: string, status: string) => {
+  const updateStatus = async (recordId: string, newStatus: string) => {
     const now = new Date().toISOString()
-    const updates: Record<string, string> = { status }
-    if (status === 'in_progress') updates.started_at = now
-    if (status === 'completed') updates.completed_at = now
+    const updates: Record<string, string> = { status: newStatus }
+    if (newStatus === 'in_progress') updates.started_at = now
+    if (newStatus === 'completed') updates.completed_at = now
 
     await supabase.from('cleaning_records').update(updates).eq('id', recordId)
     const record = records.find(r => r.id === recordId)
     setRecords(prev => prev.map(r => r.id === recordId ? { ...r, ...updates } : r))
+    setSelectedRecord(null)
 
-    const roomNumber = record?.rooms?.room_number || ''
-    const statusText = status === 'in_progress' ? `🧹 ${roomNumber}号室 清掃開始` : `✅ ${roomNumber}号室 清掃完了`
-    await addMessage('status_update', statusText, recordId)
+    const room = record?.rooms?.room_number || ''
+    const content = newStatus === 'in_progress'
+      ? `🧹 ${room}号室の清掃を開始しました`
+      : `✅ ${room}号室の清掃が完了しました`
+    await addMessage('status_update', content, recordId)
 
-    if (record?.rooms) {
-      fetch('/api/slack-notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status,
-          facilityName: facility?.name || '',
-          roomNumber,
-          area: facility?.area || '',
-        }),
-      })
-    }
+    fetch('/api/slack-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: newStatus,
+        facilityName: facility?.name || '',
+        roomNumber: room,
+        area: facility?.area || '',
+      }),
+    })
   }
 
   const uploadPhoto = async (recordId: string, file: File, type: 'before' | 'after' | 'issue') => {
     setUploading(`${recordId}-${type}`)
     const ext = file.name.split('.').pop()
     const path = `${recordId}/${type}-${Date.now()}.${ext}`
-    const { error: uploadError } = await supabase.storage.from('cleaning-photos').upload(path, file)
-    if (!uploadError) {
+    const { error } = await supabase.storage.from('cleaning-photos').upload(path, file)
+    if (!error) {
       const { data: { publicUrl } } = supabase.storage.from('cleaning-photos').getPublicUrl(path)
       await supabase.from('cleaning_photos').insert({ cleaning_record_id: recordId, photo_url: publicUrl, photo_type: type })
-      const record = records.find(r => r.id === recordId)
+      const room = records.find(r => r.id === recordId)?.rooms?.room_number
       const typeLabel = type === 'before' ? '清掃前' : type === 'after' ? '清掃後' : '問題'
-      await addMessage('system', `📷 ${record?.rooms?.room_number}号室 ${typeLabel}写真をアップロードしました`, recordId)
+      await addMessage('system', `📷 ${room}号室の${typeLabel}写真を追加しました`, recordId)
     }
     setUploading(null)
   }
 
-  const submitTrouble = async (recordId: string, roomId: string) => {
+  const submitTrouble = async (recordId: string) => {
+    if (!troubleTitle) return
+    const record = records.find(r => r.id === recordId)
     await supabase.from('trouble_reports').insert({
-      room_id: roomId,
+      room_id: record?.room_id,
       cleaning_record_id: recordId,
       title: troubleTitle,
       description: troubleDesc,
       priority: troublePriority,
     })
-    const record = records.find(r => r.id === recordId)
-    await addMessage('system', `⚠️ ${record?.rooms?.room_number}号室 トラブル報告：${troubleTitle}`, recordId)
+    await addMessage('system', `⚠️ ${record?.rooms?.room_number}号室 トラブル報告「${troubleTitle}」`, recordId)
     setShowTroubleForm(null)
     setTroubleTitle('')
     setTroubleDesc('')
   }
 
-  const statusLabel: Record<string, string> = {
-    scheduled: '未開始', in_progress: '清掃中', completed: '完了', cancelled: 'キャンセル'
-  }
-  const statusColor: Record<string, string> = {
-    scheduled: 'bg-gray-100 text-gray-600',
-    in_progress: 'bg-yellow-100 text-yellow-700',
-    completed: 'bg-green-100 text-green-700',
-    cancelled: 'bg-red-100 text-red-600',
-  }
+  const formatTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
 
-  const formatTime = (iso: string) => new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+  const pendingRooms = records.filter(r => r.status === 'scheduled' || r.status === 'in_progress')
+  const completedCount = records.filter(r => r.status === 'completed').length
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">読み込み中...</div>
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* ヘッダー */}
-      <header className="bg-blue-600 text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
-        <button onClick={() => router.push('/cleaner')} className="text-white text-xl">‹</button>
+    <div className="min-h-screen bg-[#b2c9d7] flex flex-col">
+      {/* ヘッダー（LINE風） */}
+      <header className="bg-[#00b900] text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+        <button onClick={() => router.push('/cleaner')} className="text-white text-2xl leading-none">‹</button>
         <div className="flex-1 min-w-0">
-          <p className="font-bold truncate">{facility?.name}</p>
-          <p className="text-xs text-blue-200">{facility?.area} · {records.length}部屋</p>
+          <p className="font-bold text-sm truncate">{facility?.name}</p>
+          <p className="text-xs opacity-80">{completedCount}/{records.length}部屋完了</p>
         </div>
-        <div className="text-right text-xs text-blue-200">
-          <p>{records.filter(r => r.status === 'completed').length}/{records.length} 完了</p>
+        <div className="flex gap-1">
+          {(['chat', 'photos'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`text-xs px-2 py-1 rounded ${activeTab === tab ? 'bg-white text-[#00b900] font-medium' : 'text-white/80'}`}
+            >
+              {tab === 'chat' ? '清掃' : '写真'}
+            </button>
+          ))}
         </div>
       </header>
 
-      {/* タブ */}
-      <div className="flex bg-white border-b">
-        {(['tasks', 'photos'] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2.5 text-sm font-medium ${activeTab === tab ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}
-          >
-            {tab === 'tasks' ? '清掃タスク' : '写真・報告'}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === 'tasks' && (
-        <div className="flex-1 flex flex-col">
-          {/* チャット形式のタイムライン */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-2 pb-4">
-            {/* 今日のスケジュール（システムメッセージ） */}
+      {activeTab === 'chat' ? (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* チャットエリア（スクロール可能） */}
+          <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
+            {/* 最初のシステムメッセージ */}
             <div className="flex justify-center">
-              <span className="text-xs text-gray-400 bg-gray-200 px-3 py-1 rounded-full">
-                {new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}
+              <span className="text-xs text-white bg-black/20 px-3 py-1 rounded-full">
+                {new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
               </span>
             </div>
             <div className="flex justify-center">
-              <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-xs text-blue-700 max-w-xs text-center">
-                📋 本日の清掃：{records.length}部屋
+              <div className="bg-white/90 rounded-2xl px-4 py-2 text-xs text-gray-600 text-center max-w-[280px]">
+                📋 本日 {records.length}部屋の清掃が割り当てられています
               </div>
             </div>
 
             {/* チャットメッセージ */}
             {messages.map(msg => (
               <div key={msg.id} className="flex justify-center">
-                <div className={`rounded-xl px-3 py-1.5 text-xs max-w-xs text-center ${
-                  msg.type === 'status_update' ? 'bg-green-50 border border-green-200 text-green-700' :
-                  msg.type === 'system' ? 'bg-gray-100 text-gray-600' :
-                  'bg-blue-50 text-blue-700'
+                <div className={`rounded-2xl px-3 py-2 text-sm max-w-[85%] text-center ${
+                  msg.type === 'status_update'
+                    ? msg.content.includes('完了') ? 'bg-green-500 text-white' : 'bg-yellow-400 text-white'
+                    : 'bg-white/90 text-gray-600'
                 }`}>
-                  {msg.content}
-                  <span className="block text-gray-400 mt-0.5">{formatTime(msg.created_at)}</span>
+                  <p>{msg.content}</p>
+                  <p className={`text-xs mt-0.5 ${
+                    msg.type === 'status_update' ? 'text-white/70' : 'text-gray-400'
+                  }`}>{formatTime(msg.created_at)}</p>
                 </div>
               </div>
             ))}
             <div ref={bottomRef} />
           </div>
 
-          {/* タスクカード */}
-          <div className="border-t bg-white">
-            <div className="p-3 space-y-2 max-h-[60vh] overflow-y-auto">
-              {records.map(record => (
-                <div key={record.id} className="border rounded-xl p-3 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-gray-800">{record.rooms?.room_number}号室</p>
-                      {record.started_at && (
-                        <p className="text-xs text-gray-400">開始 {formatTime(record.started_at)}</p>
-                      )}
-                      {record.completed_at && (
-                        <p className="text-xs text-gray-400">完了 {formatTime(record.completed_at)}</p>
-                      )}
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[record.status]}`}>
-                      {statusLabel[record.status]}
-                    </span>
-                  </div>
+          {/* 下部アクションエリア（LINE風） */}
+          <div className="bg-white border-t safe-area-bottom">
+            {/* 未完了の部屋リスト */}
+            {pendingRooms.length > 0 ? (
+              <div className="px-3 pt-3 pb-2">
+                <p className="text-xs text-gray-400 mb-2">部屋を選択してアクションを実行</p>
+                <div className="flex flex-wrap gap-2">
+                  {pendingRooms.map(record => (
+                    <button
+                      key={record.id}
+                      onClick={() => setSelectedRecord(selectedRecord === record.id ? null : record.id)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                        selectedRecord === record.id
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : record.status === 'in_progress'
+                          ? 'bg-yellow-50 text-yellow-700 border-yellow-300'
+                          : 'bg-gray-50 text-gray-700 border-gray-300'
+                      }`}
+                    >
+                      {record.rooms?.room_number}号室
+                      {record.status === 'in_progress' && ' 🧹'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="px-4 py-3 text-center text-sm text-green-600 font-medium">
+                🎉 全部屋の清掃が完了しました！
+              </div>
+            )}
 
+            {/* 選択した部屋のアクション */}
+            {selectedRecord && (() => {
+              const record = records.find(r => r.id === selectedRecord)
+              if (!record) return null
+              return (
+                <div className="px-3 pb-3 border-t mt-2 pt-2 space-y-2">
+                  <p className="text-xs text-gray-500 font-medium">{record.rooms?.room_number}号室</p>
                   <div className="flex gap-2">
                     {record.status === 'scheduled' && (
                       <button onClick={() => updateStatus(record.id, 'in_progress')}
-                        className="flex-1 bg-yellow-500 text-white text-sm py-2 rounded-lg font-medium">
-                        清掃開始
+                        className="flex-1 bg-yellow-500 text-white py-2.5 rounded-xl text-sm font-medium">
+                        🧹 清掃開始
                       </button>
                     )}
                     {record.status === 'in_progress' && (
                       <button onClick={() => updateStatus(record.id, 'completed')}
-                        className="flex-1 bg-green-500 text-white text-sm py-2 rounded-lg font-medium">
-                        完了
+                        className="flex-1 bg-green-500 text-white py-2.5 rounded-xl text-sm font-medium">
+                        ✅ 完了
                       </button>
                     )}
                     <button
                       onClick={() => setShowTroubleForm(showTroubleForm === record.id ? null : record.id)}
-                      className="text-sm text-red-500 border border-red-300 px-3 py-2 rounded-lg">
+                      className="bg-red-50 text-red-500 border border-red-200 px-3 py-2.5 rounded-xl text-sm">
                       報告
                     </button>
                   </div>
 
+                  {/* 写真アップロード */}
                   {record.status !== 'scheduled' && (
                     <div className="flex gap-2">
                       {(['before', 'after', 'issue'] as const).map(type => (
                         <label key={type} className="flex-1 cursor-pointer">
                           <input type="file" accept="image/*" capture="environment" className="hidden"
                             onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(record.id, f, type) }} />
-                          <span className={`block text-center text-xs py-1.5 rounded-lg border ${
+                          <span className={`block text-center text-xs py-2 rounded-xl border ${
                             uploading === `${record.id}-${type}` ? 'bg-gray-100 text-gray-400' : 'border-gray-300 text-gray-600'
                           }`}>
-                            {uploading === `${record.id}-${type}` ? '...' : type === 'before' ? '清掃前' : type === 'after' ? '清掃後' : '問題'}
+                            {uploading === `${record.id}-${type}` ? '...' :
+                              type === 'before' ? '📷清掃前' : type === 'after' ? '📷清掃後' : '📷問題'}
                           </span>
                         </label>
                       ))}
                     </div>
                   )}
 
+                  {/* トラブル報告フォーム */}
                   {showTroubleForm === record.id && (
                     <div className="space-y-2 bg-red-50 p-3 rounded-xl">
                       <input type="text" placeholder="タイトル" value={troubleTitle}
                         onChange={e => setTroubleTitle(e.target.value)}
-                        className="w-full border rounded px-3 py-2 text-sm" />
+                        className="w-full border rounded-lg px-3 py-2 text-sm" />
                       <textarea placeholder="詳細..." value={troubleDesc}
                         onChange={e => setTroubleDesc(e.target.value)}
-                        className="w-full border rounded px-3 py-2 text-sm h-16" />
+                        className="w-full border rounded-lg px-3 py-2 text-sm h-16" />
                       <div className="flex gap-2">
                         <select value={troublePriority}
                           onChange={e => setTroublePriority(e.target.value as 'low'|'medium'|'high'|'urgent')}
-                          className="flex-1 border rounded px-2 py-2 text-sm">
+                          className="flex-1 border rounded-lg px-2 py-2 text-sm">
                           <option value="low">低</option>
                           <option value="medium">中</option>
                           <option value="high">高</option>
                           <option value="urgent">緊急</option>
                         </select>
-                        <button onClick={() => submitTrouble(record.id, record.rooms?.id || '')}
-                          className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm">送信</button>
+                        <button onClick={() => submitTrouble(record.id)}
+                          className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-medium">送信</button>
                       </div>
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+              )
+            })()}
           </div>
         </div>
-      )}
-
-      {activeTab === 'photos' && (
-        <PhotosTab facilityId={facilityId} records={records} />
+      ) : (
+        <PhotosTab records={records} />
       )}
     </div>
   )
 }
 
-function PhotosTab({ facilityId, records }: { facilityId: string; records: CleaningRecord[] }) {
+function PhotosTab({ records }: { records: CleaningRecord[] }) {
   const [photos, setPhotos] = useState<{ id: string; photo_url: string; photo_type: string; cleaning_record_id: string }[]>([])
 
   useEffect(() => {
     const load = async () => {
-      const recordIds = records.map(r => r.id)
-      if (recordIds.length === 0) return
+      const ids = records.map(r => r.id)
+      if (!ids.length) return
       const { data } = await supabase.from('cleaning_photos')
         .select('id, photo_url, photo_type, cleaning_record_id')
-        .in('cleaning_record_id', recordIds)
+        .in('cleaning_record_id', ids)
         .order('created_at', { ascending: false })
       setPhotos(data || [])
     }
     load()
   }, [records])
 
-  const typeLabel: Record<string, string> = { before: '清掃前', after: '清掃後', issue: '問題' }
-  const typeColor: Record<string, string> = {
-    before: 'bg-blue-600', after: 'bg-green-600', issue: 'bg-red-600'
-  }
-
-  if (photos.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-gray-400">
-        <div className="text-center">
-          <p className="text-4xl mb-2">📷</p>
-          <p className="text-sm">写真はまだありません</p>
-        </div>
+  if (!photos.length) return (
+    <div className="flex-1 flex items-center justify-center text-white">
+      <div className="text-center">
+        <p className="text-4xl mb-2">📷</p>
+        <p className="text-sm">写真はまだありません</p>
       </div>
-    )
-  }
+    </div>
+  )
 
   return (
-    <div className="p-3 grid grid-cols-3 gap-2">
-      {photos.map(photo => {
-        const record = records.find(r => r.id === photo.cleaning_record_id)
+    <div className="p-2 grid grid-cols-3 gap-1">
+      {photos.map(p => {
+        const room = records.find(r => r.id === p.cleaning_record_id)?.rooms?.room_number
+        const colors: Record<string, string> = { before: 'bg-blue-600', after: 'bg-green-600', issue: 'bg-red-600' }
+        const labels: Record<string, string> = { before: '前', after: '後', issue: '問題' }
         return (
-          <div key={photo.id} className="relative aspect-square">
-            <img src={photo.photo_url} alt={photo.photo_type} className="w-full h-full object-cover rounded-lg" />
-            <div className="absolute bottom-1 left-1 flex gap-1">
-              <span className={`text-xs text-white px-1.5 py-0.5 rounded ${typeColor[photo.photo_type] || 'bg-gray-600'}`}>
-                {typeLabel[photo.photo_type] || photo.photo_type}
+          <div key={p.id} className="relative aspect-square">
+            <img src={p.photo_url} alt={p.photo_type} className="w-full h-full object-cover rounded-lg" />
+            <div className="absolute bottom-1 left-1 flex gap-0.5">
+              <span className={`text-xs text-white px-1.5 py-0.5 rounded ${colors[p.photo_type] || 'bg-gray-600'}`}>
+                {labels[p.photo_type] || p.photo_type}
               </span>
-              {record && (
-                <span className="text-xs bg-black/60 text-white px-1.5 py-0.5 rounded">
-                  {record.rooms?.room_number}号
-                </span>
-              )}
+              {room && <span className="text-xs bg-black/60 text-white px-1.5 py-0.5 rounded">{room}号</span>}
             </div>
           </div>
         )
