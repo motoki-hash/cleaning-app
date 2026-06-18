@@ -143,6 +143,7 @@ export default function AdminPage() {
         type: 'early_late_request',
         content,
         cleaning_record_id: null,
+        early_late_request_id: data.id,
         sender_id: null,
         sender_name: '管理者',
       })

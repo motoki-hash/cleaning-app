@@ -19,6 +19,7 @@ type ChatMessage = {
   content: string
   created_at: string
   cleaning_record_id: string | null
+  early_late_request_id: string | null
   sender_id: string | null
   sender_name: string | null
 }
@@ -304,7 +305,9 @@ export default function FacilityChatPage() {
                       <p className="text-orange-600 font-bold text-xs mb-1">🔔 依頼</p>
                       <p className="text-blue-700 font-medium whitespace-pre-wrap">{msg.content}</p>
                       <p className="text-xs text-gray-400 mt-1">{formatTime(msg.created_at)}</p>
-                      <RequestReplyButtons messageId={msg.id} facilityId={facilityId}
+                      <RequestReplyButtons
+                        requestId={msg.early_late_request_id}
+                        facilityId={facilityId}
                         onReplied={() => setPendingRequests(prev => prev.slice(1))} />
                     </div>
                   </div>
@@ -462,30 +465,24 @@ export default function FacilityChatPage() {
   )
 }
 
-function RequestReplyButtons({ messageId, facilityId, onReplied }: { messageId: string; facilityId: string; onReplied?: () => void }) {
+function RequestReplyButtons({ requestId, facilityId, onReplied }: { requestId: string | null; facilityId: string; onReplied?: () => void }) {
   const [status, setStatus] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  useEffect(() => {
+    if (!requestId) return
+    supabase.from('early_late_requests').select('status').eq('id', requestId).single()
+      .then(({ data }) => { if (data && data.status !== 'pending') setStatus(data.status) })
+  }, [requestId])
+
   const reply = async (answer: 'accepted' | 'declined' | 'hold') => {
+    if (!requestId) return
     setSaving(true)
-    // chat_messagesからearly_late_requestを探して更新
-    const { data: msg } = await supabase
-      .from('chat_messages').select('cleaning_record_id, content').eq('id', messageId).single()
 
-    // early_late_requestsテーブルを更新（facility_idとcontentで特定）
-    const { data: req } = await supabase
-      .from('early_late_requests')
-      .select('id')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    if (req) {
-      await supabase.from('early_late_requests').update({
-        status: answer,
-        responded_at: new Date().toISOString(),
-      }).eq('id', req.id)
-    }
+    await supabase.from('early_late_requests').update({
+      status: answer,
+      responded_at: new Date().toISOString(),
+    }).eq('id', requestId)
 
     const label = answer === 'accepted' ? '✅ 受けます' : answer === 'declined' ? '❌ 受けれません' : '⏸ 保留します'
     await supabase.from('chat_messages').insert({
