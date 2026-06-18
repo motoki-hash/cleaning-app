@@ -80,7 +80,10 @@ export default function CleanerHome() {
             {new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
           </p>
         </div>
-        <button onClick={logout} className="text-sm bg-blue-700 px-3 py-1 rounded-lg">ログアウト</button>
+        <div className="flex gap-2">
+          <button onClick={() => router.push('/cleaner/settings')} className="text-sm bg-blue-700 px-3 py-1 rounded-lg">設定</button>
+          <button onClick={logout} className="text-sm bg-blue-700 px-3 py-1 rounded-lg">ログアウト</button>
+        </div>
       </header>
 
       {/* サマリー */}
