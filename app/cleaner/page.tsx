@@ -4,34 +4,19 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
+type Facility = { id: string; name: string; area: string }
 type CleaningRecord = {
   id: string
-  scheduled_date: string
   status: string
-  started_at: string | null
-  completed_at: string | null
-  rooms: { id: string; room_number: string; facility_id: string; facilities: { name: string; area: string } | null } | null
+  rooms: { room_number: string; facility_id: string } | null
 }
 
-type Facility = { id: string; name: string; area: string }
-type Room = { id: string; room_number: string; facility_id: string }
-
-export default function CleanerPage() {
+export default function CleanerHome() {
   const router = useRouter()
+  const [facilities, setFacilities] = useState<Facility[]>([])
   const [records, setRecords] = useState<CleaningRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [cleanerId, setCleanerId] = useState<string | null>(null)
-  const [uploading, setUploading] = useState<string | null>(null)
-  const [showTroubleForm, setShowTroubleForm] = useState<string | null>(null)
-  const [troubleTitle, setTroubleTitle] = useState('')
-  const [troubleDesc, setTroubleDesc] = useState('')
-  const [troublePriority, setTroublePriority] = useState<'low'|'medium'|'high'|'urgent'>('medium')
-
-  const [facilities, setFacilities] = useState<Facility[]>([])
-  const [rooms, setRooms] = useState<Room[]>([])
-  const [selectedArea, setSelectedArea] = useState('')
-  const [selectedFacility, setSelectedFacility] = useState('')
-  const [selectedRoom, setSelectedRoom] = useState('')
 
   useEffect(() => {
     const init = async () => {
@@ -39,254 +24,125 @@ export default function CleanerPage() {
       if (!user) { router.push('/login'); return }
 
       const { data: cleaner } = await supabase
-        .from('cleaners')
-        .select('id')
-        .eq('user_id', user.id)
-        .single()
-
+        .from('cleaners').select('id').eq('user_id', user.id).single()
       if (!cleaner) { setLoading(false); return }
       setCleanerId(cleaner.id)
 
       const today = new Date().toISOString().split('T')[0]
-      const [recordsRes, facilitiesRes, roomsRes] = await Promise.all([
-        supabase
-          .from('cleaning_records')
-          .select('id, scheduled_date, status, started_at, completed_at, rooms(id, room_number, facility_id, facilities(name, area))')
-          .eq('cleaner_id', cleaner.id)
-          .eq('scheduled_date', today)
-          .order('created_at'),
+      const [facRes, recRes] = await Promise.all([
         supabase.from('facilities').select('id, name, area').order('area').order('name'),
-        supabase.from('rooms').select('id, room_number, facility_id').order('room_number'),
+        supabase.from('cleaning_records')
+          .select('id, status, rooms(room_number, facility_id)')
+          .eq('cleaner_id', cleaner.id)
+          .eq('scheduled_date', today),
       ])
-
-      setRecords((recordsRes.data as unknown as CleaningRecord[]) || [])
-      setFacilities((facilitiesRes.data as Facility[]) || [])
-      setRooms((roomsRes.data as Room[]) || [])
+      setFacilities((facRes.data as Facility[]) || [])
+      setRecords((recRes.data as unknown as CleaningRecord[]) || [])
       setLoading(false)
     }
     init()
   }, [router])
-
-  const updateStatus = async (recordId: string, status: string) => {
-    const now = new Date().toISOString()
-    const updates: Record<string, string> = { status }
-    if (status === 'in_progress') updates.started_at = now
-    if (status === 'completed') updates.completed_at = now
-    await supabase.from('cleaning_records').update(updates).eq('id', recordId)
-    const record = records.find(r => r.id === recordId)
-    setRecords(prev => prev.map(r => r.id === recordId ? { ...r, ...updates } : r))
-
-    if (record?.rooms) {
-      fetch('/api/slack-notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status,
-          facilityName: record.rooms.facilities?.name || '',
-          roomNumber: record.rooms.room_number || '',
-          area: record.rooms.facilities?.area || '',
-        }),
-      })
-    }
-  }
-
-  const uploadPhoto = async (recordId: string, file: File, type: 'before' | 'after' | 'issue') => {
-    setUploading(recordId)
-    const ext = file.name.split('.').pop()
-    const path = `${recordId}/${type}-${Date.now()}.${ext}`
-    const { error: uploadError } = await supabase.storage.from('cleaning-photos').upload(path, file)
-    if (!uploadError) {
-      const { data: { publicUrl } } = supabase.storage.from('cleaning-photos').getPublicUrl(path)
-      await supabase.from('cleaning_photos').insert({ cleaning_record_id: recordId, photo_url: publicUrl, photo_type: type })
-    }
-    setUploading(null)
-  }
-
-  const submitTrouble = async (recordId: string, roomId: string) => {
-    await supabase.from('trouble_reports').insert({
-      room_id: roomId,
-      cleaning_record_id: recordId,
-      title: troubleTitle,
-      description: troubleDesc,
-      priority: troublePriority,
-    })
-    setShowTroubleForm(null)
-    setTroubleTitle('')
-    setTroubleDesc('')
-    alert('トラブルを報告しました')
-  }
 
   const logout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
   }
 
-  const areas = [...new Set(facilities.map(f => f.area).filter(Boolean))].sort()
-  const filteredFacilities = selectedArea ? facilities.filter(f => f.area === selectedArea) : facilities
-  const filteredRooms = selectedFacility ? rooms.filter(r => r.facility_id === selectedFacility) : []
+  const getFacilityStats = (facilityId: string) => {
+    const facRecords = records.filter(r => r.rooms?.facility_id === facilityId)
+    const total = facRecords.length
+    const completed = facRecords.filter(r => r.status === 'completed').length
+    const inProgress = facRecords.filter(r => r.status === 'in_progress').length
+    return { total, completed, inProgress }
+  }
 
-  const filteredRecords = records.filter(r => {
-    const area = r.rooms?.facilities?.area || ''
-    const facilityId = r.rooms?.facility_id || ''
-    const roomNumber = r.rooms?.room_number || ''
-    if (selectedArea && area !== selectedArea) return false
-    if (selectedFacility && facilityId !== selectedFacility) return false
-    if (selectedRoom) {
-      const room = rooms.find(rm => rm.id === selectedRoom)
-      if (room && roomNumber !== room.room_number) return false
-    }
-    return true
+  const todayFacilities = facilities.filter(f => {
+    const stats = getFacilityStats(f.id)
+    return stats.total > 0
   })
 
-  const statusLabel: Record<string, string> = {
-    scheduled: '未開始', in_progress: '清掃中', completed: '完了', cancelled: 'キャンセル'
-  }
-  const statusColor: Record<string, string> = {
-    scheduled: 'bg-gray-100 text-gray-600',
-    in_progress: 'bg-yellow-100 text-yellow-700',
-    completed: 'bg-green-100 text-green-700',
-    cancelled: 'bg-red-100 text-red-600',
-  }
+  const areas = [...new Set(todayFacilities.map(f => f.area).filter(Boolean))].sort()
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">読み込み中...</div>
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">読み込み中...</div>
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-blue-600 text-white px-4 py-4 flex justify-between items-center">
-        <h1 className="text-lg font-bold">今日の清掃タスク</h1>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* ヘッダー */}
+      <header className="bg-blue-600 text-white px-4 py-4 flex justify-between items-center sticky top-0 z-10">
+        <div>
+          <h1 className="text-lg font-bold">今日の清掃</h1>
+          <p className="text-xs text-blue-200">{new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}</p>
+        </div>
         <button onClick={logout} className="text-sm bg-blue-700 px-3 py-1 rounded-lg">ログアウト</button>
       </header>
 
-      {/* フィルター */}
-      <div className="bg-white border-b px-4 py-3 space-y-2">
-        <select
-          value={selectedArea}
-          onChange={e => { setSelectedArea(e.target.value); setSelectedFacility(''); setSelectedRoom('') }}
-          className="w-full border rounded-lg px-3 py-2 text-sm"
-        >
-          <option value="">エリア（全て）</option>
-          {areas.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
-
-        <div className="flex gap-2">
-          <select
-            value={selectedFacility}
-            onChange={e => { setSelectedFacility(e.target.value); setSelectedRoom('') }}
-            className="border rounded-lg px-3 py-2 text-sm flex-1"
-            disabled={!selectedArea}
-          >
-            <option value="">物件（全て）</option>
-            {filteredFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
-
-          <select
-            value={selectedRoom}
-            onChange={e => setSelectedRoom(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm w-28"
-            disabled={!selectedFacility}
-          >
-            <option value="">号室</option>
-            {filteredRooms.map(r => <option key={r.id} value={r.id}>{r.room_number}号</option>)}
-          </select>
-        </div>
-
-        {(selectedArea || selectedFacility || selectedRoom) && (
-          <button
-            onClick={() => { setSelectedArea(''); setSelectedFacility(''); setSelectedRoom('') }}
-            className="text-xs text-gray-400 underline"
-          >
-            リセット
-          </button>
-        )}
+      {/* サマリー */}
+      <div className="bg-white border-b px-4 py-3 flex gap-4 text-center">
+        {[
+          { label: '合計', value: records.length, color: 'text-gray-700' },
+          { label: '完了', value: records.filter(r => r.status === 'completed').length, color: 'text-green-600' },
+          { label: '清掃中', value: records.filter(r => r.status === 'in_progress').length, color: 'text-yellow-600' },
+          { label: '未開始', value: records.filter(r => r.status === 'scheduled').length, color: 'text-gray-400' },
+        ].map(item => (
+          <div key={item.label} className="flex-1">
+            <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
+            <p className="text-xs text-gray-400">{item.label}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="p-4 space-y-4">
-        {filteredRecords.length === 0 && (
-          <div className="text-center text-gray-500 mt-12">該当するタスクがありません</div>
-        )}
-
-        {filteredRecords.map(record => {
-          const room = record.rooms
-          const facilityName = room?.facilities?.name || ''
-          const area = room?.facilities?.area || ''
-          const roomNumber = room?.room_number || ''
-          const roomId = room?.id || ''
-
-          return (
-            <div key={record.id} className="bg-white rounded-xl shadow p-4 space-y-3">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs text-gray-400">{area}</p>
-                  <p className="font-bold text-gray-800">{facilityName}</p>
-                  <p className="text-sm text-gray-500">{roomNumber}号室</p>
-                </div>
-                <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[record.status]}`}>
-                  {statusLabel[record.status]}
-                </span>
+      {/* 施設リスト */}
+      <div className="flex-1 overflow-y-auto">
+        {todayFacilities.length === 0 ? (
+          <div className="text-center text-gray-400 mt-16">
+            <p className="text-4xl mb-3">🏠</p>
+            <p>今日の清掃タスクはありません</p>
+          </div>
+        ) : (
+          areas.map(area => (
+            <div key={area}>
+              <div className="px-4 py-2 bg-gray-100 text-xs font-medium text-gray-500 sticky top-[72px]">
+                {area}
               </div>
+              {todayFacilities.filter(f => f.area === area).map(facility => {
+                const stats = getFacilityStats(facility.id)
+                const allDone = stats.completed === stats.total
+                const hasProgress = stats.inProgress > 0
 
-              {record.started_at && (
-                <p className="text-xs text-gray-400">開始: {new Date(record.started_at).toLocaleTimeString('ja-JP')}</p>
-              )}
-              {record.completed_at && (
-                <p className="text-xs text-gray-400">完了: {new Date(record.completed_at).toLocaleTimeString('ja-JP')}</p>
-              )}
-
-              <div className="flex gap-2">
-                {record.status === 'scheduled' && (
-                  <button onClick={() => updateStatus(record.id, 'in_progress')} className="bg-yellow-500 text-white text-sm px-4 py-2 rounded-lg flex-1">
-                    清掃開始
+                return (
+                  <button
+                    key={facility.id}
+                    onClick={() => router.push(`/cleaner/chat/${facility.id}`)}
+                    className="w-full bg-white border-b px-4 py-4 flex items-center gap-3 text-left active:bg-gray-50"
+                  >
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl flex-shrink-0 ${
+                      allDone ? 'bg-green-100' : hasProgress ? 'bg-yellow-100' : 'bg-blue-100'
+                    }`}>
+                      {allDone ? '✅' : hasProgress ? '🧹' : '🏠'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-800 truncate">{facility.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {stats.completed}/{stats.total}部屋完了
+                        {stats.inProgress > 0 && <span className="text-yellow-600 ml-2">清掃中 {stats.inProgress}</span>}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      {allDone ? (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">完了</span>
+                      ) : hasProgress ? (
+                        <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">清掃中</span>
+                      ) : (
+                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">未開始</span>
+                      )}
+                      <span className="text-gray-300 text-lg">›</span>
+                    </div>
                   </button>
-                )}
-                {record.status === 'in_progress' && (
-                  <button onClick={() => updateStatus(record.id, 'completed')} className="bg-green-500 text-white text-sm px-4 py-2 rounded-lg flex-1">
-                    完了
-                  </button>
-                )}
-              </div>
-
-              {record.status !== 'scheduled' && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-600">写真アップロード</p>
-                  <div className="flex gap-2">
-                    {(['before', 'after', 'issue'] as const).map(type => (
-                      <label key={type} className="flex-1 cursor-pointer">
-                        <input type="file" accept="image/*" capture="environment" className="hidden"
-                          onChange={e => { const file = e.target.files?.[0]; if (file) uploadPhoto(record.id, file, type) }} />
-                        <span className={`block text-center text-xs py-2 rounded-lg border ${uploading === record.id ? 'opacity-50' : 'border-gray-300'}`}>
-                          {type === 'before' ? '清掃前' : type === 'after' ? '清掃後' : '問題'}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <button onClick={() => setShowTroubleForm(showTroubleForm === record.id ? null : record.id)}
-                className="w-full text-sm text-red-600 border border-red-300 py-2 rounded-lg">
-                トラブル報告
-              </button>
-
-              {showTroubleForm === record.id && (
-                <div className="space-y-2 bg-red-50 p-3 rounded-lg">
-                  <input type="text" placeholder="タイトル" value={troubleTitle} onChange={e => setTroubleTitle(e.target.value)}
-                    className="w-full border rounded px-3 py-2 text-sm" />
-                  <textarea placeholder="詳細を入力..." value={troubleDesc} onChange={e => setTroubleDesc(e.target.value)}
-                    className="w-full border rounded px-3 py-2 text-sm h-20" />
-                  <select value={troublePriority} onChange={e => setTroublePriority(e.target.value as 'low'|'medium'|'high'|'urgent')}
-                    className="w-full border rounded px-3 py-2 text-sm">
-                    <option value="low">低</option>
-                    <option value="medium">中</option>
-                    <option value="high">高</option>
-                    <option value="urgent">緊急</option>
-                  </select>
-                  <button onClick={() => submitTrouble(record.id, roomId)}
-                    className="w-full bg-red-600 text-white py-2 rounded-lg text-sm">送信</button>
-                </div>
-              )}
+                )
+              })}
             </div>
-          )
-        })}
+          ))
+        )}
       </div>
     </div>
   )
