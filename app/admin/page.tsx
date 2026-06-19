@@ -43,7 +43,7 @@ export default function AdminPage() {
   const [records, setRecords] = useState<Record_[]>([])
   const [troubles, setTroubles] = useState<TroubleReport[]>([])
   const [requests, setRequests] = useState<EarlyLateRequest[]>([])
-  const [tab, setTab] = useState<'records' | 'troubles' | 'requests' | 'photos'>('records')
+  const [tab, setTab] = useState<'records' | 'troubles' | 'requests' | 'photos' | 'chat'>('records')
   const [photos, setPhotos] = useState<{ id: string; photo_url: string; photo_type: string; created_at: string }[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -334,12 +334,13 @@ export default function AdminPage() {
 
       {/* タブ */}
       <div className="flex border-b border-gray-200 mx-4">
-        {(['records', 'troubles', 'requests', 'photos'] as const).map(t => (
+        {(['records', 'troubles', 'requests', 'photos', 'chat'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium ${tab === t ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
             {t === 'records' ? '清掃状況' :
              t === 'troubles' ? `トラブル(${troubles.length})` :
-             t === 'requests' ? `依頼${pendingRequests > 0 ? `(${pendingRequests})` : ''}` : '写真'}
+             t === 'requests' ? `依頼${pendingRequests > 0 ? `(${pendingRequests})` : ''}` :
+             t === 'photos' ? '写真' : '💬 チャット'}
           </button>
         ))}
       </div>
@@ -474,6 +475,29 @@ export default function AdminPage() {
               </div>
             ))}
           </>
+        )}
+
+        {/* チャットタブ */}
+        {tab === 'chat' && (
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500 pb-1">施設を選んでチャットを開く</p>
+            {facilities.map(f => (
+              <button
+                key={f.id}
+                onClick={() => router.push(`/admin/chat/${f.id}`)}
+                className="w-full bg-white rounded-xl shadow-sm p-4 flex items-center gap-3 text-left"
+              >
+                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg flex-shrink-0">
+                  🏠
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-800 text-sm truncate">{f.name}</p>
+                  <p className="text-xs text-gray-400">{f.area}</p>
+                </div>
+                <span className="text-gray-300">›</span>
+              </button>
+            ))}
+          </div>
         )}
 
         {/* 写真タブ */}
