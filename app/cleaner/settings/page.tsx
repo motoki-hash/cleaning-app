@@ -73,14 +73,20 @@ export default function CleanerSettingsPage() {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
       })
-      await fetch('/api/push-subscribe', {
+      const res = await fetch('/api/push-subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subscription: sub.toJSON(), userId }),
       })
+      const json = await res.json()
+      if (!res.ok) {
+        alert('登録エラー: ' + JSON.stringify(json))
+        setNotifStatus('unknown')
+        return
+      }
       setNotifStatus('granted')
     } catch (e) {
-      console.error(e)
+      alert('エラー: ' + String(e))
       setNotifStatus('unknown')
     }
   }
