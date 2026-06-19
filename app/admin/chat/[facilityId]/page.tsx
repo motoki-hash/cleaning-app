@@ -80,18 +80,16 @@ export default function AdminChatPage() {
     })
 
     // 清掃員全員にプッシュ通知
-    alert(`currentUserId: ${currentUserId}`)
-    const notifyRes = await fetch('/api/push-notify', {
+    fetch('/api/push-notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: '💬 管理者',
         body: content,
         url: `/cleaner/chat/${facilityId}`,
+        excludeUserId: currentUserId,
       }),
     })
-    const notifyJson = await notifyRes.json()
-    alert(`通知結果: ${JSON.stringify(notifyJson)}`)
 
     setSending(false)
   }
