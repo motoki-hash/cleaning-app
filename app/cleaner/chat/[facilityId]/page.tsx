@@ -107,6 +107,38 @@ export default function FacilityChatPage() {
       setMessages(msgRes.data || [])
       setPendingRequests((reqRes.data as EarlyLateRequest[]) || [])
       setLoading(false)
+
+      // リアルタイム購読
+      const msgChannel = supabase
+        .channel(`chat:${facilityId}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `facility_id=eq.${facilityId}`,
+        }, payload => {
+          setMessages(prev => {
+            if (prev.some(m => m.id === payload.new.id)) return prev
+            return [...prev, payload.new as ChatMessage]
+          })
+        })
+        .subscribe()
+
+      const recChannel = supabase
+        .channel(`records:${facilityId}`)
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'cleaning_records',
+        }, payload => {
+          setRecords(prev => prev.map(r => r.id === payload.new.id ? { ...r, ...payload.new } : r))
+        })
+        .subscribe()
+
+      return () => {
+        supabase.removeChannel(msgChannel)
+        supabase.removeChannel(recChannel)
+      }
     }
     init()
   }, [facilityId, router])
@@ -116,15 +148,15 @@ export default function FacilityChatPage() {
   }, [messages])
 
   const addMessage = async (type: string, content: string, recordId?: string) => {
-    const { data } = await supabase.from('chat_messages').insert({
+    await supabase.from('chat_messages').insert({
       facility_id: facilityId,
       cleaning_record_id: recordId || null,
       type,
       content,
       sender_id: type === 'note' ? currentUserId : null,
       sender_name: type === 'note' ? currentUserName : null,
-    }).select().single()
-    if (data) setMessages(prev => [...prev, data as ChatMessage])
+    })
+    // Realtimeが自動でsetMessagesするので手動追加不要
   }
 
   const updateStatus = async (recordId: string, newStatus: string) => {

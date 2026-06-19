@@ -102,6 +102,35 @@ export default function AdminPage() {
       setRooms((roomsRes.data as Room[]) || [])
       setRequests((requestsRes.data as unknown as EarlyLateRequest[]) || [])
       setLoading(false)
+
+      // リアルタイム: 清掃状況の更新
+      const recChannel = supabase
+        .channel('admin:cleaning_records')
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'cleaning_records',
+        }, payload => {
+          setRecords(prev => prev.map(r => r.id === payload.new.id ? { ...r, ...payload.new } : r))
+        })
+        .subscribe()
+
+      // リアルタイム: 依頼への回答
+      const reqChannel = supabase
+        .channel('admin:early_late_requests')
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'early_late_requests',
+        }, payload => {
+          setRequests(prev => prev.map(r => r.id === payload.new.id ? { ...r, ...payload.new } : r))
+        })
+        .subscribe()
+
+      return () => {
+        supabase.removeChannel(recChannel)
+        supabase.removeChannel(reqChannel)
+      }
     }
     init()
   }, [router])

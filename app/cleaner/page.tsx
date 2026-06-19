@@ -42,6 +42,20 @@ export default function CleanerHome() {
       setFacilities((facRes.data as Facility[]) || [])
       setRecords((recRes.data as unknown as CleaningRecord[]) || [])
       setLoading(false)
+
+      // リアルタイム: 自分の清掃レコードが更新されたら反映
+      const channel = supabase
+        .channel('cleaner:records')
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'cleaning_records',
+        }, payload => {
+          setRecords(prev => prev.map(r => r.id === payload.new.id ? { ...r, status: payload.new.status } : r))
+        })
+        .subscribe()
+
+      return () => { supabase.removeChannel(channel) }
     }
     init()
   }, [router])
