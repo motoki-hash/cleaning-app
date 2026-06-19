@@ -80,7 +80,7 @@ export default function AdminChatPage() {
     })
 
     // 清掃員全員にプッシュ通知
-    fetch('/api/push-notify', {
+    const notifyRes = await fetch('/api/push-notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -90,6 +90,8 @@ export default function AdminChatPage() {
         excludeUserId: currentUserId,
       }),
     })
+    const notifyJson = await notifyRes.json()
+    alert(`通知結果: ${JSON.stringify(notifyJson)}`)
 
     setSending(false)
   }
