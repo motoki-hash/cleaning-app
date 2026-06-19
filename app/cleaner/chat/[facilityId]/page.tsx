@@ -157,6 +157,20 @@ export default function FacilityChatPage() {
       sender_name: type === 'note' ? currentUserName : null,
     })
     // Realtimeが自動でsetMessagesするので手動追加不要
+
+    // noteメッセージは他のユーザーにプッシュ通知
+    if (type === 'note' && currentUserId) {
+      fetch('/api/push-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `💬 ${currentUserName}`,
+          body: content,
+          url: `/cleaner/chat/${facilityId}`,
+          excludeUserId: currentUserId,
+        }),
+      })
+    }
   }
 
   const updateStatus = async (recordId: string, newStatus: string) => {

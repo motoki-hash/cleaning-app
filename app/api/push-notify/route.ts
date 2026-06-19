@@ -15,11 +15,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'VAPID not configured' }, { status: 500 })
   }
   webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey)
-  const { title, body, url, userIds } = await req.json()
+  const { title, body, url, userIds, excludeUserId } = await req.json()
 
-  let query = supabase.from('push_subscriptions').select('subscription, endpoint')
+  let query = supabase.from('push_subscriptions').select('subscription, endpoint, user_id')
   if (userIds && userIds.length > 0) {
     query = query.in('user_id', userIds)
+  }
+  if (excludeUserId) {
+    query = query.neq('user_id', excludeUserId)
   }
   const { data: subs } = await query
 
