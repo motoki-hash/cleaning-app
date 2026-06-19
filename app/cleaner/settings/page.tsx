@@ -37,8 +37,30 @@ export default function CleanerSettingsPage() {
       }
       setLoading(false)
 
-      if ('Notification' in window) {
-        setNotifStatus(Notification.permission === 'granted' ? 'granted' : Notification.permission === 'denied' ? 'denied' : 'unknown')
+      // 通知許可済みなら自動的にDBへ登録
+      if ('Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window) {
+        if (Notification.permission === 'denied') {
+          setNotifStatus('denied')
+        } else if (Notification.permission === 'granted') {
+          try {
+            const reg = await navigator.serviceWorker.register('/sw.js')
+            await navigator.serviceWorker.ready
+            const sub = await reg.pushManager.getSubscription()
+            if (sub) {
+              const res = await fetch('/api/push-subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ subscription: sub.toJSON(), userId: user.id }),
+              })
+              if (res.ok) setNotifStatus('granted')
+              else setNotifStatus('unknown')
+            } else {
+              setNotifStatus('unknown')
+            }
+          } catch {
+            setNotifStatus('unknown')
+          }
+        }
       }
     }
     init()
