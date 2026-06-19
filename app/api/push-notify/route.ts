@@ -2,18 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import webpush from 'web-push'
 import { createClient } from '@supabase/supabase-js'
 
-webpush.setVapidDetails(
-  process.env.VAPID_EMAIL!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-)
-
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
 export async function POST(req: NextRequest) {
+  const vapidEmail = process.env.VAPID_EMAIL
+  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
+  if (!vapidEmail || !vapidPublicKey || !vapidPrivateKey) {
+    return NextResponse.json({ error: 'VAPID not configured' }, { status: 500 })
+  }
+  webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey)
   const { title, body, url, userIds } = await req.json()
 
   let query = supabase.from('push_subscriptions').select('subscription, endpoint')
