@@ -98,15 +98,22 @@ export default function CleanerSettingsPage() {
         return
       }
       const reg = await navigator.serviceWorker.register('/sw.js')
-      await navigator.serviceWorker.ready
-      const existing = await reg.pushManager.getSubscription()
+      alert('SW登録完了: ' + reg.scope)
+      const readyReg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('SW ready timeout')), 5000))
+      ])
+      alert('SW ready完了')
+      const existing = await (readyReg as ServiceWorkerRegistration).pushManager.getSubscription()
+      alert('existing sub: ' + (existing ? 'あり' : 'なし'))
       let sub = existing
       if (!sub) {
         try {
-          sub = await reg.pushManager.subscribe({
+          sub = await (readyReg as ServiceWorkerRegistration).pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(vapidKey),
           })
+          alert('subscribe成功')
         } catch (subErr) {
           alert('subscribe失敗: ' + String(subErr))
           setNotifStatus('unknown')
