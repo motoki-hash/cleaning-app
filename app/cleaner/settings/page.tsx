@@ -86,6 +86,12 @@ export default function CleanerSettingsPage() {
     }
     setNotifStatus('registering')
     try {
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      if (!vapidKey) {
+        alert('VAPIDキーが設定されていません')
+        setNotifStatus('unknown')
+        return
+      }
       const permission = await Notification.requestPermission()
       if (permission !== 'granted') {
         setNotifStatus('denied')
@@ -94,10 +100,19 @@ export default function CleanerSettingsPage() {
       const reg = await navigator.serviceWorker.register('/sw.js')
       await navigator.serviceWorker.ready
       const existing = await reg.pushManager.getSubscription()
-      const sub = existing || await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
-      })
+      let sub = existing
+      if (!sub) {
+        try {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidKey),
+          })
+        } catch (subErr) {
+          alert('subscribe失敗: ' + String(subErr))
+          setNotifStatus('unknown')
+          return
+        }
+      }
       const res = await fetch('/api/push-subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
