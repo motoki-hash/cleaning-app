@@ -45,18 +45,21 @@ export default function CleanerSettingsPage() {
           try {
             const reg = await navigator.serviceWorker.register('/sw.js')
             await navigator.serviceWorker.ready
-            const sub = await reg.pushManager.getSubscription()
-            if (sub) {
-              const res = await fetch('/api/push-subscribe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ subscription: sub.toJSON(), userId: user.id }),
+            let sub = await reg.pushManager.getSubscription()
+            // サブスクリプションがない場合は新規作成
+            if (!sub) {
+              sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
               })
-              if (res.ok) setNotifStatus('granted')
-              else setNotifStatus('unknown')
-            } else {
-              setNotifStatus('unknown')
             }
+            const res = await fetch('/api/push-subscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ subscription: sub.toJSON(), userId: user.id }),
+            })
+            if (res.ok) setNotifStatus('granted')
+            else setNotifStatus('unknown')
           } catch {
             setNotifStatus('unknown')
           }
