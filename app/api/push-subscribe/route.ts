@@ -12,9 +12,10 @@ export async function POST(req: NextRequest) {
 
   const endpoint = subscription.endpoint
 
-  await supabase
+  const { error } = await supabase
     .from('push_subscriptions')
     .upsert({ user_id: userId, endpoint, subscription: JSON.stringify(subscription) }, { onConflict: 'endpoint' })
 
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
