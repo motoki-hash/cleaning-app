@@ -24,9 +24,9 @@ export async function POST(req: NextRequest) {
   if (excludeUserId) {
     query = query.neq('user_id', excludeUserId)
   }
-  const { data: subs } = await query
+  const { data: subs, error: subsError } = await query
 
-  if (!subs || subs.length === 0) return NextResponse.json({ ok: true, sent: 0 })
+  if (!subs || subs.length === 0) return NextResponse.json({ ok: true, sent: 0, error: subsError?.message, errorCode: subsError?.code })
 
   const payload = JSON.stringify({ title, body, url })
   let sent = 0
