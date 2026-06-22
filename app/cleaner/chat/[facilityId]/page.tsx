@@ -400,9 +400,8 @@ export default function FacilityChatPage() {
             </button>
           </div>
 
-          {/* 下部アクションエリア（LINE風） */}
+          {/* 下部アクションエリア */}
           <div className="bg-white border-t safe-area-bottom">
-            {/* 未完了の部屋リスト */}
             {pendingRooms.length > 0 ? (
               <div className="px-3 pt-3 pb-2">
                 <p className="text-xs text-gray-400 mb-2">部屋を選択してアクションを実行</p>
@@ -430,30 +429,35 @@ export default function FacilityChatPage() {
                 🎉 全部屋の清掃が完了しました！
               </div>
             )}
+          </div>
 
-            {/* 選択した部屋のアクション */}
-            {selectedRecord && (() => {
-              const record = records.find(r => r.id === selectedRecord)
-              if (!record) return null
-              return (
-                <div className="px-3 pb-3 border-t mt-2 pt-2 space-y-2">
-                  <p className="text-xs text-gray-500 font-medium">{record.rooms?.room_number}号室</p>
+          {/* 選択した部屋のアクション（オーバーレイ） */}
+          {selectedRecord && (() => {
+            const record = records.find(r => r.id === selectedRecord)
+            if (!record) return null
+            return (
+              <div className="fixed inset-0 z-50 flex items-end" onClick={() => { setSelectedRecord(null); setShowTroubleForm(null) }}>
+                <div className="w-full bg-white rounded-t-2xl shadow-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-gray-800">{record.rooms?.room_number}号室</p>
+                    <button onClick={() => { setSelectedRecord(null); setShowTroubleForm(null) }} className="text-gray-400 text-2xl leading-none">×</button>
+                  </div>
                   <div className="flex gap-2">
                     {record.status === 'scheduled' && (
                       <button onClick={() => updateStatus(record.id, 'in_progress')}
-                        className="flex-1 bg-yellow-500 text-white py-2.5 rounded-xl text-sm font-medium">
+                        className="flex-1 bg-yellow-500 text-white py-3 rounded-xl text-base font-bold">
                         🧹 清掃開始
                       </button>
                     )}
                     {record.status === 'in_progress' && (
                       <button onClick={() => updateStatus(record.id, 'completed')}
-                        className="flex-1 bg-green-500 text-white py-2.5 rounded-xl text-sm font-medium">
-                        ✅ 完了
+                        className="flex-1 bg-green-500 text-white py-3 rounded-xl text-base font-bold">
+                        ✅ 清掃完了
                       </button>
                     )}
                     <button
                       onClick={() => setShowTroubleForm(showTroubleForm === record.id ? null : record.id)}
-                      className="bg-red-50 text-red-500 border border-red-200 px-3 py-2.5 rounded-xl text-sm">
+                      className="bg-red-50 text-red-500 border border-red-200 px-4 py-3 rounded-xl text-sm">
                       報告
                     </button>
                   </div>
@@ -500,9 +504,9 @@ export default function FacilityChatPage() {
                     </div>
                   )}
                 </div>
-              )
-            })()}
-          </div>
+              </div>
+            )
+          })()}
         </div>
       ) : (
         <PhotosTab records={records} />
