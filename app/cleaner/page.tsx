@@ -54,10 +54,9 @@ export default function CleanerHome() {
       if (todayFacIds.length > 0) {
         const { data: recentMsgs } = await supabase
           .from('chat_messages')
-          .select('facility_id, created_at, sender_id')
+          .select('facility_id, created_at')
           .in('facility_id', todayFacIds)
-          .eq('type', 'note')
-          .neq('sender_id', user.id)
+          .in('type', ['note', 'early_late_request'])
           .order('created_at', { ascending: false })
 
         if (recentMsgs) {
@@ -81,7 +80,7 @@ export default function CleanerHome() {
           table: 'chat_messages',
         }, payload => {
           const msg = payload.new
-          if (msg.type !== 'note' || msg.sender_id === user.id) return
+          if (msg.type !== 'note' && msg.type !== 'early_late_request') return
           const lastRead = localStorage.getItem(`lastRead_${msg.facility_id}`) || '1970-01-01'
           if (msg.created_at > lastRead) {
             setUnreadCounts(prev => ({ ...prev, [msg.facility_id]: (prev[msg.facility_id] || 0) + 1 }))
