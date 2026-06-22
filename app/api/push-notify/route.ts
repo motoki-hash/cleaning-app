@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
   const payload = JSON.stringify({ title, body, url })
   let sent = 0
   const expired: string[] = []
+  const errors: string[] = []
 
   await Promise.all(subs.map(async (row) => {
     try {
@@ -38,8 +39,11 @@ export async function POST(req: NextRequest) {
       await webpush.sendNotification(sub, payload)
       sent++
     } catch (e: unknown) {
-      if (e && typeof e === 'object' && 'statusCode' in e && (e.statusCode === 410 || e.statusCode === 404)) {
+      if (e && typeof e === 'object' && 'statusCode' in e && (e as {statusCode: number}).statusCode === 410 || e && typeof e === 'object' && 'statusCode' in e && (e as {statusCode: number}).statusCode === 404) {
         expired.push(row.endpoint)
+        errors.push(`expired:${(e as {statusCode: number}).statusCode}`)
+      } else {
+        errors.push(String(e))
       }
     }
   }))
@@ -48,5 +52,5 @@ export async function POST(req: NextRequest) {
     await supabase.from('push_subscriptions').delete().in('endpoint', expired)
   }
 
-  return NextResponse.json({ ok: true, sent })
+  return NextResponse.json({ ok: true, sent, errors })
 }
