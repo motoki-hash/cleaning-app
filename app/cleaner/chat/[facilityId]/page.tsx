@@ -276,9 +276,13 @@ export default function FacilityChatPage() {
         <div
           style={{ position: 'sticky', top: '52px', zIndex: 20 }}
           onClick={() => {
-            const firstRequestMsg = messages.find(m => m.type === 'early_late_request')
-            if (firstRequestMsg) {
-              requestRefs.current[firstRequestMsg.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            const pendingIds = new Set(pendingRequests.map(r => r.id))
+            const targetMsg = messages.find(m =>
+              m.type === 'early_late_request' &&
+              m.early_late_request_id && pendingIds.has(m.early_late_request_id)
+            ) || messages.find(m => m.type === 'early_late_request')
+            if (targetMsg) {
+              requestRefs.current[targetMsg.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
             }
           }}
           className="bg-orange-500 text-white px-4 py-2 flex items-center gap-2 cursor-pointer active:bg-orange-600"
