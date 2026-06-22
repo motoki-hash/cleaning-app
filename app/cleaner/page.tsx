@@ -18,6 +18,7 @@ export default function CleanerHome() {
   const [records, setRecords] = useState<CleaningRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
 
   usePushNotification(currentUserId)
 
@@ -39,9 +40,54 @@ export default function CleanerHome() {
           .eq('cleaner_id', cleaner.id)
           .eq('scheduled_date', today),
       ])
-      setFacilities((facRes.data as Facility[]) || [])
+      const facilityList = (facRes.data as Facility[]) || []
+      setFacilities(facilityList)
       setRecords((recRes.data as unknown as CleaningRecord[]) || [])
       setLoading(false)
+
+      // 未読メッセージ数を計算
+      const todayFacIds = facilityList.filter(f => {
+        const facRecs = ((recRes.data as unknown as CleaningRecord[]) || []).filter(r => r.rooms?.facility_id === f.id)
+        return facRecs.length > 0
+      }).map(f => f.id)
+
+      if (todayFacIds.length > 0) {
+        const { data: recentMsgs } = await supabase
+          .from('chat_messages')
+          .select('facility_id, created_at, sender_id')
+          .in('facility_id', todayFacIds)
+          .eq('type', 'note')
+          .neq('sender_id', user.id)
+          .order('created_at', { ascending: false })
+
+        if (recentMsgs) {
+          const counts: Record<string, number> = {}
+          for (const msg of recentMsgs) {
+            const lastRead = localStorage.getItem(`lastRead_${msg.facility_id}`) || '1970-01-01'
+            if (msg.created_at > lastRead) {
+              counts[msg.facility_id] = (counts[msg.facility_id] || 0) + 1
+            }
+          }
+          setUnreadCounts(counts)
+        }
+      }
+
+      // リアルタイム: 新着メッセージでバッジを更新
+      const msgChannel = supabase
+        .channel('cleaner:home:messages')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+        }, payload => {
+          const msg = payload.new
+          if (msg.type !== 'note' || msg.sender_id === user.id) return
+          const lastRead = localStorage.getItem(`lastRead_${msg.facility_id}`) || '1970-01-01'
+          if (msg.created_at > lastRead) {
+            setUnreadCounts(prev => ({ ...prev, [msg.facility_id]: (prev[msg.facility_id] || 0) + 1 }))
+          }
+        })
+        .subscribe()
 
       // リアルタイム: 自分の清掃レコードが更新されたら反映
       const channel = supabase
@@ -55,7 +101,7 @@ export default function CleanerHome() {
         })
         .subscribe()
 
-      return () => { supabase.removeChannel(channel) }
+      return () => { supabase.removeChannel(channel); supabase.removeChannel(msgChannel) }
     }
     init()
   }, [router])
@@ -140,7 +186,11 @@ export default function CleanerHome() {
               return (
                 <button
                   key={facility.id}
-                  onClick={() => router.push(`/cleaner/chat/${facility.id}`)}
+                  onClick={() => {
+                    localStorage.setItem(`lastRead_${facility.id}`, new Date().toISOString())
+                    setUnreadCounts(prev => { const n = { ...prev }; delete n[facility.id]; return n })
+                    router.push(`/cleaner/chat/${facility.id}`)
+                  }}
                   className="w-full bg-white border-b px-4 py-3 flex items-center gap-3 text-left active:bg-gray-50"
                 >
                   {/* アイコン */}
@@ -170,7 +220,13 @@ export default function CleanerHome() {
                     }`}>
                       {allDone ? '完了' : hasProgress ? '清掃中' : '未開始'}
                     </span>
-                    <span className="text-gray-300">›</span>
+                    {unreadCounts[facility.id] > 0 ? (
+                      <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
+                        {unreadCounts[facility.id] > 99 ? '99+' : unreadCounts[facility.id]}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300">›</span>
+                    )}
                   </div>
                 </button>
               )
