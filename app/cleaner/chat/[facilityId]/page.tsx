@@ -439,8 +439,17 @@ export default function FacilityChatPage() {
                   <div key={req.id} className="border border-orange-200 rounded-xl p-3 space-y-2">
                     <p className="text-sm font-bold text-orange-600">
                       {req.type === 'early_checkin' ? 'アーリーチェックイン' : 'レイトチェックアウト'}
-                      {req.requested_time && ` (${req.requested_time.slice(0, 5)})`}
                     </p>
+                    {req.requested_time && (() => {
+                      const parts = req.requested_time!.split(' ')
+                      const date = parts[0]?.match(/^\d{4}-\d{2}-\d{2}$/) ? parts[0] : null
+                      const time = parts[1]?.slice(0, 5) || (parts[0]?.match(/^\d{2}:\d{2}/) ? parts[0].slice(0, 5) : null)
+                      return (
+                        <p className="text-sm text-gray-700">
+                          {date && `📅 ${date}`}{date && time && ' '}{time && `🕐 ${time}`}
+                        </p>
+                      )
+                    })()}
                     {req.message && <p className="text-sm text-gray-700">{req.message}</p>}
                     <RequestReplyButtons
                       requestId={req.id}
