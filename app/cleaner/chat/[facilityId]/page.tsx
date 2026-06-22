@@ -439,7 +439,7 @@ export default function FacilityChatPage() {
                   <div key={req.id} className="border border-orange-200 rounded-xl p-3 space-y-2">
                     <p className="text-sm font-bold text-orange-600">
                       {req.type === 'early_checkin' ? 'アーリーチェックイン' : 'レイトチェックアウト'}
-                      {req.requested_time && ` (${req.requested_time})`}
+                      {req.requested_time && ` (${req.requested_time.slice(0, 5)})`}
                     </p>
                     {req.message && <p className="text-sm text-gray-700">{req.message}</p>}
                     <RequestReplyButtons
