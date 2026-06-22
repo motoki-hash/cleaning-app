@@ -53,6 +53,7 @@ export default function FacilityChatPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentUserName, setCurrentUserName] = useState<string>('清掃員')
   const [pendingRequests, setPendingRequests] = useState<EarlyLateRequest[]>([])
+  const [showRequestModal, setShowRequestModal] = useState(false)
   const requestRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
@@ -275,16 +276,7 @@ export default function FacilityChatPage() {
       {pendingRequests.length > 0 && (
         <div
           style={{ position: 'sticky', top: '52px', zIndex: 20 }}
-          onClick={() => {
-            const pendingIds = new Set(pendingRequests.map(r => r.id))
-            const targetMsg = messages.find(m =>
-              m.type === 'early_late_request' &&
-              m.early_late_request_id && pendingIds.has(m.early_late_request_id)
-            ) || messages.find(m => m.type === 'early_late_request')
-            if (targetMsg) {
-              requestRefs.current[targetMsg.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            }
-          }}
+          onClick={() => setShowRequestModal(true)}
           className="bg-orange-500 text-white px-4 py-2 flex items-center gap-2 cursor-pointer active:bg-orange-600"
         >
           <span className="text-sm">🔔</span>
@@ -434,6 +426,35 @@ export default function FacilityChatPage() {
               </div>
             )}
           </div>
+
+          {/* 未回答依頼モーダル */}
+          {showRequestModal && (
+            <div className="fixed inset-0 z-50 flex items-end" onClick={() => setShowRequestModal(false)}>
+              <div className="w-full bg-white rounded-t-2xl shadow-2xl p-4 space-y-3 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-bold text-gray-800">🔔 未回答の依頼</p>
+                  <button onClick={() => setShowRequestModal(false)} className="text-gray-400 text-2xl leading-none">×</button>
+                </div>
+                {pendingRequests.map(req => (
+                  <div key={req.id} className="border border-orange-200 rounded-xl p-3 space-y-2">
+                    <p className="text-sm font-bold text-orange-600">
+                      {req.type === 'early_checkin' ? 'アーリーチェックイン' : 'レイトチェックアウト'}
+                      {req.requested_time && ` (${req.requested_time})`}
+                    </p>
+                    {req.message && <p className="text-sm text-gray-700">{req.message}</p>}
+                    <RequestReplyButtons
+                      requestId={req.id}
+                      facilityId={facilityId}
+                      onReplied={() => {
+                        setPendingRequests(prev => prev.filter(r => r.id !== req.id))
+                        if (pendingRequests.length <= 1) setShowRequestModal(false)
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* 選択した部屋のアクション（オーバーレイ） */}
           {selectedRecord && (() => {
