@@ -213,7 +213,7 @@ export default function AdminPhotosPage() {
       {currentPhoto && lightboxIndex !== null && (
         <div className="fixed inset-0 z-50" style={{ backgroundColor: '#000' }}>
           {/* ヘッダー */}
-          <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 py-3" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
+          <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3" style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}>
             <div>
               <span className="text-white text-sm font-medium">
                 {currentPhoto.cleaning_records?.rooms?.room_number}号室 ·{' '}
