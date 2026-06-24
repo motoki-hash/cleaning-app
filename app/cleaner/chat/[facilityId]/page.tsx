@@ -203,17 +203,24 @@ export default function FacilityChatPage() {
     })
   }
 
-  const uploadPhoto = async (recordId: string, file: File, type: 'before' | 'after' | 'issue') => {
+  const uploadPhotos = async (recordId: string, files: File[], type: 'before' | 'after' | 'issue') => {
     setUploading(`${recordId}-${type}`)
-    const ext = file.name.split('.').pop()
-    const path = `${recordId}/${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`
-    const { error } = await supabase.storage.from('cleaning-photos').upload(path, file)
-    if (!error) {
-      const { data: { publicUrl } } = supabase.storage.from('cleaning-photos').getPublicUrl(path)
-      await supabase.from('cleaning_photos').insert({ cleaning_record_id: recordId, photo_url: publicUrl, photo_type: type })
+    let successCount = 0
+    await Promise.all(files.map(async file => {
+      const ext = file.name.split('.').pop()
+      const path = `${recordId}/${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`
+      const { error } = await supabase.storage.from('cleaning-photos').upload(path, file)
+      if (!error) {
+        const { data: { publicUrl } } = supabase.storage.from('cleaning-photos').getPublicUrl(path)
+        await supabase.from('cleaning_photos').insert({ cleaning_record_id: recordId, photo_url: publicUrl, photo_type: type })
+        successCount++
+      }
+    }))
+    if (successCount > 0) {
       const room = records.find(r => r.id === recordId)?.rooms?.room_number
-      const typeLabel = type === 'before' ? '清掃前' : type === 'after' ? '清掃後' : '問題'
-      await addMessage('system', `📷 ${room}号室の${typeLabel}写真を追加しました`, recordId)
+      const typeLabel = type === 'after' ? '清掃後' : type === 'issue' ? '問題' : '清掃前'
+      const countText = successCount > 1 ? `${successCount}枚` : ''
+      await addMessage('system', `📷 ${room}号室の${typeLabel}写真${countText}を追加しました`, recordId)
     }
     setUploading(null)
   }
@@ -504,7 +511,7 @@ export default function FacilityChatPage() {
                           <input type="file" accept="image/*" multiple className="hidden"
                             onChange={e => {
                               const files = Array.from(e.target.files || [])
-                              files.forEach(f => uploadPhoto(record.id, f, type))
+                              if (files.length > 0) uploadPhotos(record.id, files, type)
                               e.target.value = ''
                             }} />
                           <span className={`block text-center text-xs py-2 rounded-xl border ${
