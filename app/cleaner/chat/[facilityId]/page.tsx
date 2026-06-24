@@ -206,7 +206,7 @@ export default function FacilityChatPage() {
   const uploadPhoto = async (recordId: string, file: File, type: 'before' | 'after' | 'issue') => {
     setUploading(`${recordId}-${type}`)
     const ext = file.name.split('.').pop()
-    const path = `${recordId}/${type}-${Date.now()}.${ext}`
+    const path = `${recordId}/${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`
     const { error } = await supabase.storage.from('cleaning-photos').upload(path, file)
     if (!error) {
       const { data: { publicUrl } } = supabase.storage.from('cleaning-photos').getPublicUrl(path)
