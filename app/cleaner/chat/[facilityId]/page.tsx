@@ -499,7 +499,7 @@ export default function FacilityChatPage() {
                   {/* 写真アップロード */}
                   {record.status !== 'scheduled' && (
                     <div className="flex gap-2">
-                      {(['before', 'after', 'issue'] as const).map(type => (
+                      {(['after', 'issue'] as const).map(type => (
                         <label key={type} className="flex-1 cursor-pointer">
                           <input type="file" accept="image/*" capture="environment" className="hidden"
                             onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(record.id, f, type) }} />
@@ -507,7 +507,7 @@ export default function FacilityChatPage() {
                             uploading === `${record.id}-${type}` ? 'bg-gray-100 text-gray-400' : 'border-gray-300 text-gray-600'
                           }`}>
                             {uploading === `${record.id}-${type}` ? '...' :
-                              type === 'before' ? '📷清掃前' : type === 'after' ? '📷清掃後' : '📷問題'}
+                              type === 'after' ? '📷清掃後' : '📷問題'}
                           </span>
                         </label>
                       ))}

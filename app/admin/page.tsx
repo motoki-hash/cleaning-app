@@ -502,15 +502,14 @@ export default function AdminPage() {
 
         {/* 写真タブ */}
         {tab === 'photos' && (
-          <div className="grid grid-cols-3 gap-2">
-            {photos.map(photo => (
-              <div key={photo.id} className="relative">
-                <img src={photo.photo_url} alt={photo.photo_type} className="w-full aspect-square object-cover rounded-lg" />
-                <span className="absolute bottom-1 left-1 text-xs bg-black/60 text-white px-1 rounded">
-                  {photo.photo_type === 'before' ? '前' : photo.photo_type === 'after' ? '後' : '問題'}
-                </span>
-              </div>
-            ))}
+          <div className="text-center py-8">
+            <p className="text-gray-500 text-sm mb-4">施設・日付・号室ごとに写真を管理できます</p>
+            <button
+              onClick={() => router.push('/admin/photos')}
+              className="bg-gray-900 text-white px-6 py-3 rounded-xl font-medium"
+            >
+              📷 写真管理を開く
+            </button>
           </div>
         )}
       </div>
