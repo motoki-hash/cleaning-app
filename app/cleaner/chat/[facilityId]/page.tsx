@@ -501,8 +501,12 @@ export default function FacilityChatPage() {
                     <div className="flex gap-2">
                       {(['after', 'issue'] as const).map(type => (
                         <label key={type} className="flex-1 cursor-pointer">
-                          <input type="file" accept="image/*" capture="environment" className="hidden"
-                            onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(record.id, f, type) }} />
+                          <input type="file" accept="image/*" multiple className="hidden"
+                            onChange={e => {
+                              const files = Array.from(e.target.files || [])
+                              files.forEach(f => uploadPhoto(record.id, f, type))
+                              e.target.value = ''
+                            }} />
                           <span className={`block text-center text-xs py-2 rounded-xl border ${
                             uploading === `${record.id}-${type}` ? 'bg-gray-100 text-gray-400' : 'border-gray-300 text-gray-600'
                           }`}>
