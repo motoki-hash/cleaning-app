@@ -77,22 +77,18 @@ export default function CleanerHome() {
         }
       }
 
-      // 未回答のアーリー/レイト依頼を施設ごとにカウント
-      const allRoomIds = raw.map(r => r.room_id).filter(Boolean)
-      if (allRoomIds.length > 0) {
-        const { data: pendingReqs } = await supabase
-          .from('early_late_requests')
-          .select('id, room_id, rooms(facility_id)')
-          .in('room_id', allRoomIds)
-          .eq('status', 'pending')
-        if (pendingReqs) {
-          const counts: Record<string, number> = {}
-          for (const req of pendingReqs as unknown as { id: string; room_id: string; rooms: { facility_id: string } | null }[]) {
-            const fid = req.rooms?.facility_id
-            if (fid) counts[fid] = (counts[fid] || 0) + 1
-          }
-          setPendingRequestCounts(counts)
+      // 未回答のアーリー/レイト依頼を施設ごとにカウント（全施設の全部屋を対象）
+      const { data: pendingReqs } = await supabase
+        .from('early_late_requests')
+        .select('id, rooms(facility_id)')
+        .eq('status', 'pending')
+      if (pendingReqs) {
+        const counts: Record<string, number> = {}
+        for (const req of pendingReqs as unknown as { id: string; rooms: { facility_id: string } | null }[]) {
+          const fid = req.rooms?.facility_id
+          if (fid) counts[fid] = (counts[fid] || 0) + 1
         }
+        setPendingRequestCounts(counts)
       }
 
       // リアルタイム: 新着メッセージでバッジを更新
