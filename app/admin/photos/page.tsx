@@ -211,52 +211,61 @@ export default function AdminPhotosPage() {
 
       {/* ライトボックス */}
       {currentPhoto && lightboxIndex !== null && (
-        <div className="fixed inset-0 bg-black/95 z-50 flex flex-col">
+        <div className="fixed inset-0 z-50" style={{ backgroundColor: '#000' }}>
           {/* ヘッダー */}
-          <div className="flex items-center justify-between px-4 py-3">
-            <span className={`text-xs px-2 py-1 rounded font-medium ${
-              currentPhoto.photo_type === 'issue' ? 'bg-red-500 text-white' : 'bg-white/20 text-white'
-            }`}>
-              {typeLabel(currentPhoto.photo_type)} · {currentPhoto.cleaning_records?.rooms?.room_number}号室
-            </span>
+          <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 py-3" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
+            <div>
+              <span className="text-white text-sm font-medium">
+                {currentPhoto.cleaning_records?.rooms?.room_number}号室 ·{' '}
+                <span className={currentPhoto.photo_type === 'issue' ? 'text-red-400' : 'text-white/70'}>
+                  {typeLabel(currentPhoto.photo_type)}
+                </span>
+              </span>
+              <span className="text-white/40 text-xs ml-2">{lightboxIndex + 1} / {flatPhotos.length}</span>
+            </div>
             <div className="flex items-center gap-3">
-              <span className="text-white/50 text-sm">{lightboxIndex + 1} / {flatPhotos.length}</span>
               <button
                 onClick={deletePhoto}
                 disabled={deleting}
-                className="text-red-400 text-sm px-3 py-1 border border-red-400/50 rounded-lg disabled:opacity-50"
+                className="text-red-400 text-sm font-medium disabled:opacity-50"
               >
                 {deleting ? '削除中...' : '🗑 削除'}
               </button>
-              <button onClick={() => setLightboxIndex(null)} className="text-white text-2xl leading-none">×</button>
+              <button onClick={() => setLightboxIndex(null)} className="text-white text-3xl font-light leading-none ml-2">×</button>
             </div>
           </div>
 
-          {/* 写真 + 矢印 */}
-          <div className="flex-1 flex items-center justify-center relative">
-            {flatPhotos.length > 1 && (
-              <button
-                onClick={goPrev}
-                className="absolute left-2 z-10 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white text-xl"
-              >
-                ‹
-              </button>
-            )}
+          {/* 写真 */}
+          <div className="absolute inset-0 flex items-center justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={currentPhoto.photo_url}
               alt=""
-              className="max-w-full max-h-full object-contain px-14"
+              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
             />
-            {flatPhotos.length > 1 && (
-              <button
-                onClick={goNext}
-                className="absolute right-2 z-10 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white text-xl"
-              >
-                ›
-              </button>
-            )}
           </div>
+
+          {/* 矢印（左） */}
+          {flatPhotos.length > 1 && (
+            <button
+              onClick={goPrev}
+              className="absolute left-0 top-0 bottom-0 z-10 flex items-center justify-start pl-3"
+              style={{ width: '20%' }}
+            >
+              <span className="w-12 h-12 rounded-full flex items-center justify-center text-white text-3xl font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.25)' }}>‹</span>
+            </button>
+          )}
+
+          {/* 矢印（右） */}
+          {flatPhotos.length > 1 && (
+            <button
+              onClick={goNext}
+              className="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-end pr-3"
+              style={{ width: '20%' }}
+            >
+              <span className="w-12 h-12 rounded-full flex items-center justify-center text-white text-3xl font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.25)' }}>›</span>
+            </button>
+          )}
         </div>
       )}
     </div>
