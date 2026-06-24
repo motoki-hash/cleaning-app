@@ -9,6 +9,7 @@ type Facility = { id: string; name: string; area: string }
 type CleaningRecord = {
   id: string
   status: string
+  room_id: string
   rooms: { room_number: string; facility_id: string } | null
 }
 
@@ -36,13 +37,17 @@ export default function CleanerHome() {
       const [facRes, recRes] = await Promise.all([
         supabase.from('facilities').select('id, name, area').order('area').order('name'),
         supabase.from('cleaning_records')
-          .select('id, status, rooms(room_number, facility_id)')
+          .select('id, status, room_id, rooms(room_number, facility_id)')
           .eq('cleaner_id', cleaner.id)
           .eq('scheduled_date', today),
       ])
       const facilityList = (facRes.data as Facility[]) || []
       setFacilities(facilityList)
-      setRecords((recRes.data as unknown as CleaningRecord[]) || [])
+      // 同じroom_idの重複レコードを除去（チャット画面と同じロジック）
+      const raw = (recRes.data as unknown as CleaningRecord[]) || []
+      const seen = new Map<string, CleaningRecord>()
+      for (const r of raw) { if (!seen.has(r.room_id)) seen.set(r.room_id, r) }
+      setRecords(Array.from(seen.values()))
       setLoading(false)
 
       // 未読メッセージ数を計算
