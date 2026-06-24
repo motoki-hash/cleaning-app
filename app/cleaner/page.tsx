@@ -119,8 +119,7 @@ export default function CleanerHome() {
     }
   }
 
-  // 今日タスクがある施設だけ表示
-  const todayFacilities = facilities.filter(f => getFacilityStats(f.id).total > 0)
+  const todayFacilities = facilities
 
   // エリアでグループ化（エリアなしは「その他」にまとめる）
   const grouped: Record<string, Facility[]> = {}
