@@ -447,13 +447,16 @@ export default function FacilityChatPage() {
                     <p className="text-sm font-bold text-orange-600">
                       {req.type === 'early_checkin' ? 'アーリーチェックイン' : 'レイトチェックアウト'}
                     </p>
-                    {req.requested_time && (() => {
-                      const parts = req.requested_time!.split(' ')
+                    {(() => {
+                      const rt = req.requested_time
+                      if (!rt) return null
+                      const parts = rt.split(' ')
                       const date = parts[0]?.match(/^\d{4}-\d{2}-\d{2}$/) ? parts[0] : null
-                      const time = parts[1]?.slice(0, 5) || (parts[0]?.match(/^\d{2}:\d{2}/) ? parts[0].slice(0, 5) : null)
+                      const time = (date ? parts[1] : parts[0])?.slice(0, 5) || null
                       return (
                         <p className="text-sm text-gray-700">
-                          {date && `📅 ${date}`}{date && time && ' '}{time && `🕐 ${time}`}
+                          {date ? `📅 ${date}` : '📅 日付未設定'}
+                          {time && ` 🕐 ${time}`}
                         </p>
                       )
                     })()}

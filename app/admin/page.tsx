@@ -146,7 +146,7 @@ export default function AdminPage() {
   }
 
   const createRequest = async () => {
-    if (!reqRoom || !reqType) return
+    if (!reqRoom || !reqType || !reqDate || !reqTime) return
     setReqSaving(true)
 
     const room = rooms.find(r => r.id === reqRoom)
