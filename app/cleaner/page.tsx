@@ -20,6 +20,7 @@ export default function CleanerHome() {
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
+  const [pendingRequestCounts, setPendingRequestCounts] = useState<Record<string, number>>({})
 
   usePushNotification(currentUserId)
 
@@ -73,6 +74,24 @@ export default function CleanerHome() {
             }
           }
           setUnreadCounts(counts)
+        }
+      }
+
+      // 未回答のアーリー/レイト依頼を施設ごとにカウント
+      const allRoomIds = raw.map(r => r.room_id).filter(Boolean)
+      if (allRoomIds.length > 0) {
+        const { data: pendingReqs } = await supabase
+          .from('early_late_requests')
+          .select('id, room_id, rooms(facility_id)')
+          .in('room_id', allRoomIds)
+          .eq('status', 'pending')
+        if (pendingReqs) {
+          const counts: Record<string, number> = {}
+          for (const req of pendingReqs as unknown as { id: string; room_id: string; rooms: { facility_id: string } | null }[]) {
+            const fid = req.rooms?.facility_id
+            if (fid) counts[fid] = (counts[fid] || 0) + 1
+          }
+          setPendingRequestCounts(counts)
         }
       }
 
@@ -223,13 +242,20 @@ export default function CleanerHome() {
                     }`}>
                       {allDone ? '完了' : hasProgress ? '清掃中' : '未開始'}
                     </span>
-                    {unreadCounts[facility.id] > 0 ? (
-                      <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
-                        {unreadCounts[facility.id] > 99 ? '99+' : unreadCounts[facility.id]}
-                      </span>
-                    ) : (
-                      <span className="text-gray-300">›</span>
-                    )}
+                    <div className="flex gap-1">
+                      {pendingRequestCounts[facility.id] > 0 && (
+                        <span className="bg-orange-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
+                          🔔{pendingRequestCounts[facility.id]}
+                        </span>
+                      )}
+                      {unreadCounts[facility.id] > 0 ? (
+                        <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
+                          {unreadCounts[facility.id] > 99 ? '99+' : unreadCounts[facility.id]}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300">›</span>
+                      )}
+                    </div>
                   </div>
                 </button>
               )
