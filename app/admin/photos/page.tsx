@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -24,15 +24,15 @@ export default function AdminPhotosPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
   const [loading, setLoading] = useState(true)
-  const [lightbox, setLightbox] = useState<string | null>(null)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [dates, setDates] = useState<string[]>([])
 
   useEffect(() => {
     supabase.from('facilities').select('id, name, area').order('area').order('name')
       .then(({ data }) => { setFacilities(data || []); setLoading(false) })
   }, [])
 
-  // 施設選択時: その施設に写真がある日付一覧
-  const [dates, setDates] = useState<string[]>([])
   useEffect(() => {
     if (!selectedFacility) { setDates([]); setSelectedDate(null); setPhotos([]); return }
     supabase
@@ -51,7 +51,6 @@ export default function AdminPhotosPage() {
       })
   }, [selectedFacility])
 
-  // 日付選択時: 号室ごとに写真取得
   useEffect(() => {
     if (!selectedFacility || !selectedDate) { setPhotos([]); return }
     supabase
@@ -71,6 +70,50 @@ export default function AdminPhotosPage() {
       })
   }, [selectedFacility, selectedDate])
 
+  const flatPhotos = photos
+
+  const goNext = useCallback(() => {
+    if (lightboxIndex === null) return
+    setLightboxIndex((lightboxIndex + 1) % flatPhotos.length)
+  }, [lightboxIndex, flatPhotos.length])
+
+  const goPrev = useCallback(() => {
+    if (lightboxIndex === null) return
+    setLightboxIndex((lightboxIndex - 1 + flatPhotos.length) % flatPhotos.length)
+  }, [lightboxIndex, flatPhotos.length])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (lightboxIndex === null) return
+      if (e.key === 'ArrowRight') goNext()
+      if (e.key === 'ArrowLeft') goPrev()
+      if (e.key === 'Escape') setLightboxIndex(null)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [lightboxIndex, goNext, goPrev])
+
+  const deletePhoto = async () => {
+    if (lightboxIndex === null) return
+    const photo = flatPhotos[lightboxIndex]
+    if (!confirm('この写真を削除しますか？')) return
+    setDeleting(true)
+    // Storage削除
+    const urlPath = new URL(photo.photo_url).pathname
+    const storagePath = urlPath.split('/cleaning-photos/')[1]
+    if (storagePath) await supabase.storage.from('cleaning-photos').remove([storagePath])
+    // DB削除
+    await supabase.from('cleaning_photos').delete().eq('id', photo.id)
+    const newPhotos = photos.filter(p => p.id !== photo.id)
+    setPhotos(newPhotos)
+    if (newPhotos.length === 0) {
+      setLightboxIndex(null)
+    } else {
+      setLightboxIndex(Math.min(lightboxIndex, newPhotos.length - 1))
+    }
+    setDeleting(false)
+  }
+
   // 号室ごとにグループ化
   const grouped: Record<string, Photo[]> = {}
   for (const p of photos) {
@@ -80,6 +123,8 @@ export default function AdminPhotosPage() {
   }
 
   const typeLabel = (t: string) => t === 'after' ? '清掃後' : t === 'issue' ? '問題' : t === 'before' ? '清掃前' : t
+
+  const currentPhoto = lightboxIndex !== null ? flatPhotos[lightboxIndex] : null
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">読み込み中...</div>
 
@@ -145,28 +190,73 @@ export default function AdminPhotosPage() {
           <div key={room}>
             <p className="text-sm font-bold text-gray-700 mb-2 border-b pb-1">{room}号室</p>
             <div className="grid grid-cols-3 gap-2">
-              {roomPhotos.map(photo => (
-                <div key={photo.id} className="relative aspect-square cursor-pointer" onClick={() => setLightbox(photo.photo_url)}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photo.photo_url} alt="" className="w-full h-full object-cover rounded-lg" />
-                  <span className={`absolute bottom-1 left-1 text-xs px-1.5 py-0.5 rounded font-medium ${
-                    photo.photo_type === 'issue' ? 'bg-red-500 text-white' : 'bg-black/50 text-white'
-                  }`}>
-                    {typeLabel(photo.photo_type)}
-                  </span>
-                </div>
-              ))}
+              {roomPhotos.map(photo => {
+                const idx = flatPhotos.findIndex(p => p.id === photo.id)
+                return (
+                  <div key={photo.id} className="relative aspect-square cursor-pointer" onClick={() => setLightboxIndex(idx)}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo.photo_url} alt="" className="w-full h-full object-cover rounded-lg" />
+                    <span className={`absolute bottom-1 left-1 text-xs px-1.5 py-0.5 rounded font-medium ${
+                      photo.photo_type === 'issue' ? 'bg-red-500 text-white' : 'bg-black/50 text-white'
+                    }`}>
+                      {typeLabel(photo.photo_type)}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           </div>
         ))}
       </div>
 
       {/* ライトボックス */}
-      {lightbox && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center" onClick={() => setLightbox(null)}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightbox} alt="" className="max-w-full max-h-full object-contain" />
-          <button className="absolute top-4 right-4 text-white text-3xl">×</button>
+      {currentPhoto && lightboxIndex !== null && (
+        <div className="fixed inset-0 bg-black/95 z-50 flex flex-col">
+          {/* ヘッダー */}
+          <div className="flex items-center justify-between px-4 py-3">
+            <span className={`text-xs px-2 py-1 rounded font-medium ${
+              currentPhoto.photo_type === 'issue' ? 'bg-red-500 text-white' : 'bg-white/20 text-white'
+            }`}>
+              {typeLabel(currentPhoto.photo_type)} · {currentPhoto.cleaning_records?.rooms?.room_number}号室
+            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-white/50 text-sm">{lightboxIndex + 1} / {flatPhotos.length}</span>
+              <button
+                onClick={deletePhoto}
+                disabled={deleting}
+                className="text-red-400 text-sm px-3 py-1 border border-red-400/50 rounded-lg disabled:opacity-50"
+              >
+                {deleting ? '削除中...' : '🗑 削除'}
+              </button>
+              <button onClick={() => setLightboxIndex(null)} className="text-white text-2xl leading-none">×</button>
+            </div>
+          </div>
+
+          {/* 写真 + 矢印 */}
+          <div className="flex-1 flex items-center justify-center relative">
+            {flatPhotos.length > 1 && (
+              <button
+                onClick={goPrev}
+                className="absolute left-2 z-10 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white text-xl"
+              >
+                ‹
+              </button>
+            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={currentPhoto.photo_url}
+              alt=""
+              className="max-w-full max-h-full object-contain px-14"
+            />
+            {flatPhotos.length > 1 && (
+              <button
+                onClick={goNext}
+                className="absolute right-2 z-10 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white text-xl"
+              >
+                ›
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
