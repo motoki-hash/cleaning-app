@@ -292,7 +292,7 @@ export default function FacilityChatPage() {
               未回答の依頼が {pendingRequests.length}件あります
             </p>
             <p className="text-xs opacity-80">
-              {pendingRequests.map(r => r.type === 'early_checkin' ? 'アーリーチェックイン' : 'レイトチェックアウト').join('・')}
+              {[...new Set(pendingRequests.map(r => r.type === 'early_checkin' ? 'アーリーチェックイン' : 'レイトチェックアウト'))].join('・')}
             </p>
           </div>
           <span className="text-white/70 text-sm">›</span>
@@ -574,10 +574,14 @@ function RequestReplyButtons({ requestId, facilityId, onReplied }: { requestId: 
     if (!requestId) return
     setSaving(true)
 
-    await supabase.from('early_late_requests').update({
+    const { error } = await supabase.from('early_late_requests').update({
       status: answer,
       responded_at: new Date().toISOString(),
     }).eq('id', requestId)
+    if (error) {
+      // responded_atカラムがない場合はstatusだけ更新
+      await supabase.from('early_late_requests').update({ status: answer }).eq('id', requestId)
+    }
 
     const label = answer === 'accepted' ? '✅ 受けます' : answer === 'declined' ? '❌ 受けれません' : '⏸ 保留します'
     await supabase.from('chat_messages').insert({
