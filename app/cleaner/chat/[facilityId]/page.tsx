@@ -571,7 +571,7 @@ export default function FacilityChatPage() {
           })()}
         </div>
       ) : (
-        <PhotosTab records={records} />
+        <PhotosTab facilityId={facilityId} />
       )}
 
       {/* 依頼一覧モーダル */}
@@ -698,49 +698,150 @@ function RequestReplyButtons({ requestId, facilityId, initialStatus, onReplied }
   )
 }
 
-function PhotosTab({ records }: { records: CleaningRecord[] }) {
-  const [photos, setPhotos] = useState<{ id: string; photo_url: string; photo_type: string; cleaning_record_id: string }[]>([])
+type AllPhoto = {
+  id: string
+  photo_url: string
+  photo_type: string
+  cleaning_record_id: string
+  cleaning_records: { scheduled_date: string; rooms: { room_number: string } | null } | null
+}
+
+function PhotosTab({ facilityId }: { facilityId: string }) {
+  const [allPhotos, setAllPhotos] = useState<AllPhoto[]>([])
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const load = async () => {
-      const ids = records.map(r => r.id)
-      if (!ids.length) return
+      const { data: roomsData } = await supabase.from('rooms').select('id').eq('facility_id', facilityId)
+      const roomIds = (roomsData || []).map(r => r.id)
+      if (!roomIds.length) { setLoading(false); return }
+
+      const { data: recData } = await supabase.from('cleaning_records').select('id').in('room_id', roomIds)
+      const recIds = (recData || []).map(r => r.id)
+      if (!recIds.length) { setLoading(false); return }
+
       const { data } = await supabase.from('cleaning_photos')
-        .select('id, photo_url, photo_type, cleaning_record_id')
-        .in('cleaning_record_id', ids)
+        .select('id, photo_url, photo_type, cleaning_record_id, cleaning_records(scheduled_date, rooms(room_number))')
+        .in('cleaning_record_id', recIds)
         .order('created_at', { ascending: false })
-      setPhotos(data || [])
+      setAllPhotos((data as unknown as AllPhoto[]) || [])
+      setLoading(false)
     }
     load()
-  }, [records])
+  }, [facilityId])
 
-  if (!photos.length) return (
-    <div className="flex-1 flex items-center justify-center text-white">
-      <div className="text-center">
-        <p className="text-4xl mb-2">📷</p>
-        <p className="text-sm">写真はまだありません</p>
+  const dates = [...new Set(allPhotos.map(p => p.cleaning_records?.scheduled_date).filter(Boolean) as string[])].sort().reverse()
+  const datePhotos = selectedDate ? allPhotos.filter(p => p.cleaning_records?.scheduled_date === selectedDate) : []
+
+  // 号室ごとにグループ化
+  const grouped: Record<string, AllPhoto[]> = {}
+  for (const p of datePhotos) {
+    const room = p.cleaning_records?.rooms?.room_number || '不明'
+    if (!grouped[room]) grouped[room] = []
+    grouped[room].push(p)
+  }
+
+  const flatPhotos = datePhotos
+  const typeLabel = (t: string) => t === 'after' ? '清掃後' : t === 'issue' ? '問題' : t === 'before' ? '清掃前' : t
+  const currentPhoto = lightboxIndex !== null ? flatPhotos[lightboxIndex] : null
+
+  if (loading) return <div className="flex-1 flex items-center justify-center text-white text-sm">読み込み中...</div>
+
+  if (!selectedDate) {
+    if (dates.length === 0) return (
+      <div className="flex-1 flex items-center justify-center text-white">
+        <div className="text-center"><p className="text-4xl mb-2">📷</p><p className="text-sm">写真はまだありません</p></div>
       </div>
-    </div>
-  )
+    )
+    return (
+      <div className="flex-1 overflow-y-auto bg-gray-50 p-4">
+        <p className="text-xs text-gray-500 font-medium mb-3">日付を選択</p>
+        <div className="space-y-2">
+          {dates.map(d => {
+            const count = allPhotos.filter(p => p.cleaning_records?.scheduled_date === d).length
+            return (
+              <button key={d} onClick={() => setSelectedDate(d)}
+                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between text-left active:bg-gray-50">
+                <span className="text-sm font-medium text-gray-800">📅 {d}</span>
+                <span className="text-xs text-gray-400">{count}枚 ›</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="p-2 grid grid-cols-3 gap-1">
-      {photos.map(p => {
-        const room = records.find(r => r.id === p.cleaning_record_id)?.rooms?.room_number
-        const colors: Record<string, string> = { before: 'bg-blue-600', after: 'bg-green-600', issue: 'bg-red-600' }
-        const labels: Record<string, string> = { before: '前', after: '後', issue: '問題' }
-        return (
-          <div key={p.id} className="relative aspect-square">
-            <img src={p.photo_url} alt={p.photo_type} className="w-full h-full object-cover rounded-lg" />
-            <div className="absolute bottom-1 left-1 flex gap-0.5">
-              <span className={`text-xs text-white px-1.5 py-0.5 rounded ${colors[p.photo_type] || 'bg-gray-600'}`}>
-                {labels[p.photo_type] || p.photo_type}
-              </span>
-              {room && <span className="text-xs bg-black/60 text-white px-1.5 py-0.5 rounded">{room}号</span>}
+    <div className="flex-1 overflow-y-auto bg-gray-50">
+      <div className="bg-white border-b px-4 py-2 flex items-center gap-2">
+        <button onClick={() => setSelectedDate(null)} className="text-blue-600 text-sm">‹ 日付一覧</button>
+        <span className="text-sm text-gray-600">{selectedDate}</span>
+      </div>
+      <div className="p-4 space-y-4">
+        {Object.keys(grouped).length === 0 && <p className="text-sm text-gray-400 text-center py-8">この日の写真はありません</p>}
+        {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b, 'ja', { numeric: true })).map(([room, roomPhotos]) => {
+          const afterPhotos = roomPhotos.filter(p => p.photo_type === 'after')
+          const issuePhotos = roomPhotos.filter(p => p.photo_type === 'issue')
+          const sections = [
+            { label: '清掃後', color: 'bg-green-600', photos: afterPhotos },
+            { label: '問題', color: 'bg-red-500', photos: issuePhotos },
+          ]
+          return (
+            <div key={room}>
+              <p className="text-sm font-bold text-gray-700 mb-2 border-b pb-1">{room}号室</p>
+              {sections.map(sec => sec.photos.length === 0 ? null : (
+                <div key={sec.label} className="mb-3">
+                  <p className="text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1">
+                    <span className={`inline-block w-2 h-2 rounded-full ${sec.color}`} />
+                    {sec.label}（{sec.photos.length}枚）
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {sec.photos.map(photo => {
+                      const idx = flatPhotos.findIndex(p => p.id === photo.id)
+                      return (
+                        <div key={photo.id} className="relative aspect-square cursor-pointer" onClick={() => setLightboxIndex(idx)}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={photo.photo_url} alt="" className="w-full h-full object-cover rounded-lg" />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
+          )
+        })}
+      </div>
+
+      {/* ライトボックス */}
+      {currentPhoto && lightboxIndex !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: '#000' }}>
+          <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3" style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}>
+            <span className="text-white text-sm">
+              {currentPhoto.cleaning_records?.rooms?.room_number}号室 · <span className={currentPhoto.photo_type === 'issue' ? 'text-red-400' : 'text-white/70'}>{typeLabel(currentPhoto.photo_type)}</span>
+              <span className="text-white/40 text-xs ml-2">{lightboxIndex + 1} / {flatPhotos.length}</span>
+            </span>
+            <button onClick={() => setLightboxIndex(null)} className="text-white text-3xl font-light leading-none">×</button>
           </div>
-        )
-      })}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={currentPhoto.photo_url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          {flatPhotos.length > 1 && (
+            <button onClick={() => setLightboxIndex((lightboxIndex - 1 + flatPhotos.length) % flatPhotos.length)}
+              className="absolute left-0 top-0 bottom-0 z-10 flex items-center justify-start pl-3" style={{ width: '20%' }}>
+              <span className="w-12 h-12 rounded-full flex items-center justify-center text-white text-3xl font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.25)' }}>‹</span>
+            </button>
+          )}
+          {flatPhotos.length > 1 && (
+            <button onClick={() => setLightboxIndex((lightboxIndex + 1) % flatPhotos.length)}
+              className="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-end pr-3" style={{ width: '20%' }}>
+              <span className="w-12 h-12 rounded-full flex items-center justify-center text-white text-3xl font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.25)' }}>›</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
