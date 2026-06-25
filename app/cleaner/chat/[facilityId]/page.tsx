@@ -29,6 +29,7 @@ type EarlyLateRequest = {
   requested_time: string | null
   message: string | null
   status: string
+  rooms?: { room_number: string } | null
 }
 
 export default function FacilityChatPage() {
@@ -53,7 +54,9 @@ export default function FacilityChatPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentUserName, setCurrentUserName] = useState<string>('清掃員')
   const [pendingRequests, setPendingRequests] = useState<EarlyLateRequest[]>([])
+  const [allRequests, setAllRequests] = useState<EarlyLateRequest[]>([])
   const [showRequestModal, setShowRequestModal] = useState(false)
+  const [showRequestList, setShowRequestList] = useState(false)
   const requestRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
@@ -93,9 +96,9 @@ export default function FacilityChatPage() {
           .eq('facility_id', facilityId)
           .order('created_at'),
         supabase.from('early_late_requests')
-          .select('id, type, requested_time, message, status')
+          .select('id, type, requested_time, message, status, rooms(room_number)')
           .in('room_id', roomIds)
-          .eq('status', 'pending'),
+          .order('created_at', { ascending: false }),
       ])
 
       // 同じroom_idの重複レコードを除去（最新1件のみ残す）
@@ -106,7 +109,9 @@ export default function FacilityChatPage() {
       }
       setRecords(Array.from(seen.values()))
       setMessages(msgRes.data || [])
-      setPendingRequests((reqRes.data as EarlyLateRequest[]) || [])
+      const allReqs = (reqRes.data as unknown as EarlyLateRequest[]) || []
+      setPendingRequests(allReqs.filter(r => r.status === 'pending'))
+      setAllRequests(allReqs)
       setLoading(false)
 
       // リアルタイム購読
@@ -276,6 +281,17 @@ export default function FacilityChatPage() {
               {tab === 'chat' ? '清掃' : '写真'}
             </button>
           ))}
+          <button
+            onClick={() => setShowRequestList(true)}
+            className="relative text-xs px-2 py-1 rounded text-white/80"
+          >
+            依頼
+            {pendingRequests.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                {pendingRequests.length}
+              </span>
+            )}
+          </button>
         </div>
       </header>
 
@@ -553,6 +569,59 @@ export default function FacilityChatPage() {
         </div>
       ) : (
         <PhotosTab records={records} />
+      )}
+
+      {/* 依頼一覧モーダル */}
+      {showRequestList && (
+        <div className="fixed inset-0 z-50 flex items-end" onClick={() => setShowRequestList(false)}>
+          <div className="w-full bg-white rounded-t-2xl shadow-2xl p-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="font-bold text-gray-800">📋 依頼一覧</p>
+              <button onClick={() => setShowRequestList(false)} className="text-gray-400 text-2xl leading-none">×</button>
+            </div>
+            {allRequests.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-6">依頼はありません</p>
+            ) : allRequests.map(req => {
+              const typeLabel = req.type === 'early_checkin' ? 'アーリーチェックイン' : 'レイトチェックアウト'
+              const rt = req.requested_time
+              let dateText = ''
+              if (rt) {
+                const parts = rt.split(' ')
+                const date = parts[0]?.match(/^\d{4}-\d{2}-\d{2}$/) ? parts[0] : null
+                const time = (date ? parts[1] : parts[0])?.slice(0, 5) || null
+                dateText = (date ? `📅 ${date}` : '') + (time ? ` 🕐 ${time}` : '')
+              }
+              const statusInfo =
+                req.status === 'accepted' ? { label: '✅ 受けます', color: 'text-green-600' } :
+                req.status === 'declined' ? { label: '❌ 受けれません', color: 'text-red-500' } :
+                req.status === 'hold' ? { label: '⏸ 保留', color: 'text-gray-500' } :
+                { label: '⏳ 未回答', color: 'text-orange-500' }
+              return (
+                <div key={req.id} className={`border rounded-xl p-3 mb-2 ${req.status === 'pending' ? 'border-orange-300 bg-orange-50' : 'border-gray-200'}`}>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">{typeLabel}</p>
+                      {req.rooms?.room_number && <p className="text-xs text-gray-500">{req.rooms.room_number}号室</p>}
+                      {dateText && <p className="text-xs text-gray-600 mt-0.5">{dateText}</p>}
+                      {req.message && <p className="text-xs text-gray-500 mt-0.5">{req.message}</p>}
+                    </div>
+                    <span className={`text-xs font-medium ${statusInfo.color} ml-2 flex-shrink-0`}>{statusInfo.label}</span>
+                  </div>
+                  {req.status === 'pending' && (
+                    <RequestReplyButtons
+                      requestId={req.id}
+                      facilityId={facilityId}
+                      onReplied={() => {
+                        setAllRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'replied' } : r))
+                        setPendingRequests(prev => prev.filter(r => r.id !== req.id))
+                      }}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
       )}
     </div>
   )
