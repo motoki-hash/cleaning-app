@@ -8,7 +8,9 @@ export async function POST(req: NextRequest) {
 
   let text = ''
 
-  if (status === 'request') {
+  if (status === 'chat') {
+    text = `💬 ${facilityName}にメッセージ\n👤 ${message}`
+  } else if (status === 'request') {
     const timeText = requestTime ? `（${requestTime}）` : ''
     text = `📨 ${requestType}依頼${timeText}\n📍 ${area} / ${facilityName} ${roomNumber}号室`
     if (message) text += `\n💬 ${message}`

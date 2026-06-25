@@ -164,7 +164,7 @@ export default function FacilityChatPage() {
     })
     // Realtimeが自動でsetMessagesするので手動追加不要
 
-    // noteメッセージは他のユーザーにプッシュ通知
+    // noteメッセージは他のユーザーにプッシュ通知＋Slack通知
     if (type === 'note' && currentUserId) {
       fetch('/api/push-notify', {
         method: 'POST',
@@ -174,6 +174,15 @@ export default function FacilityChatPage() {
           body: content,
           url: `/cleaner/chat/${facilityId}`,
           excludeUserId: currentUserId,
+        }),
+      })
+      fetch('/api/slack-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'chat',
+          facilityName: facility?.name || facilityId,
+          message: `${currentUserName}：${content}`,
         }),
       })
     }
