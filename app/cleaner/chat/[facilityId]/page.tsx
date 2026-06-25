@@ -249,9 +249,12 @@ export default function FacilityChatPage() {
   const sendMessage = async () => {
     if (!inputText.trim() || sending) return
     setSending(true)
-    await addMessage('note', inputText.trim())
-    setInputText('')
-    setSending(false)
+    try {
+      await addMessage('note', inputText.trim())
+      setInputText('')
+    } finally {
+      setSending(false)
+    }
   }
 
   const formatTime = (iso: string) =>
