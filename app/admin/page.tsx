@@ -11,6 +11,7 @@ type Record_ = {
   started_at: string | null
   completed_at: string | null
   notes: string | null
+  room_id: string
   rooms: { room_number: string; facility_id: string; facilities: { name: string; area: string } | null } | null
   cleaners: { name: string; cleaning_companies: { name: string } | null } | null
 }
@@ -73,7 +74,7 @@ export default function AdminPage() {
       const [recordsRes, troublesRes, photosRes, facilitiesRes, roomsRes, requestsRes] = await Promise.all([
         supabase
           .from('cleaning_records')
-          .select('id, scheduled_date, status, started_at, completed_at, notes, rooms(room_number, facility_id, facilities(name, area)), cleaners(name, cleaning_companies(name))')
+          .select('id, scheduled_date, status, started_at, completed_at, notes, room_id, rooms(room_number, facility_id, facilities(name, area)), cleaners(name, cleaning_companies(name))')
           .eq('scheduled_date', today)
           .order('created_at'),
         supabase
@@ -95,7 +96,10 @@ export default function AdminPage() {
           .limit(30),
       ])
 
-      setRecords((recordsRes.data as unknown as Record_[]) || [])
+      const rawRecords = (recordsRes.data as unknown as Record_[]) || []
+      const seenRooms = new Map<string, Record_>()
+      for (const r of rawRecords) { if (!seenRooms.has(r.room_id)) seenRooms.set(r.room_id, r) }
+      setRecords(Array.from(seenRooms.values()))
       setTroubles((troublesRes.data as unknown as TroubleReport[]) || [])
       setPhotos(photosRes.data || [])
       setFacilities((facilitiesRes.data as Facility[]) || [])
