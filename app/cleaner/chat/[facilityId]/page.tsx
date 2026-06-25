@@ -499,11 +499,6 @@ export default function FacilityChatPage() {
                         ✅ 清掃完了
                       </button>
                     )}
-                    <button
-                      onClick={() => setShowTroubleForm(showTroubleForm === record.id ? null : record.id)}
-                      className="bg-red-50 text-red-500 border border-red-200 px-4 py-3 rounded-xl text-sm">
-                      報告
-                    </button>
                   </div>
 
                   {/* 写真アップロード */}
