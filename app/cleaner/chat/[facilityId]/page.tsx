@@ -664,15 +664,16 @@ function RequestReplyButtons({ requestId, facilityId, initialStatus, onReplied }
       await supabase.from('early_late_requests').update({ status: answer }).eq('id', requestId)
     }
 
+    const label = answer === 'accepted' ? '✅ 受けます' : answer === 'declined' ? '❌ 受けれません' : '⏸ 保留中（後で返答します）'
+    await supabase.from('chat_messages').insert({
+      facility_id: facilityId,
+      type: 'status_update',
+      content: label,
+      sender_id: null,
+      sender_name: null,
+    })
+
     if (answer !== 'hold') {
-      const label = answer === 'accepted' ? '✅ 受けます' : '❌ 受けれません'
-      await supabase.from('chat_messages').insert({
-        facility_id: facilityId,
-        type: 'status_update',
-        content: label,
-        sender_id: null,
-        sender_name: null,
-      })
       setStatus(answer)
     }
 
