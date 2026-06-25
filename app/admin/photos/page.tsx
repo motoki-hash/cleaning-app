@@ -186,27 +186,40 @@ export default function AdminPhotosPage() {
         {selectedDate && Object.keys(grouped).length === 0 && (
           <p className="text-sm text-gray-400 text-center py-8">この日の写真はありません</p>
         )}
-        {Object.entries(grouped).map(([room, roomPhotos]) => (
-          <div key={room}>
-            <p className="text-sm font-bold text-gray-700 mb-2 border-b pb-1">{room}号室</p>
-            <div className="grid grid-cols-3 gap-2">
-              {roomPhotos.map(photo => {
-                const idx = flatPhotos.findIndex(p => p.id === photo.id)
-                return (
-                  <div key={photo.id} className="relative aspect-square cursor-pointer" onClick={() => setLightboxIndex(idx)}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={photo.photo_url} alt="" className="w-full h-full object-cover rounded-lg" />
-                    <span className={`absolute bottom-1 left-1 text-xs px-1.5 py-0.5 rounded font-medium ${
-                      photo.photo_type === 'issue' ? 'bg-red-500 text-white' : 'bg-black/50 text-white'
-                    }`}>
-                      {typeLabel(photo.photo_type)}
-                    </span>
+        {Object.entries(grouped).map(([room, roomPhotos]) => {
+          const afterPhotos = roomPhotos.filter(p => p.photo_type === 'after')
+          const issuePhotos = roomPhotos.filter(p => p.photo_type === 'issue')
+          const otherPhotos = roomPhotos.filter(p => p.photo_type !== 'after' && p.photo_type !== 'issue')
+          const sections: { label: string; color: string; photos: Photo[] }[] = [
+            { label: '清掃後', color: 'bg-green-600', photos: afterPhotos },
+            { label: '問題', color: 'bg-red-500', photos: issuePhotos },
+            ...(otherPhotos.length > 0 ? [{ label: 'その他', color: 'bg-gray-500', photos: otherPhotos }] : []),
+          ]
+          return (
+            <div key={room}>
+              <p className="text-sm font-bold text-gray-700 mb-2 border-b pb-1">{room}号室</p>
+              {sections.map(section => section.photos.length === 0 ? null : (
+                <div key={section.label} className="mb-3">
+                  <p className="text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1">
+                    <span className={`inline-block w-2 h-2 rounded-full ${section.color}`} />
+                    {section.label}（{section.photos.length}枚）
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {section.photos.map(photo => {
+                      const idx = flatPhotos.findIndex(p => p.id === photo.id)
+                      return (
+                        <div key={photo.id} className="relative aspect-square cursor-pointer" onClick={() => setLightboxIndex(idx)}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={photo.photo_url} alt="" className="w-full h-full object-cover rounded-lg" />
+                        </div>
+                      )
+                    })}
                   </div>
-                )
-              })}
+                </div>
+              ))}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* ライトボックス */}
