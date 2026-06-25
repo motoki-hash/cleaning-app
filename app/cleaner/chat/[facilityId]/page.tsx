@@ -286,9 +286,9 @@ export default function FacilityChatPage() {
             className="relative text-xs px-2 py-1 rounded text-white/80"
           >
             依頼
-            {pendingRequests.length > 0 && (
+            {(allRequests.filter(r => r.status === 'pending' || r.status === 'hold').length > 0) && (
               <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                {pendingRequests.length}
+                {allRequests.filter(r => r.status === 'pending' || r.status === 'hold').length}
               </span>
             )}
           </button>
@@ -373,7 +373,10 @@ export default function FacilityChatPage() {
                       <RequestReplyButtons
                         requestId={msg.early_late_request_id}
                         facilityId={facilityId}
-                        onReplied={() => setPendingRequests(prev => prev.slice(1))} />
+                        onReplied={(newStatus) => {
+                          if (newStatus !== 'hold') setPendingRequests(prev => prev.filter(r => r.id !== msg.early_late_request_id))
+                          setAllRequests(prev => prev.map(r => r.id === msg.early_late_request_id ? { ...r, status: newStatus } : r))
+                        }} />
                     </div>
                   </div>
                 )
@@ -581,7 +584,10 @@ export default function FacilityChatPage() {
             </div>
             {allRequests.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-6">依頼はありません</p>
-            ) : allRequests.map(req => {
+            ) : [...allRequests].sort((a, b) => {
+              const order = (s: string) => s === 'pending' ? 0 : s === 'hold' ? 1 : 2
+              return order(a.status) - order(b.status)
+            }).map(req => {
               const typeLabel = req.type === 'early_checkin' ? 'アーリーチェックイン' : 'レイトチェックアウト'
               const rt = req.requested_time
               let dateText = ''
@@ -594,10 +600,15 @@ export default function FacilityChatPage() {
               const statusInfo =
                 req.status === 'accepted' ? { label: '✅ 受けます', color: 'text-green-600' } :
                 req.status === 'declined' ? { label: '❌ 受けれません', color: 'text-red-500' } :
-                req.status === 'hold' ? { label: '⏸ 保留', color: 'text-gray-500' } :
+                req.status === 'hold' ? { label: '⏸ 保留中', color: 'text-yellow-600' } :
                 { label: '⏳ 未回答', color: 'text-orange-500' }
+              const needsAction = req.status === 'pending' || req.status === 'hold'
               return (
-                <div key={req.id} className={`border rounded-xl p-3 mb-2 ${req.status === 'pending' ? 'border-orange-300 bg-orange-50' : 'border-gray-200'}`}>
+                <div key={req.id} className={`border rounded-xl p-3 mb-2 ${
+                  req.status === 'pending' ? 'border-orange-300 bg-orange-50' :
+                  req.status === 'hold' ? 'border-yellow-300 bg-yellow-50' :
+                  'border-gray-200'
+                }`}>
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-sm font-bold text-gray-800">{typeLabel}</p>
@@ -607,12 +618,13 @@ export default function FacilityChatPage() {
                     </div>
                     <span className={`text-xs font-medium ${statusInfo.color} ml-2 flex-shrink-0`}>{statusInfo.label}</span>
                   </div>
-                  {req.status === 'pending' && (
+                  {needsAction && (
                     <RequestReplyButtons
                       requestId={req.id}
                       facilityId={facilityId}
-                      onReplied={() => {
-                        setAllRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'replied' } : r))
+                      initialStatus={req.status}
+                      onReplied={(newStatus) => {
+                        setAllRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: newStatus } : r))
                         setPendingRequests(prev => prev.filter(r => r.id !== req.id))
                       }}
                     />
@@ -627,15 +639,18 @@ export default function FacilityChatPage() {
   )
 }
 
-function RequestReplyButtons({ requestId, facilityId, onReplied }: { requestId: string | null; facilityId: string; onReplied?: () => void }) {
-  const [status, setStatus] = useState<string | null>(null)
+function RequestReplyButtons({ requestId, facilityId, initialStatus, onReplied }: { requestId: string | null; facilityId: string; initialStatus?: string; onReplied?: (newStatus: string) => void }) {
+  const [status, setStatus] = useState<string | null>(
+    initialStatus && initialStatus !== 'pending' && initialStatus !== 'hold' ? initialStatus : null
+  )
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!requestId) return
+    if (initialStatus && initialStatus !== 'pending' && initialStatus !== 'hold') return
     supabase.from('early_late_requests').select('status').eq('id', requestId).single()
-      .then(({ data }) => { if (data && data.status !== 'pending') setStatus(data.status) })
-  }, [requestId])
+      .then(({ data }) => { if (data && data.status !== 'pending' && data.status !== 'hold') setStatus(data.status) })
+  }, [requestId, initialStatus])
 
   const reply = async (answer: 'accepted' | 'declined' | 'hold') => {
     if (!requestId) return
@@ -646,22 +661,23 @@ function RequestReplyButtons({ requestId, facilityId, onReplied }: { requestId: 
       responded_at: new Date().toISOString(),
     }).eq('id', requestId)
     if (error) {
-      // responded_atカラムがない場合はstatusだけ更新
       await supabase.from('early_late_requests').update({ status: answer }).eq('id', requestId)
     }
 
-    const label = answer === 'accepted' ? '✅ 受けます' : answer === 'declined' ? '❌ 受けれません' : '⏸ 保留します'
-    await supabase.from('chat_messages').insert({
-      facility_id: facilityId,
-      type: 'status_update',
-      content: label,
-      sender_id: null,
-      sender_name: null,
-    })
+    if (answer !== 'hold') {
+      const label = answer === 'accepted' ? '✅ 受けます' : '❌ 受けれません'
+      await supabase.from('chat_messages').insert({
+        facility_id: facilityId,
+        type: 'status_update',
+        content: label,
+        sender_id: null,
+        sender_name: null,
+      })
+      setStatus(answer)
+    }
 
-    setStatus(answer)
     setSaving(false)
-    onReplied?.()
+    onReplied?.(answer)
   }
 
   if (status) {
@@ -676,7 +692,7 @@ function RequestReplyButtons({ requestId, facilityId, onReplied }: { requestId: 
       <button onClick={() => reply('declined')} disabled={saving}
         className="flex-1 bg-red-500 text-white text-xs py-1.5 rounded-lg font-medium">受けれない</button>
       <button onClick={() => reply('hold')} disabled={saving}
-        className="flex-1 bg-gray-400 text-white text-xs py-1.5 rounded-lg font-medium">保留</button>
+        className="flex-1 bg-yellow-500 text-white text-xs py-1.5 rounded-lg font-medium">保留</button>
     </div>
   )
 }
