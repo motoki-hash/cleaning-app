@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ ok: true })
     }
-    text = `💬 ${facilityName}にメッセージ\n👤 ${message}`
+    text = `💬 ${facilityName}にメッセージ [v4]\n👤 ${message}\n[facilityId="${facilityId}"]`
   } else if (status === 'request') {
     const timeText = requestTime ? `（${requestTime}）` : ''
     text = `📨 ${requestType}依頼${timeText}\n📍 ${area} / ${facilityName} ${roomNumber}号室`
