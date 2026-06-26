@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useRouter, useParams, usePathname } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 type Room = { id: string; room_number: string }
@@ -35,8 +35,7 @@ type EarlyLateRequest = {
 export default function FacilityChatPage() {
   const router = useRouter()
   const params = useParams()
-  const pathname = usePathname()
-  const facilityId = (params?.facilityId as string) || pathname.split('/').pop() || ''
+  const facilityId = params?.facilityId as string
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const [facility, setFacility] = useState<{ name: string; area: string } | null>(null)
@@ -177,16 +176,17 @@ export default function FacilityChatPage() {
           excludeUserId: currentUserId,
         }),
       })
+      const currentFacilityId = typeof window !== 'undefined'
+        ? window.location.pathname.split('/').pop() || facilityId
+        : facilityId
       fetch('/api/slack-notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'chat',
-          facilityId,
-          facilityName: facility?.name || facilityId,
+          facilityId: currentFacilityId,
+          facilityName: facility?.name || currentFacilityId,
           message: `${currentUserName}：${content}`,
-          _debugPathname: pathname,
-          _debugParamsFacilityId: params?.facilityId,
         }),
       })
     }
