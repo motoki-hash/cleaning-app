@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     if (resolvedFacilityId) {
       const today = new Date().toISOString().split('T')[0]
 
-      const { data: thread } = await supabaseAdmin
+      const { data: thread, error: threadErr } = await supabaseAdmin
         .from('slack_threads')
         .select('thread_ts')
         .eq('facility_id', resolvedFacilityId)
@@ -67,7 +67,12 @@ export async function POST(req: NextRequest) {
       } else {
         const ts = await postToSlack(`💬 ${facilityName} 本日のチャット\n👤 ${message}`)
         if (ts) {
-          await supabaseAdmin.from('slack_threads').insert({ facility_id: resolvedFacilityId, date: today, thread_ts: ts })
+          const { error: insertErr } = await supabaseAdmin.from('slack_threads').insert({ facility_id: resolvedFacilityId, date: today, thread_ts: ts })
+          if (insertErr) {
+            await postToSlack(`[debug] insert error: ${insertErr.message} fId=${resolvedFacilityId}`)
+          }
+        } else {
+          await postToSlack(`[debug] postToSlack returned null ts, threadErr=${threadErr?.message}`)
         }
       }
       return NextResponse.json({ ok: true })
