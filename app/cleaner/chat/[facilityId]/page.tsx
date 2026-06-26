@@ -181,6 +181,7 @@ export default function FacilityChatPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'chat',
+          facilityId,
           facilityName: facility?.name || facilityId,
           message: `${currentUserName}：${content}`,
         }),
