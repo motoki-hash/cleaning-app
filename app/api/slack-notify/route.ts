@@ -36,36 +36,43 @@ async function postToSlack(text: string, threadTs?: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const { status, facilityName, facilityId, roomNumber, area, requestType, requestTime, message, _debugUrl } = await req.json()
+  const { status, facilityName, facilityId, roomNumber, area, requestType, requestTime, message } = await req.json()
 
   let text = ''
 
   if (status === 'chat') {
-    // チャットメッセージはスレッドに投稿
-    if (facilityId) {
+    // facilityIdが未送信の場合はfacilityNameから検索
+    let resolvedFacilityId = facilityId
+    if (!resolvedFacilityId && facilityName) {
+      const { data: fac } = await supabaseAdmin
+        .from('facilities')
+        .select('id')
+        .eq('name', facilityName)
+        .single()
+      resolvedFacilityId = fac?.id
+    }
+
+    if (resolvedFacilityId) {
       const today = new Date().toISOString().split('T')[0]
 
-      // 今日のスレッドを取得
       const { data: thread } = await supabaseAdmin
         .from('slack_threads')
         .select('thread_ts')
-        .eq('facility_id', facilityId)
+        .eq('facility_id', resolvedFacilityId)
         .eq('date', today)
         .single()
 
       if (thread) {
-        // 既存スレッドに返信
         await postToSlack(`👤 ${message}`, thread.thread_ts)
       } else {
-        // 新しいスレッドを作成
         const ts = await postToSlack(`💬 ${facilityName} 本日のチャット\n👤 ${message}`)
         if (ts) {
-          await supabaseAdmin.from('slack_threads').insert({ facility_id: facilityId, date: today, thread_ts: ts })
+          await supabaseAdmin.from('slack_threads').insert({ facility_id: resolvedFacilityId, date: today, thread_ts: ts })
         }
       }
       return NextResponse.json({ ok: true })
     }
-    text = `💬 ${facilityName}にメッセージ [v5]\n👤 ${message}\n[fId="${facilityId}" url="${_debugUrl}"]`
+    text = `💬 ${facilityName}にメッセージ\n👤 ${message}`
   } else if (status === 'request') {
     const timeText = requestTime ? `（${requestTime}）` : ''
     text = `📨 ${requestType}依頼${timeText}\n📍 ${area} / ${facilityName} ${roomNumber}号室`
