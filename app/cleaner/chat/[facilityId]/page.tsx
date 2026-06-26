@@ -176,9 +176,10 @@ export default function FacilityChatPage() {
           excludeUserId: currentUserId,
         }),
       })
-      const currentFacilityId = typeof window !== 'undefined'
-        ? window.location.pathname.split('/').pop() || facilityId
-        : facilityId
+      const pathMatch = typeof window !== 'undefined'
+        ? window.location.pathname.match(/\/cleaner\/chat\/([^/?#]+)/)
+        : null
+      const currentFacilityId = pathMatch?.[1] || facilityId
       fetch('/api/slack-notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -187,6 +188,7 @@ export default function FacilityChatPage() {
           facilityId: currentFacilityId,
           facilityName: facility?.name || currentFacilityId,
           message: `${currentUserName}：${content}`,
+          _debugUrl: typeof window !== 'undefined' ? window.location.pathname : 'ssr',
         }),
       })
     }

@@ -36,7 +36,7 @@ async function postToSlack(text: string, threadTs?: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const { status, facilityName, facilityId, roomNumber, area, requestType, requestTime, message } = await req.json()
+  const { status, facilityName, facilityId, roomNumber, area, requestType, requestTime, message, _debugUrl } = await req.json()
 
   let text = ''
 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ ok: true })
     }
-    text = `💬 ${facilityName}にメッセージ [v4]\n👤 ${message}\n[facilityId="${facilityId}"]`
+    text = `💬 ${facilityName}にメッセージ [v5]\n👤 ${message}\n[fId="${facilityId}" url="${_debugUrl}"]`
   } else if (status === 'request') {
     const timeText = requestTime ? `（${requestTime}）` : ''
     text = `📨 ${requestType}依頼${timeText}\n📍 ${area} / ${facilityName} ${roomNumber}号室`
