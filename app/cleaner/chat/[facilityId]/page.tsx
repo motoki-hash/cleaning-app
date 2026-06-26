@@ -185,6 +185,8 @@ export default function FacilityChatPage() {
           facilityId,
           facilityName: facility?.name || facilityId,
           message: `${currentUserName}：${content}`,
+          _debugPathname: pathname,
+          _debugParamsFacilityId: params?.facilityId,
         }),
       })
     }
