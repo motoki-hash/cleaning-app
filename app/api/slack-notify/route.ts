@@ -44,15 +44,12 @@ export async function POST(req: NextRequest) {
     // facilityIdが未送信の場合はfacilityNameから検索
     let resolvedFacilityId = facilityId
     if (!resolvedFacilityId && facilityName) {
-      const { data: fac, error: facError } = await supabaseAdmin
+      const { data: facs } = await supabaseAdmin
         .from('facilities')
         .select('id')
         .eq('name', facilityName)
-        .single()
-      resolvedFacilityId = fac?.id
-      if (facError || !fac) {
-        await postToSlack(`[debug] fac lookup failed: name="${facilityName}" error="${facError?.message}"`)
-      }
+        .limit(1)
+      resolvedFacilityId = facs?.[0]?.id
     }
 
     if (resolvedFacilityId) {
