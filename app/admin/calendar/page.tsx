@@ -15,6 +15,19 @@ type CalendarRecord = {
   } | null
 }
 
+type EarlyLateRequest = {
+  id: string
+  type: string
+  status: string
+  requested_time: string | null
+  message: string | null
+  rooms: {
+    room_number: string
+    facility_id: string
+    facilities: { id: string; name: string } | null
+  } | null
+}
+
 type Facility = { id: string; name: string; area: string }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -29,6 +42,20 @@ const STATUS_LABEL: Record<string, string> = {
   scheduled: '未開始',
 }
 
+const REQ_STATUS_STYLE: Record<string, string> = {
+  pending: 'bg-orange-100 text-orange-700',
+  approved: 'bg-green-100 text-green-700',
+  rejected: 'bg-red-100 text-red-600',
+  hold: 'bg-gray-100 text-gray-500',
+}
+
+const REQ_STATUS_LABEL: Record<string, string> = {
+  pending: '未回答',
+  approved: '承認',
+  rejected: '拒否',
+  hold: '保留',
+}
+
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
 
 export default function AdminCalendarPage() {
@@ -38,6 +65,7 @@ export default function AdminCalendarPage() {
     return new Date(d.getFullYear(), d.getMonth(), 1)
   })
   const [records, setRecords] = useState<CalendarRecord[]>([])
+  const [requests, setRequests] = useState<EarlyLateRequest[]>([])
   const [facilities, setFacilities] = useState<Facility[]>([])
   const [selectedFacilityId, setSelectedFacilityId] = useState<string>('')
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
@@ -57,15 +85,22 @@ export default function AdminCalendarPage() {
     const lastDay = new Date(year, month + 1, 0).getDate()
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-    let query = supabase
-      .from('cleaning_records')
-      .select('id, scheduled_date, status, rooms(room_number, facility_id, facilities(id, name, area))')
-      .gte('scheduled_date', startDate)
-      .lte('scheduled_date', endDate)
-      .order('scheduled_date')
+    const [recRes, reqRes] = await Promise.all([
+      supabase
+        .from('cleaning_records')
+        .select('id, scheduled_date, status, rooms(room_number, facility_id, facilities(id, name, area))')
+        .gte('scheduled_date', startDate)
+        .lte('scheduled_date', endDate)
+        .order('scheduled_date'),
+      supabase
+        .from('early_late_requests')
+        .select('id, type, status, requested_time, message, rooms(room_number, facility_id, facilities(id, name))')
+        .gte('requested_time', `${startDate}T00:00:00`)
+        .lte('requested_time', `${endDate}T23:59:59`),
+    ])
 
-    const { data } = await query
-    setRecords((data || []) as unknown as CalendarRecord[])
+    setRecords((recRes.data || []) as unknown as CalendarRecord[])
+    setRequests((reqRes.data || []) as unknown as EarlyLateRequest[])
     setLoading(false)
   }, [year, month])
 
@@ -75,10 +110,13 @@ export default function AdminCalendarPage() {
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const today = new Date().toISOString().split('T')[0]
 
-  // 施設フィルタ適用
   const filteredRecords = selectedFacilityId
     ? records.filter(r => r.rooms?.facility_id === selectedFacilityId)
     : records
+
+  const filteredRequests = selectedFacilityId
+    ? requests.filter(r => r.rooms?.facility_id === selectedFacilityId)
+    : requests
 
   const recordsByDate: Record<string, CalendarRecord[]> = {}
   for (const r of filteredRecords) {
@@ -86,9 +124,17 @@ export default function AdminCalendarPage() {
     recordsByDate[r.scheduled_date].push(r)
   }
 
-  const selectedRecords = selectedDate ? (recordsByDate[selectedDate] || []) : []
+  const requestsByDate: Record<string, EarlyLateRequest[]> = {}
+  for (const r of filteredRequests) {
+    if (!r.requested_time) continue
+    const date = r.requested_time.split('T')[0]
+    if (!requestsByDate[date]) requestsByDate[date] = []
+    requestsByDate[date].push(r)
+  }
 
-  // 施設ごとにグループ化
+  const selectedRecords = selectedDate ? (recordsByDate[selectedDate] || []) : []
+  const selectedRequests = selectedDate ? (requestsByDate[selectedDate] || []) : []
+
   const byFacility: Record<string, CalendarRecord[]> = {}
   for (const r of selectedRecords) {
     const fname = r.rooms?.facilities?.name || '不明'
@@ -96,12 +142,8 @@ export default function AdminCalendarPage() {
     byFacility[fname].push(r)
   }
 
-  // エリア一覧（フィルタ用）
-  const areas = [...new Set(facilities.map(f => f.area).filter(Boolean))].sort()
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* ヘッダー */}
       <header className="bg-gray-900 text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
         <button onClick={() => router.push('/admin')} className="text-white text-2xl leading-none">‹</button>
         <h1 className="font-bold flex-1">清掃カレンダー</h1>
@@ -116,48 +158,33 @@ export default function AdminCalendarPage() {
           className="border rounded-lg px-3 py-1.5 text-sm flex-1 text-gray-700"
         >
           <option value="">全施設</option>
-          {facilities.map(f => (
-            <option key={f.id} value={f.id}>{f.name}</option>
-          ))}
+          {facilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
         {selectedFacilityId && (
-          <button
-            onClick={() => { setSelectedFacilityId(''); setSelectedDate(null) }}
-            className="text-xs text-gray-500 border rounded-lg px-3 py-1.5"
-          >
-            リセット
-          </button>
+          <button onClick={() => { setSelectedFacilityId(''); setSelectedDate(null) }}
+            className="text-xs text-gray-500 border rounded-lg px-3 py-1.5">リセット</button>
         )}
       </div>
 
       {/* 月ナビゲーション */}
       <div className="bg-white px-4 py-3 flex items-center justify-between border-b">
-        <button
-          onClick={() => { setCurrentDate(new Date(year, month - 1, 1)); setSelectedDate(null) }}
-          className="w-9 h-9 flex items-center justify-center rounded-full text-gray-700 text-xl font-bold active:bg-gray-100"
-        >‹</button>
+        <button onClick={() => { setCurrentDate(new Date(year, month - 1, 1)); setSelectedDate(null) }}
+          className="w-9 h-9 flex items-center justify-center rounded-full text-gray-700 text-xl font-bold active:bg-gray-100">‹</button>
         <div className="text-center">
           <h2 className="font-bold text-gray-800">{year}年{month + 1}月</h2>
-          <p className="text-xs text-gray-400">{filteredRecords.length}件</p>
+          <p className="text-xs text-gray-400">{filteredRecords.length}件 / 依頼{filteredRequests.length}件</p>
         </div>
-        <button
-          onClick={() => { setCurrentDate(new Date(year, month + 1, 1)); setSelectedDate(null) }}
-          className="w-9 h-9 flex items-center justify-center rounded-full text-gray-700 text-xl font-bold active:bg-gray-100"
-        >›</button>
+        <button onClick={() => { setCurrentDate(new Date(year, month + 1, 1)); setSelectedDate(null) }}
+          className="w-9 h-9 flex items-center justify-center rounded-full text-gray-700 text-xl font-bold active:bg-gray-100">›</button>
       </div>
 
       {/* カレンダーグリッド */}
       <div className="bg-white shadow-sm">
-        {/* 曜日ヘッダー */}
         <div className="grid grid-cols-7 border-b">
           {WEEKDAYS.map((d, i) => (
-            <div key={d} className={`text-center text-xs py-2 font-medium ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-500' : 'text-gray-500'}`}>
-              {d}
-            </div>
+            <div key={d} className={`text-center text-xs py-2 font-medium ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-500' : 'text-gray-500'}`}>{d}</div>
           ))}
         </div>
-
-        {/* 日付セル */}
         <div className="grid grid-cols-7">
           {Array.from({ length: firstDow }).map((_, i) => (
             <div key={`e${i}`} className="border-b border-r border-gray-100 h-16" />
@@ -166,12 +193,14 @@ export default function AdminCalendarPage() {
             const day = i + 1
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
             const dayRecs = recordsByDate[dateStr] || []
+            const dayReqs = requestsByDate[dateStr] || []
             const isToday = dateStr === today
             const isSelected = dateStr === selectedDate
             const dow = (firstDow + i) % 7
             const completed = dayRecs.filter(r => r.status === 'completed').length
             const inProgress = dayRecs.filter(r => r.status === 'in_progress').length
             const total = dayRecs.length
+            const pendingReqs = dayReqs.filter(r => r.status === 'pending').length
 
             return (
               <button
@@ -182,19 +211,22 @@ export default function AdminCalendarPage() {
                 <span className={`text-xs w-6 h-6 flex items-center justify-center rounded-full font-medium ${
                   isToday ? 'bg-gray-900 text-white' :
                   dow === 0 ? 'text-red-400' :
-                  dow === 6 ? 'text-blue-500' :
-                  'text-gray-700'
+                  dow === 6 ? 'text-blue-500' : 'text-gray-700'
                 }`}>{day}</span>
                 {total > 0 && (
-                  <div className="mt-0.5 w-full px-0.5 space-y-0.5">
+                  <div className="mt-0.5 w-full px-0.5">
                     <p className="text-xs font-bold text-gray-600 text-center leading-none">{total}部屋</p>
-                    {/* 状態バー */}
-                    <div className="flex h-1 rounded-full overflow-hidden gap-px">
+                    <div className="flex h-1 rounded-full overflow-hidden gap-px mt-0.5">
                       {completed > 0 && <div className="bg-green-500 h-full" style={{ flex: completed }} />}
                       {inProgress > 0 && <div className="bg-yellow-400 h-full" style={{ flex: inProgress }} />}
                       {(total - completed - inProgress) > 0 && <div className="bg-gray-200 h-full" style={{ flex: total - completed - inProgress }} />}
                     </div>
                   </div>
+                )}
+                {dayReqs.length > 0 && (
+                  <span className={`text-xs leading-none mt-0.5 ${pendingReqs > 0 ? 'text-orange-500' : 'text-gray-400'}`}>
+                    🔔{dayReqs.length}
+                  </span>
                 )}
               </button>
             )
@@ -203,27 +235,59 @@ export default function AdminCalendarPage() {
       </div>
 
       {/* 凡例 */}
-      <div className="px-4 py-2 flex gap-4 text-xs text-gray-500 bg-white border-b">
+      <div className="px-4 py-2 flex gap-3 text-xs text-gray-500 flex-wrap bg-white border-b">
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />完了</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" />清掃中</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-200 inline-block" />未開始</span>
+        <span className="flex items-center gap-1"><span className="text-orange-500">🔔</span>アーリー/レイト依頼</span>
       </div>
 
       {/* 選択日の詳細 */}
       {selectedDate ? (
-        <div className="flex-1 p-4">
-          <div className="flex items-center justify-between mb-3">
+        <div className="flex-1 p-4 space-y-3">
+          <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-700">
               {new Date(selectedDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
             </h3>
             <span className="text-xs text-gray-500">
-              {selectedRecords.length}部屋 / 完了{selectedRecords.filter(r => r.status === 'completed').length}
+              清掃{selectedRecords.length}部屋 / 依頼{selectedRequests.length}件
             </span>
           </div>
 
-          {selectedRecords.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-8">この日の清掃はありません</p>
-          ) : (
+          {/* アーリー/レイト依頼 */}
+          {selectedRequests.length > 0 && (
+            <div className="bg-white rounded-xl p-3 shadow-sm border-l-4 border-orange-400">
+              <p className="text-sm font-bold text-gray-700 mb-2">🔔 アーリー/レイト依頼（{selectedRequests.length}件）</p>
+              <div className="space-y-2">
+                {selectedRequests.map(req => (
+                  <div key={req.id} className="flex items-center justify-between">
+                    <div className="text-xs">
+                      <span className="font-medium text-gray-700">
+                        {req.rooms?.facilities?.name} {req.rooms?.room_number}号室
+                      </span>
+                      <div className="text-gray-500 mt-0.5">
+                        {req.type === 'early_checkin' ? '🌅 アーリーチェックイン' : '🌙 レイトチェックアウト'}
+                        {req.requested_time && (
+                          <span className="ml-1 text-gray-400">
+                            {new Date(req.requested_time).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
+                      {req.message && <p className="text-gray-400 mt-0.5 italic">"{req.message}"</p>}
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ml-2 flex-shrink-0 ${REQ_STATUS_STYLE[req.status] || 'bg-gray-100 text-gray-500'}`}>
+                      {REQ_STATUS_LABEL[req.status] || req.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 清掃レコード */}
+          {selectedRecords.length === 0 && selectedRequests.length === 0 ? (
+            <p className="text-gray-400 text-sm text-center py-8">この日のデータはありません</p>
+          ) : selectedRecords.length > 0 && (
             <div className="space-y-2">
               {Object.entries(byFacility)
                 .sort(([a], [b]) => a.localeCompare(b, 'ja'))
