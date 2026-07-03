@@ -27,6 +27,7 @@ type EarlyLateRequest = {
   id: string
   type: string
   requested_time: string | null
+  request_date: string | null
   message: string | null
   status: string
   rooms?: { room_number: string } | null
@@ -57,6 +58,7 @@ export default function FacilityChatPage() {
   const [allRequests, setAllRequests] = useState<EarlyLateRequest[]>([])
   const [showRequestModal, setShowRequestModal] = useState(false)
   const [showRequestList, setShowRequestList] = useState(false)
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({})
   const requestRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
@@ -96,7 +98,7 @@ export default function FacilityChatPage() {
           .eq('facility_id', facilityId)
           .order('created_at'),
         supabase.from('early_late_requests')
-          .select('id, type, requested_time, message, status, rooms(room_number)')
+          .select('id, type, requested_time, request_date, message, status, rooms(room_number)')
           .in('room_id', roomIds)
           .order('created_at', { ascending: false }),
       ])
@@ -600,56 +602,94 @@ export default function FacilityChatPage() {
               <p className="font-bold text-gray-800">📋 依頼一覧</p>
               <button onClick={() => setShowRequestList(false)} className="text-gray-400 text-2xl leading-none">×</button>
             </div>
-            {allRequests.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">依頼はありません</p>
-            ) : [...allRequests].sort((a, b) => {
-              const order = (s: string) => s === 'pending' ? 0 : s === 'hold' ? 1 : 2
-              return order(a.status) - order(b.status)
-            }).map(req => {
-              const typeLabel = req.type === 'early_checkin' ? 'アーリーチェックイン' : 'レイトチェックアウト'
-              const rt = req.requested_time
-              let dateText = ''
-              if (rt) {
-                const parts = rt.split(' ')
-                const date = parts[0]?.match(/^\d{4}-\d{2}-\d{2}$/) ? parts[0] : null
-                const time = (date ? parts[1] : parts[0])?.slice(0, 5) || null
-                dateText = (date ? `📅 ${date}` : '') + (time ? ` 🕐 ${time}` : '')
+            {(() => {
+              const today = new Date().toISOString().split('T')[0]
+              const current = allRequests.filter(r => !r.request_date || r.request_date >= today)
+              const past = allRequests.filter(r => r.request_date && r.request_date < today)
+
+              // 過去分を日付ごとにグループ化
+              const pastByDate: Record<string, EarlyLateRequest[]> = {}
+              for (const r of past) {
+                const d = r.request_date!
+                if (!pastByDate[d]) pastByDate[d] = []
+                pastByDate[d].push(r)
               }
-              const statusInfo =
-                req.status === 'accepted' ? { label: '✅ 受けます', color: 'text-green-600' } :
-                req.status === 'declined' ? { label: '❌ 受けれません', color: 'text-red-500' } :
-                req.status === 'hold' ? { label: '⏸ 保留中', color: 'text-yellow-600' } :
-                { label: '⏳ 未回答', color: 'text-orange-500' }
-              const needsAction = req.status === 'pending' || req.status === 'hold'
-              return (
-                <div key={req.id} className={`border rounded-xl p-3 mb-2 ${
-                  req.status === 'pending' ? 'border-orange-300 bg-orange-50' :
-                  req.status === 'hold' ? 'border-yellow-300 bg-yellow-50' :
-                  'border-gray-200'
-                }`}>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-gray-800">{typeLabel}</p>
-                      {req.rooms?.room_number && <p className="text-xs text-gray-500">{req.rooms.room_number}号室</p>}
-                      {dateText && <p className="text-xs text-gray-600 mt-0.5">{dateText}</p>}
-                      {req.message && <p className="text-xs text-gray-500 mt-0.5">{req.message}</p>}
+
+              const renderReq = (req: EarlyLateRequest) => {
+                const typeLabel = req.type === 'early_checkin' ? 'アーリーチェックイン' : 'レイトチェックアウト'
+                const rt = req.requested_time || ''
+                const time = rt.includes(' ') ? rt.split(' ')[1]?.slice(0, 5) : rt.slice(0, 5)
+                const statusInfo =
+                  req.status === 'accepted' ? { label: '✅ 受けます', color: 'text-green-600' } :
+                  req.status === 'declined' ? { label: '❌ 受けれません', color: 'text-red-500' } :
+                  req.status === 'hold' ? { label: '⏸ 保留中', color: 'text-yellow-600' } :
+                  { label: '⏳ 未回答', color: 'text-orange-500' }
+                const needsAction = req.status === 'pending' || req.status === 'hold'
+                return (
+                  <div key={req.id} className={`border rounded-xl p-3 mb-2 ${
+                    req.status === 'pending' ? 'border-orange-300 bg-orange-50' :
+                    req.status === 'hold' ? 'border-yellow-300 bg-yellow-50' :
+                    'border-gray-200'
+                  }`}>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-gray-800">{typeLabel}</p>
+                        {req.rooms?.room_number && <p className="text-xs text-gray-500">{req.rooms.room_number}号室</p>}
+                        {time && <p className="text-xs text-gray-600 mt-0.5">🕐 {time}</p>}
+                        {req.message && <p className="text-xs text-gray-500 mt-0.5">{req.message}</p>}
+                      </div>
+                      <span className={`text-xs font-medium ${statusInfo.color} ml-2 flex-shrink-0`}>{statusInfo.label}</span>
                     </div>
-                    <span className={`text-xs font-medium ${statusInfo.color} ml-2 flex-shrink-0`}>{statusInfo.label}</span>
+                    {needsAction && (
+                      <RequestReplyButtons
+                        requestId={req.id}
+                        facilityId={facilityId}
+                        initialStatus={req.status}
+                        onReplied={(newStatus) => {
+                          setAllRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: newStatus } : r))
+                          setPendingRequests(prev => prev.filter(r => r.id !== req.id))
+                        }}
+                      />
+                    )}
                   </div>
-                  {needsAction && (
-                    <RequestReplyButtons
-                      requestId={req.id}
-                      facilityId={facilityId}
-                      initialStatus={req.status}
-                      onReplied={(newStatus) => {
-                        setAllRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: newStatus } : r))
-                        setPendingRequests(prev => prev.filter(r => r.id !== req.id))
-                      }}
-                    />
+                )
+              }
+
+              return (
+                <>
+                  {allRequests.length === 0 && <p className="text-sm text-gray-400 text-center py-6">依頼はありません</p>}
+
+                  {/* 今日以降 */}
+                  {[...current].sort((a, b) => {
+                    const order = (s: string) => s === 'pending' ? 0 : s === 'hold' ? 1 : 2
+                    return order(a.status) - order(b.status)
+                  }).map(renderReq)}
+
+                  {/* 過去（日付ごとに折りたたみ） */}
+                  {Object.keys(pastByDate).length > 0 && (
+                    <div className="mt-3 border-t pt-3">
+                      <p className="text-xs font-bold text-gray-400 mb-2">過去の依頼</p>
+                      {Object.entries(pastByDate).sort(([a], [b]) => b.localeCompare(a)).map(([date, reqs]) => (
+                        <div key={date} className="mb-2">
+                          <button
+                            onClick={() => setExpandedDates(prev => ({ ...prev, [date]: !prev[date] }))}
+                            className="w-full flex items-center justify-between text-xs text-gray-500 bg-gray-100 rounded-lg px-3 py-2"
+                          >
+                            <span>📅 {date}（{reqs.length}件）</span>
+                            <span>{expandedDates[date] ? '▲' : '▼'}</span>
+                          </button>
+                          {expandedDates[date] && (
+                            <div className="mt-1 pl-1">
+                              {reqs.map(renderReq)}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </div>
+                </>
               )
-            })}
+            })()}
           </div>
         </div>
       )}
