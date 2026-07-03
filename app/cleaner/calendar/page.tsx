@@ -25,7 +25,7 @@ type EarlyLateRequest = {
   rooms: {
     room_number: string
     facility_id: string
-    facilities: { id: string; name: string } | null
+    facilities: { id: string; name: string; area: string } | null
   } | null
 }
 
@@ -89,7 +89,7 @@ export default function CleanerCalendarPage() {
         .order('scheduled_date'),
       supabase
         .from('early_late_requests')
-        .select('id, type, status, request_date, requested_time, message, rooms(room_number, facility_id, facilities(id, name))')
+        .select('id, type, status, request_date, requested_time, message, rooms(room_number, facility_id, facilities(id, name, area))')
         .gte('request_date', startDate)
         .lte('request_date', endDate)
         .neq('status', 'declined'),
@@ -133,7 +133,7 @@ export default function CleanerCalendarPage() {
     byArea[area][fname].records.push(r)
   }
   for (const req of selectedRequests) {
-    const area = (req.rooms as unknown as { facilities: { area: string; name: string } | null })?.facilities?.area || 'その他'
+    const area = req.rooms?.facilities?.area || 'その他'
     const fname = req.rooms?.facilities?.name || '不明'
     if (!byArea[area]) byArea[area] = {}
     if (!byArea[area][fname]) byArea[area][fname] = { records: [], requests: [] }
