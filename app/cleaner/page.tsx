@@ -164,6 +164,7 @@ export default function CleanerHome() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => router.push('/cleaner/calendar')} className="text-sm bg-blue-700 px-3 py-1 rounded-lg">📅 カレンダー</button>
           <button onClick={() => router.push('/cleaner/settings')} className="text-sm bg-blue-700 px-3 py-1 rounded-lg">設定</button>
           <button onClick={logout} className="text-sm bg-blue-700 px-3 py-1 rounded-lg">ログアウト</button>
         </div>
