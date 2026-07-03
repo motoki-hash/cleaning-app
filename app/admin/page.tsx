@@ -159,7 +159,7 @@ export default function AdminPage() {
     const { data } = await supabase.from('early_late_requests').insert({
       room_id: reqRoom,
       type: reqType,
-      requested_time: reqTime || null,
+      requested_time: reqDate && reqTime ? `${reqDate} ${reqTime}` : reqDate || reqTime || null,
       request_date: reqDate || null,
       message: reqMessage || null,
       status: 'pending',

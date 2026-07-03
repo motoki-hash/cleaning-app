@@ -261,9 +261,8 @@ export default function AdminCalendarPage() {
               <p className="text-sm font-bold text-gray-700 mb-2">🔔 アーリー/レイト依頼（{selectedRequests.length}件）</p>
               <div className="space-y-2">
                 {selectedRequests.map(req => {
-                  const timeStr = req.requested_time
-                    ? req.requested_time.slice(0, 5)
-                    : null
+                  const rt = req.requested_time || ''
+                  const timeStr = rt ? (rt.includes(' ') ? rt.split(' ')[1].slice(0, 5) : rt.slice(0, 5)) : null
                   const isEarly = req.type === 'early_checkin'
                   return (
                     <div key={req.id} className="text-xs border-b border-gray-100 pb-2 last:border-0 last:pb-0">
