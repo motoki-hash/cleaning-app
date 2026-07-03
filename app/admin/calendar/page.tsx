@@ -259,27 +259,34 @@ export default function AdminCalendarPage() {
             <div className="bg-white rounded-xl p-3 shadow-sm border-l-4 border-orange-400">
               <p className="text-sm font-bold text-gray-700 mb-2">🔔 アーリー/レイト依頼（{selectedRequests.length}件）</p>
               <div className="space-y-2">
-                {selectedRequests.map(req => (
-                  <div key={req.id} className="flex items-center justify-between">
-                    <div className="text-xs">
-                      <span className="font-medium text-gray-700">
-                        {req.rooms?.facilities?.name} {req.rooms?.room_number}号室
-                      </span>
-                      <div className="text-gray-500 mt-0.5">
-                        {req.type === 'early_checkin' ? '🌅 アーリーチェックイン' : '🌙 レイトチェックアウト'}
-                        {req.requested_time && (
-                          <span className="ml-1 text-gray-400">
-                            {new Date(req.requested_time).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
+                {selectedRequests.map(req => {
+                  const timeStr = req.requested_time
+                    ? new Date(req.requested_time).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+                    : null
+                  const isEarly = req.type === 'early_checkin'
+                  return (
+                    <div key={req.id} className="text-xs border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-gray-800 text-sm">
+                          {req.rooms?.facilities?.name} {req.rooms?.room_number}号室
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full font-medium ml-2 flex-shrink-0 ${REQ_STATUS_STYLE[req.status] || 'bg-gray-100 text-gray-500'}`}>
+                          {REQ_STATUS_LABEL[req.status] || req.status}
+                        </span>
                       </div>
-                      {req.message && <p className="text-gray-400 mt-0.5 italic">"{req.message}"</p>}
+                      <div className="text-gray-500 mb-1">
+                        {isEarly ? '🌅 アーリーチェックイン' : '🌙 レイトチェックアウト'}
+                        {timeStr && <span className="ml-1 font-medium text-gray-700">{timeStr}</span>}
+                      </div>
+                      {timeStr && (
+                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${isEarly ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
+                          🧹 清掃可能時間：{isEarly ? `${timeStr} まで` : `${timeStr} 以降`}
+                        </div>
+                      )}
+                      {req.message && <p className="text-gray-400 mt-1 italic">"{req.message}"</p>}
                     </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ml-2 flex-shrink-0 ${REQ_STATUS_STYLE[req.status] || 'bg-gray-100 text-gray-500'}`}>
-                      {REQ_STATUS_LABEL[req.status] || req.status}
-                    </span>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}

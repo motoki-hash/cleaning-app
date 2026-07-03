@@ -15,6 +15,19 @@ type CalendarRecord = {
   } | null
 }
 
+type EarlyLateRequest = {
+  id: string
+  type: string
+  status: string
+  requested_time: string | null
+  message: string | null
+  rooms: {
+    room_number: string
+    facility_id: string
+    facilities: { id: string; name: string } | null
+  } | null
+}
+
 const STATUS_STYLE: Record<string, string> = {
   completed: 'bg-green-100 text-green-700',
   in_progress: 'bg-yellow-100 text-yellow-700',
@@ -27,6 +40,20 @@ const STATUS_LABEL: Record<string, string> = {
   scheduled: '未開始',
 }
 
+const REQ_STATUS_STYLE: Record<string, string> = {
+  pending: 'bg-orange-100 text-orange-700',
+  approved: 'bg-green-100 text-green-700',
+  rejected: 'bg-red-100 text-red-600',
+  hold: 'bg-gray-100 text-gray-500',
+}
+
+const REQ_STATUS_LABEL: Record<string, string> = {
+  pending: '未回答',
+  approved: '承認',
+  rejected: '拒否',
+  hold: '保留',
+}
+
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
 
 export default function CleanerCalendarPage() {
@@ -36,6 +63,7 @@ export default function CleanerCalendarPage() {
     return new Date(d.getFullYear(), d.getMonth(), 1)
   })
   const [records, setRecords] = useState<CalendarRecord[]>([])
+  const [requests, setRequests] = useState<EarlyLateRequest[]>([])
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -51,14 +79,22 @@ export default function CleanerCalendarPage() {
     const lastDay = new Date(year, month + 1, 0).getDate()
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-    const { data } = await supabase
-      .from('cleaning_records')
-      .select('id, scheduled_date, status, rooms(room_number, facility_id, facilities(id, name))')
-      .gte('scheduled_date', startDate)
-      .lte('scheduled_date', endDate)
-      .order('scheduled_date')
+    const [recRes, reqRes] = await Promise.all([
+      supabase
+        .from('cleaning_records')
+        .select('id, scheduled_date, status, rooms(room_number, facility_id, facilities(id, name))')
+        .gte('scheduled_date', startDate)
+        .lte('scheduled_date', endDate)
+        .order('scheduled_date'),
+      supabase
+        .from('early_late_requests')
+        .select('id, type, status, requested_time, message, rooms(room_number, facility_id, facilities(id, name))')
+        .gte('requested_time', `${startDate}T00:00:00`)
+        .lte('requested_time', `${endDate}T23:59:59`),
+    ])
 
-    setRecords((data || []) as unknown as CalendarRecord[])
+    setRecords((recRes.data || []) as unknown as CalendarRecord[])
+    setRequests((reqRes.data || []) as unknown as EarlyLateRequest[])
     setLoading(false)
   }, [year, month, router])
 
@@ -74,7 +110,16 @@ export default function CleanerCalendarPage() {
     recordsByDate[r.scheduled_date].push(r)
   }
 
+  const requestsByDate: Record<string, EarlyLateRequest[]> = {}
+  for (const r of requests) {
+    if (!r.requested_time) continue
+    const date = r.requested_time.split('T')[0]
+    if (!requestsByDate[date]) requestsByDate[date] = []
+    requestsByDate[date].push(r)
+  }
+
   const selectedRecords = selectedDate ? (recordsByDate[selectedDate] || []) : []
+  const selectedRequests = selectedDate ? (requestsByDate[selectedDate] || []) : []
 
   const byFacility: Record<string, CalendarRecord[]> = {}
   for (const r of selectedRecords) {
@@ -85,72 +130,66 @@ export default function CleanerCalendarPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* ヘッダー */}
       <header className="bg-blue-600 text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
         <button onClick={() => router.push('/cleaner')} className="text-white text-2xl leading-none">‹</button>
         <h1 className="font-bold flex-1">清掃カレンダー</h1>
         {loading && <span className="text-xs text-blue-200">読み込み中...</span>}
       </header>
 
-      {/* 月ナビゲーション */}
       <div className="bg-white px-4 py-3 flex items-center justify-between border-b">
-        <button
-          onClick={() => { setCurrentDate(new Date(year, month - 1, 1)); setSelectedDate(null) }}
-          className="w-9 h-9 flex items-center justify-center rounded-full text-blue-600 text-xl font-bold active:bg-gray-100"
-        >‹</button>
+        <button onClick={() => { setCurrentDate(new Date(year, month - 1, 1)); setSelectedDate(null) }}
+          className="w-9 h-9 flex items-center justify-center rounded-full text-blue-600 text-xl font-bold active:bg-gray-100">‹</button>
         <h2 className="font-bold text-gray-800">{year}年{month + 1}月</h2>
-        <button
-          onClick={() => { setCurrentDate(new Date(year, month + 1, 1)); setSelectedDate(null) }}
-          className="w-9 h-9 flex items-center justify-center rounded-full text-blue-600 text-xl font-bold active:bg-gray-100"
-        >›</button>
+        <button onClick={() => { setCurrentDate(new Date(year, month + 1, 1)); setSelectedDate(null) }}
+          className="w-9 h-9 flex items-center justify-center rounded-full text-blue-600 text-xl font-bold active:bg-gray-100">›</button>
       </div>
 
-      {/* カレンダーグリッド */}
       <div className="bg-white shadow-sm">
-        {/* 曜日ヘッダー */}
         <div className="grid grid-cols-7 border-b">
           {WEEKDAYS.map((d, i) => (
-            <div key={d} className={`text-center text-xs py-2 font-medium ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-500' : 'text-gray-500'}`}>
-              {d}
-            </div>
+            <div key={d} className={`text-center text-xs py-2 font-medium ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-500' : 'text-gray-500'}`}>{d}</div>
           ))}
         </div>
-
-        {/* 日付セル */}
         <div className="grid grid-cols-7">
           {Array.from({ length: firstDow }).map((_, i) => (
-            <div key={`e${i}`} className="border-b border-r border-gray-100 h-14" />
+            <div key={`e${i}`} className="border-b border-r border-gray-100 h-16" />
           ))}
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
             const dayRecs = recordsByDate[dateStr] || []
+            const dayReqs = requestsByDate[dateStr] || []
             const isToday = dateStr === today
             const isSelected = dateStr === selectedDate
             const dow = (firstDow + i) % 7
             const completed = dayRecs.filter(r => r.status === 'completed').length
             const total = dayRecs.length
+            const pendingReqs = dayReqs.filter(r => r.status === 'pending').length
 
             return (
               <button
                 key={day}
                 onClick={() => setSelectedDate(isSelected ? null : dateStr)}
-                className={`border-b border-r border-gray-100 h-14 flex flex-col items-center pt-1 px-0.5 transition-colors ${isSelected ? 'bg-blue-50' : 'active:bg-gray-50'}`}
+                className={`border-b border-r border-gray-100 h-16 flex flex-col items-center pt-1 px-0.5 transition-colors ${isSelected ? 'bg-blue-50' : 'active:bg-gray-50'}`}
               >
                 <span className={`text-xs w-6 h-6 flex items-center justify-center rounded-full font-medium ${
                   isToday ? 'bg-blue-600 text-white' :
                   dow === 0 ? 'text-red-400' :
-                  dow === 6 ? 'text-blue-500' :
-                  'text-gray-700'
+                  dow === 6 ? 'text-blue-500' : 'text-gray-700'
                 }`}>{day}</span>
                 {total > 0 && (
-                  <div className="mt-0.5 flex flex-col items-center gap-0.5 w-full">
-                    <span className="text-xs font-bold text-blue-600 leading-none">{total}部屋</span>
-                    {completed > 0 && (
-                      <div className="w-3/4 h-1 rounded-full bg-gray-200 overflow-hidden">
-                        <div className="h-full bg-green-500 rounded-full" style={{ width: `${(completed / total) * 100}%` }} />
-                      </div>
-                    )}
+                  <div className="mt-0.5 w-full px-0.5">
+                    <span className="text-xs font-bold text-blue-600 leading-none block text-center">{total}部屋</span>
+                    <div className="w-full h-1 rounded-full bg-gray-200 overflow-hidden mt-0.5">
+                      <div className="h-full bg-green-500 rounded-full" style={{ width: `${(completed / total) * 100}%` }} />
+                    </div>
+                  </div>
+                )}
+                {dayReqs.length > 0 && (
+                  <div className="flex items-center gap-0.5 mt-0.5">
+                    <span className={`text-xs leading-none ${pendingReqs > 0 ? 'text-orange-500' : 'text-gray-400'}`}>
+                      🔔{dayReqs.length}
+                    </span>
                   </div>
                 )}
               </button>
@@ -160,22 +199,60 @@ export default function CleanerCalendarPage() {
       </div>
 
       {/* 凡例 */}
-      <div className="px-4 py-2 flex gap-3 text-xs text-gray-500">
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />完了</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" />清掃中</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300 inline-block" />未開始</span>
+      <div className="px-4 py-2 flex gap-3 text-xs text-gray-500 flex-wrap">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />清掃完了</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-200 inline-block" />未完了</span>
+        <span className="flex items-center gap-1"><span className="text-orange-500">🔔</span>アーリー/レイト依頼</span>
       </div>
 
       {/* 選択日の詳細 */}
       {selectedDate ? (
-        <div className="flex-1 p-4">
-          <h3 className="text-sm font-bold text-gray-600 mb-3">
+        <div className="flex-1 p-4 space-y-3">
+          <h3 className="text-sm font-bold text-gray-600">
             {new Date(selectedDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
-            　{selectedRecords.length}部屋
           </h3>
-          {selectedRecords.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-8">この日の清掃はありません</p>
-          ) : (
+
+          {/* アーリー/レイト依頼 */}
+          {selectedRequests.length > 0 && (
+            <div className="bg-white rounded-xl p-3 shadow-sm border-l-4 border-orange-400">
+              <p className="text-sm font-bold text-gray-700 mb-2">🔔 アーリー/レイト依頼（{selectedRequests.length}件）</p>
+              <div className="space-y-3">
+                {selectedRequests.map(req => {
+                  const timeStr = req.requested_time
+                    ? new Date(req.requested_time).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+                    : null
+                  const isEarly = req.type === 'early_checkin'
+                  return (
+                    <div key={req.id} className="text-xs border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-gray-800 text-sm">
+                          {req.rooms?.facilities?.name} {req.rooms?.room_number}号室
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${REQ_STATUS_STYLE[req.status] || 'bg-gray-100 text-gray-500'}`}>
+                          {REQ_STATUS_LABEL[req.status] || req.status}
+                        </span>
+                      </div>
+                      <div className="text-gray-500 mb-1">
+                        {isEarly ? '🌅 アーリーチェックイン' : '🌙 レイトチェックアウト'}
+                        {timeStr && <span className="ml-1 font-medium text-gray-700">{timeStr}</span>}
+                      </div>
+                      {timeStr && (
+                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${isEarly ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
+                          🧹 清掃可能時間：{isEarly ? `${timeStr} まで` : `${timeStr} 以降`}
+                        </div>
+                      )}
+                      {req.message && <p className="text-gray-400 mt-1 italic">"{req.message}"</p>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 清掃レコード */}
+          {selectedRecords.length === 0 && selectedRequests.length === 0 ? (
+            <p className="text-gray-400 text-sm text-center py-8">この日のデータはありません</p>
+          ) : selectedRecords.length > 0 && (
             <div className="space-y-2">
               {Object.entries(byFacility).map(([fname, recs]) => (
                 <div key={fname} className="bg-white rounded-xl p-3 shadow-sm">
