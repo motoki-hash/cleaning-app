@@ -11,7 +11,7 @@ type CalendarRecord = {
   rooms: {
     room_number: string
     facility_id: string
-    facilities: { id: string; name: string } | null
+    facilities: { id: string; name: string; area: string } | null
   } | null
 }
 
@@ -83,7 +83,7 @@ export default function CleanerCalendarPage() {
     const [recRes, reqRes] = await Promise.all([
       supabase
         .from('cleaning_records')
-        .select('id, scheduled_date, status, rooms(room_number, facility_id, facilities(id, name))')
+        .select('id, scheduled_date, status, rooms(room_number, facility_id, facilities(id, name, area))')
         .gte('scheduled_date', startDate)
         .lte('scheduled_date', endDate)
         .order('scheduled_date'),
@@ -123,11 +123,13 @@ export default function CleanerCalendarPage() {
   const selectedRecords = selectedDate ? (recordsByDate[selectedDate] || []) : []
   const selectedRequests = selectedDate ? (requestsByDate[selectedDate] || []) : []
 
-  const byFacility: Record<string, CalendarRecord[]> = {}
+  const byArea: Record<string, Record<string, CalendarRecord[]>> = {}
   for (const r of selectedRecords) {
+    const area = r.rooms?.facilities?.area || 'その他'
     const fname = r.rooms?.facilities?.name || '不明'
-    if (!byFacility[fname]) byFacility[fname] = []
-    byFacility[fname].push(r)
+    if (!byArea[area]) byArea[area] = {}
+    if (!byArea[area][fname]) byArea[area][fname] = []
+    byArea[area][fname].push(r)
   }
 
   return (
@@ -254,19 +256,26 @@ export default function CleanerCalendarPage() {
           {selectedRecords.length === 0 && selectedRequests.length === 0 ? (
             <p className="text-gray-400 text-sm text-center py-8">この日のデータはありません</p>
           ) : selectedRecords.length > 0 && (
-            <div className="space-y-2">
-              {Object.entries(byFacility).map(([fname, recs]) => (
-                <div key={fname} className="bg-white rounded-xl p-3 shadow-sm">
-                  <p className="text-sm font-bold text-gray-700 mb-2">{fname}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {recs
-                      .sort((a, b) => (a.rooms?.room_number || '').localeCompare(b.rooms?.room_number || '', 'ja', { numeric: true }))
-                      .map(r => (
-                        <span key={r.id} className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_STYLE[r.status] || STATUS_STYLE.scheduled}`}>
-                          {r.rooms?.room_number}号室
-                          <span className="opacity-60 ml-1">({STATUS_LABEL[r.status] || r.status})</span>
-                        </span>
-                      ))}
+            <div className="space-y-3">
+              {Object.entries(byArea).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([area, facilities]) => (
+                <div key={area}>
+                  <div className="px-1 py-1 text-xs font-bold text-gray-400 uppercase tracking-wide">{area}</div>
+                  <div className="space-y-2">
+                    {Object.entries(facilities).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([fname, recs]) => (
+                      <div key={fname} className="bg-white rounded-xl p-3 shadow-sm">
+                        <p className="text-sm font-bold text-gray-700 mb-2">{fname}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {recs
+                            .sort((a, b) => (a.rooms?.room_number || '').localeCompare(b.rooms?.room_number || '', 'ja', { numeric: true }))
+                            .map(r => (
+                              <span key={r.id} className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_STYLE[r.status] || STATUS_STYLE.scheduled}`}>
+                                {r.rooms?.room_number}号室
+                                <span className="opacity-60 ml-1">({STATUS_LABEL[r.status] || r.status})</span>
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}

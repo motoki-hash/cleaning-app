@@ -137,11 +137,13 @@ export default function AdminCalendarPage() {
   const selectedRecords = selectedDate ? (recordsByDate[selectedDate] || []) : []
   const selectedRequests = selectedDate ? (requestsByDate[selectedDate] || []) : []
 
-  const byFacility: Record<string, CalendarRecord[]> = {}
+  const byArea: Record<string, Record<string, CalendarRecord[]>> = {}
   for (const r of selectedRecords) {
+    const area = r.rooms?.facilities?.area || 'その他'
     const fname = r.rooms?.facilities?.name || '不明'
-    if (!byFacility[fname]) byFacility[fname] = []
-    byFacility[fname].push(r)
+    if (!byArea[area]) byArea[area] = {}
+    if (!byArea[area][fname]) byArea[area][fname] = []
+    byArea[area][fname].push(r)
   }
 
   return (
@@ -296,29 +298,34 @@ export default function AdminCalendarPage() {
           {selectedRecords.length === 0 && selectedRequests.length === 0 ? (
             <p className="text-gray-400 text-sm text-center py-8">この日のデータはありません</p>
           ) : selectedRecords.length > 0 && (
-            <div className="space-y-2">
-              {Object.entries(byFacility)
-                .sort(([a], [b]) => a.localeCompare(b, 'ja'))
-                .map(([fname, recs]) => {
-                  const doneCount = recs.filter(r => r.status === 'completed').length
-                  return (
-                    <div key={fname} className="bg-white rounded-xl p-3 shadow-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-bold text-gray-700">{fname}</p>
-                        <span className="text-xs text-gray-400">{doneCount}/{recs.length}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {recs
-                          .sort((a, b) => (a.rooms?.room_number || '').localeCompare(b.rooms?.room_number || '', 'ja', { numeric: true }))
-                          .map(r => (
-                            <span key={r.id} className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_STYLE[r.status] || STATUS_STYLE.scheduled}`}>
-                              {r.rooms?.room_number}号室
-                            </span>
-                          ))}
-                      </div>
-                    </div>
-                  )
-                })}
+            <div className="space-y-3">
+              {Object.entries(byArea).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([area, facilities]) => (
+                <div key={area}>
+                  <div className="px-1 py-1 text-xs font-bold text-gray-400 uppercase tracking-wide">{area}</div>
+                  <div className="space-y-2">
+                    {Object.entries(facilities).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([fname, recs]) => {
+                      const doneCount = recs.filter(r => r.status === 'completed').length
+                      return (
+                        <div key={fname} className="bg-white rounded-xl p-3 shadow-sm">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm font-bold text-gray-700">{fname}</p>
+                            <span className="text-xs text-gray-400">{doneCount}/{recs.length}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {recs
+                              .sort((a, b) => (a.rooms?.room_number || '').localeCompare(b.rooms?.room_number || '', 'ja', { numeric: true }))
+                              .map(r => (
+                                <span key={r.id} className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_STYLE[r.status] || STATUS_STYLE.scheduled}`}>
+                                  {r.rooms?.room_number}号室
+                                </span>
+                              ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
