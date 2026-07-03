@@ -134,7 +134,6 @@ export default function CleanerCalendarPage() {
       <header className="bg-blue-600 text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
         <button onClick={() => router.push('/cleaner')} className="text-white text-2xl leading-none">‹</button>
         <h1 className="font-bold flex-1">清掃カレンダー</h1>
-        <span className="text-xs text-blue-200">v4 req:{requests.length}</span>
         {loading && <span className="text-xs text-blue-200">読み込み中...</span>}
       </header>
 
