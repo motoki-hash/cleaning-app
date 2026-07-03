@@ -242,7 +242,7 @@ export default function CleanerCalendarPage() {
                           🧹 清掃可能時間：{isEarly ? `${timeStr} まで` : `${timeStr} 以降`}
                         </div>
                       )}
-                      {req.message && <p className="text-gray-400 mt-1 italic">"{req.message}"</p>}
+                      {req.message && <p className="text-gray-400 mt-1 italic">&ldquo;{req.message}&rdquo;</p>}
                     </div>
                   )
                 })}
