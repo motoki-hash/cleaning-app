@@ -91,7 +91,8 @@ export default function CleanerCalendarPage() {
         .from('early_late_requests')
         .select('id, type, status, request_date, requested_time, message, rooms(room_number, facility_id, facilities(id, name))')
         .gte('request_date', startDate)
-        .lte('request_date', endDate),
+        .lte('request_date', endDate)
+        .neq('status', 'declined'),
     ])
 
     setRecords((recRes.data || []) as unknown as CalendarRecord[])
