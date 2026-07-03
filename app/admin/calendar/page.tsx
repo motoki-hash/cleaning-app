@@ -19,6 +19,7 @@ type EarlyLateRequest = {
   id: string
   type: string
   status: string
+  request_date: string | null
   requested_time: string | null
   message: string | null
   rooms: {
@@ -94,9 +95,9 @@ export default function AdminCalendarPage() {
         .order('scheduled_date'),
       supabase
         .from('early_late_requests')
-        .select('id, type, status, requested_time, message, rooms(room_number, facility_id, facilities(id, name))')
-        .gte('requested_time', startDate)
-        .lte('requested_time', `${endDate} 23:59:59`),
+        .select('id, type, status, request_date, requested_time, message, rooms(room_number, facility_id, facilities(id, name))')
+        .gte('request_date', startDate)
+        .lte('request_date', endDate),
     ])
 
     setRecords((recRes.data || []) as unknown as CalendarRecord[])
@@ -126,8 +127,8 @@ export default function AdminCalendarPage() {
 
   const requestsByDate: Record<string, EarlyLateRequest[]> = {}
   for (const r of filteredRequests) {
-    if (!r.requested_time) continue
-    const date = r.requested_time.split('T')[0]
+    const date = r.request_date
+    if (!date) continue
     if (!requestsByDate[date]) requestsByDate[date] = []
     requestsByDate[date].push(r)
   }
@@ -261,7 +262,7 @@ export default function AdminCalendarPage() {
               <div className="space-y-2">
                 {selectedRequests.map(req => {
                   const timeStr = req.requested_time
-                    ? new Date(req.requested_time).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+                    ? req.requested_time.slice(0, 5)
                     : null
                   const isEarly = req.type === 'early_checkin'
                   return (
