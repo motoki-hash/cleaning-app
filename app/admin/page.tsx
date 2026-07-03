@@ -153,6 +153,22 @@ export default function AdminPage() {
     if (!reqRoom || !reqType || !reqDate || !reqTime) return
     setReqSaving(true)
 
+    // 同じ部屋・日付・タイプの依頼が既にあるか確認
+    const { data: existing } = await supabase
+      .from('early_late_requests')
+      .select('id, status')
+      .eq('room_id', reqRoom)
+      .eq('type', reqType)
+      .eq('request_date', reqDate)
+      .limit(1)
+
+    if (existing && existing.length > 0) {
+      const statusLabel: Record<string, string> = { pending: '未回答', accepted: '承認済み', declined: '拒否済み', hold: '保留中' }
+      alert(`この部屋・日付・タイプの依頼は既に存在します（${statusLabel[existing[0].status] || existing[0].status}）`)
+      setReqSaving(false)
+      return
+    }
+
     const room = rooms.find(r => r.id === reqRoom)
     const facility = facilities.find(f => f.id === reqFacility)
 
