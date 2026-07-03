@@ -347,6 +347,10 @@ export default function AdminPage() {
              t === 'photos' ? '写真' : '💬 チャット'}
           </button>
         ))}
+        <button onClick={() => router.push('/admin/calendar')}
+          className="px-4 py-2 text-sm font-medium text-gray-500">
+          📅 カレンダー
+        </button>
       </div>
 
       <div className="p-4 space-y-3">
