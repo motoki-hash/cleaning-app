@@ -95,8 +95,8 @@ export default function AdminCalendarPage() {
       supabase
         .from('early_late_requests')
         .select('id, type, status, requested_time, message, rooms(room_number, facility_id, facilities(id, name))')
-        .gte('requested_time', `${startDate}T00:00:00`)
-        .lte('requested_time', `${endDate}T23:59:59`),
+        .gte('requested_time', startDate)
+        .lte('requested_time', `${endDate} 23:59:59`),
     ])
 
     setRecords((recRes.data || []) as unknown as CalendarRecord[])
