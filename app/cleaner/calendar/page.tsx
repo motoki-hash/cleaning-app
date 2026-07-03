@@ -93,7 +93,6 @@ export default function CleanerCalendarPage() {
         .lte('requested_time', `${endDate}T23:59:59`),
     ])
 
-    console.log('[calendar] requests:', reqRes.data, 'error:', reqRes.error)
     setRecords((recRes.data || []) as unknown as CalendarRecord[])
     setRequests((reqRes.data || []) as unknown as EarlyLateRequest[])
     setLoading(false)
