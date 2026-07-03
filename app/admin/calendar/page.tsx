@@ -25,7 +25,7 @@ type EarlyLateRequest = {
   rooms: {
     room_number: string
     facility_id: string
-    facilities: { id: string; name: string } | null
+    facilities: { id: string; name: string; area: string } | null
   } | null
 }
 
@@ -95,7 +95,7 @@ export default function AdminCalendarPage() {
         .order('scheduled_date'),
       supabase
         .from('early_late_requests')
-        .select('id, type, status, request_date, requested_time, message, rooms(room_number, facility_id, facilities(id, name))')
+        .select('id, type, status, request_date, requested_time, message, rooms(room_number, facility_id, facilities(id, name, area))')
         .gte('request_date', startDate)
         .lte('request_date', endDate)
         .neq('status', 'declined'),
@@ -137,13 +137,20 @@ export default function AdminCalendarPage() {
   const selectedRecords = selectedDate ? (recordsByDate[selectedDate] || []) : []
   const selectedRequests = selectedDate ? (requestsByDate[selectedDate] || []) : []
 
-  const byArea: Record<string, Record<string, CalendarRecord[]>> = {}
+  const byArea: Record<string, Record<string, { records: CalendarRecord[]; requests: EarlyLateRequest[] }>> = {}
   for (const r of selectedRecords) {
     const area = r.rooms?.facilities?.area || 'その他'
     const fname = r.rooms?.facilities?.name || '不明'
     if (!byArea[area]) byArea[area] = {}
-    if (!byArea[area][fname]) byArea[area][fname] = []
-    byArea[area][fname].push(r)
+    if (!byArea[area][fname]) byArea[area][fname] = { records: [], requests: [] }
+    byArea[area][fname].records.push(r)
+  }
+  for (const req of selectedRequests) {
+    const area = req.rooms?.facilities?.area || 'その他'
+    const fname = req.rooms?.facilities?.name || '不明'
+    if (!byArea[area]) byArea[area] = {}
+    if (!byArea[area][fname]) byArea[area][fname] = { records: [], requests: [] }
+    byArea[area][fname].requests.push(req)
   }
 
   return (
@@ -258,52 +265,16 @@ export default function AdminCalendarPage() {
             </span>
           </div>
 
-          {/* アーリー/レイト依頼 */}
-          {selectedRequests.length > 0 && (
-            <div className="bg-white rounded-xl p-3 shadow-sm border-l-4 border-orange-400">
-              <p className="text-sm font-bold text-gray-700 mb-2">🔔 アーリー/レイト依頼（{selectedRequests.length}件）</p>
-              <div className="space-y-2">
-                {selectedRequests.map(req => {
-                  const rt = req.requested_time || ''
-                  const timeStr = rt ? (rt.includes(' ') ? rt.split(' ')[1].slice(0, 5) : rt.slice(0, 5)) : null
-                  const isEarly = req.type === 'early_checkin'
-                  return (
-                    <div key={req.id} className="text-xs border-b border-gray-100 pb-2 last:border-0 last:pb-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-gray-800 text-sm">
-                          {req.rooms?.facilities?.name} {req.rooms?.room_number}号室
-                        </span>
-                        <span className={`px-2 py-0.5 rounded-full font-medium ml-2 flex-shrink-0 ${REQ_STATUS_STYLE[req.status] || 'bg-gray-100 text-gray-500'}`}>
-                          {REQ_STATUS_LABEL[req.status] || req.status}
-                        </span>
-                      </div>
-                      <div className="text-gray-500 mb-1">
-                        {isEarly ? '🌅 アーリーチェックイン' : '🌙 レイトチェックアウト'}
-                        {timeStr && <span className="ml-1 font-medium text-gray-700">{timeStr}</span>}
-                      </div>
-                      {timeStr && (
-                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${isEarly ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
-                          🧹 清掃可能時間：{isEarly ? `${timeStr} まで` : `${timeStr} 以降`}
-                        </div>
-                      )}
-                      {req.message && <p className="text-gray-400 mt-1 italic">&ldquo;{req.message}&rdquo;</p>}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* 清掃レコード */}
-          {selectedRecords.length === 0 && selectedRequests.length === 0 ? (
+          {/* エリア別 施設一覧（依頼込み） */}
+          {Object.keys(byArea).length === 0 ? (
             <p className="text-gray-400 text-sm text-center py-8">この日のデータはありません</p>
-          ) : selectedRecords.length > 0 && (
+          ) : (
             <div className="space-y-3">
               {Object.entries(byArea).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([area, facilities]) => (
                 <div key={area}>
-                  <div className="px-1 py-1 text-xs font-bold text-gray-400 uppercase tracking-wide">{area}</div>
+                  <div className="px-1 py-1 text-xs font-bold text-gray-400 tracking-wide">{area}</div>
                   <div className="space-y-2">
-                    {Object.entries(facilities).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([fname, recs]) => {
+                    {Object.entries(facilities).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([fname, { records: recs, requests: reqs }]) => {
                       const doneCount = recs.filter(r => r.status === 'completed').length
                       return (
                         <div key={fname} className="bg-white rounded-xl p-3 shadow-sm">
@@ -311,6 +282,32 @@ export default function AdminCalendarPage() {
                             <p className="text-sm font-bold text-gray-700">{fname}</p>
                             <span className="text-xs text-gray-400">{doneCount}/{recs.length}</span>
                           </div>
+                          {reqs.length > 0 && (
+                            <div className="mb-2 space-y-1.5 border-l-2 border-orange-300 pl-2">
+                              {reqs.map(req => {
+                                const rt = req.requested_time || ''
+                                const timeStr = rt ? (rt.includes(' ') ? rt.split(' ')[1].slice(0, 5) : rt.slice(0, 5)) : null
+                                const isEarly = req.type === 'early_checkin'
+                                return (
+                                  <div key={req.id} className="text-xs">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-gray-600">
+                                        {req.rooms?.room_number}号室 {isEarly ? '🌅' : '🌙'} {timeStr}
+                                      </span>
+                                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${REQ_STATUS_STYLE[req.status] || 'bg-gray-100 text-gray-500'}`}>
+                                        {REQ_STATUS_LABEL[req.status] || req.status}
+                                      </span>
+                                    </div>
+                                    {timeStr && (
+                                      <span className={`text-xs font-medium ${isEarly ? 'text-blue-600' : 'text-purple-600'}`}>
+                                        🧹 {isEarly ? `${timeStr} まで` : `${timeStr} 以降`}
+                                      </span>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
                           <div className="flex flex-wrap gap-1.5">
                             {recs
                               .sort((a, b) => (a.rooms?.room_number || '').localeCompare(b.rooms?.room_number || '', 'ja', { numeric: true }))
