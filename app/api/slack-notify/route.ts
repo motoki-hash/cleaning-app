@@ -36,11 +36,28 @@ async function postToSlack(text: string, threadTs?: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const { status, facilityName, facilityId, roomNumber, area, requestType, requestTime, message } = await req.json()
+  const { status, facilityName, facilityId, roomNumber, area, requestType, requestTime, message, photoType, photoCount } = await req.json()
 
   let text = ''
 
-  if (status === 'chat') {
+  if (status === 'photo') {
+    const countText = photoCount > 1 ? `${photoCount}枚` : '1枚'
+    const today = new Date().toISOString().split('T')[0]
+    const { data: thread } = await supabaseAdmin
+      .from('slack_threads')
+      .select('thread_ts')
+      .eq('facility_id', facilityId)
+      .eq('date', today)
+      .single()
+    const text = `📷 ${roomNumber}号室 ${photoType}写真が${countText}格納されました\n📍 ${area} / ${facilityName}`
+    if (thread) {
+      await postToSlack(text, thread.thread_ts)
+    } else {
+      await postToSlack(text)
+    }
+    return NextResponse.json({ ok: true })
+  } else if (status === 'chat') {
+
     // facilityIdが未送信の場合はfacilityNameから検索
     let resolvedFacilityId = facilityId
     if (!resolvedFacilityId && facilityName) {

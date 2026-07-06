@@ -243,6 +243,19 @@ export default function FacilityChatPage() {
       const typeLabel = type === 'after' ? '清掃後' : type === 'issue' ? '問題' : '清掃前'
       const countText = successCount > 1 ? `${successCount}枚` : ''
       await addMessage('system', `📷 ${room}号室の${typeLabel}写真${countText}を追加しました`, recordId)
+      fetch('/api/slack-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'photo',
+          facilityId,
+          facilityName: facility?.name || '',
+          area: facility?.area || '',
+          roomNumber: room,
+          photoType: typeLabel,
+          photoCount: successCount,
+        }),
+      }).catch(() => {})
     }
     setUploading(null)
   }
