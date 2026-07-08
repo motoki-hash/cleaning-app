@@ -26,6 +26,14 @@ export default function AdminChatPage() {
   const [inputText, setInputText] = useState('')
   const [sending, setSending] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [cleanerLastReadAt, setCleanerLastReadAt] = useState<string | null>(null)
+
+  const markAdminRead = async () => {
+    await supabase.from('message_reads').upsert(
+      { facility_id: facilityId, reader: 'admin', last_read_at: new Date().toISOString() },
+      { onConflict: 'facility_id,reader' }
+    )
+  }
 
   useEffect(() => {
     const init = async () => {
@@ -33,12 +41,18 @@ export default function AdminChatPage() {
       if (!user) { router.push('/login'); return }
       setCurrentUserId(user.id)
 
-      const [facRes, msgRes] = await Promise.all([
+      const [facRes, msgRes, readsRes] = await Promise.all([
         supabase.from('facilities').select('name, area').eq('id', facilityId).single(),
         supabase.from('chat_messages').select('*').eq('facility_id', facilityId).order('created_at'),
+        supabase.from('message_reads').select('reader, last_read_at').eq('facility_id', facilityId),
       ])
       setFacility(facRes.data)
       setMessages(msgRes.data || [])
+
+      const cleanerRead = (readsRes.data || []).find(r => r.reader === 'cleaner')
+      setCleanerLastReadAt(cleanerRead?.last_read_at || null)
+
+      await markAdminRead()
       setLoading(false)
 
       const channel = supabase
@@ -53,10 +67,29 @@ export default function AdminChatPage() {
             if (prev.some(m => m.id === payload.new.id)) return prev
             return [...prev, payload.new as ChatMessage]
           })
+          markAdminRead()
         })
         .subscribe()
 
-      return () => { supabase.removeChannel(channel) }
+      // 清掃員の既読状態をリアルタイムで監視
+      const readsChannel = supabase
+        .channel(`admin-reads:${facilityId}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'message_reads',
+          filter: `facility_id=eq.${facilityId}`,
+        }, payload => {
+          if (payload.new && (payload.new as { reader: string }).reader === 'cleaner') {
+            setCleanerLastReadAt((payload.new as { last_read_at: string }).last_read_at)
+          }
+        })
+        .subscribe()
+
+      return () => {
+        supabase.removeChannel(channel)
+        supabase.removeChannel(readsChannel)
+      }
     }
     init()
   }, [facilityId, router])
@@ -79,7 +112,6 @@ export default function AdminChatPage() {
       sender_name: '管理者',
     })
 
-    // 清掃員全員にプッシュ通知
     fetch('/api/push-notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -101,7 +133,12 @@ export default function AdminChatPage() {
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">読み込み中...</div>
 
-  // 日付グループ化
+  // 管理者が送った最後のメッセージのうち清掃員が既読済みのもの
+  const adminMessages = messages.filter(m => m.type === 'note' && m.sender_name === '管理者')
+  const lastReadByCleanerMsg = cleanerLastReadAt
+    ? [...adminMessages].reverse().find(m => m.created_at <= cleanerLastReadAt)
+    : null
+
   let lastDate = ''
 
   return (
@@ -117,11 +154,12 @@ export default function AdminChatPage() {
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
         {messages.map(msg => {
           const isNote = msg.type === 'note'
-          const isMyMessage = isNote && msg.sender_id === currentUserId
+          const isMyMessage = isNote && msg.sender_name === '管理者'
           const isStatusUpdate = msg.type === 'status_update'
           const msgDate = formatDate(msg.created_at)
           const showDate = msgDate !== lastDate
           lastDate = msgDate
+          const isLastReadByCleanerMsg = lastReadByCleanerMsg?.id === msg.id
 
           return (
             <div key={msg.id}>
@@ -155,9 +193,14 @@ export default function AdminChatPage() {
                     }`}>
                       <p>{msg.content}</p>
                     </div>
-                    <p className={`text-xs mt-0.5 ${isMyMessage ? 'text-white/60 text-right' : 'text-gray-400 ml-1'}`}>
-                      {formatTime(msg.created_at)}
-                    </p>
+                    <div className={`flex items-center gap-1 mt-0.5 ${isMyMessage ? 'flex-row-reverse' : ''}`}>
+                      <p className={`text-xs ${isMyMessage ? 'text-white/60' : 'text-gray-400 ml-1'}`}>
+                        {formatTime(msg.created_at)}
+                      </p>
+                      {isMyMessage && isLastReadByCleanerMsg && (
+                        <span className="text-xs text-white/70">既読</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (

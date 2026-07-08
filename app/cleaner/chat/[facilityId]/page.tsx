@@ -59,6 +59,7 @@ export default function FacilityChatPage() {
   const [showRequestModal, setShowRequestModal] = useState(false)
   const [showRequestList, setShowRequestList] = useState(false)
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({})
+  const [adminLastReadAt, setAdminLastReadAt] = useState<string | null>(null)
   const requestRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
@@ -86,7 +87,7 @@ export default function FacilityChatPage() {
       if (roomIds.length === 0) { setLoading(false); return }
 
       // 部屋IDで清掃レコード・チャット・依頼を取得
-      const [recRes, msgRes, reqRes] = await Promise.all([
+      const [recRes, msgRes, reqRes, readsRes] = await Promise.all([
         supabase.from('cleaning_records')
           .select('id, status, started_at, completed_at, room_id, rooms(id, room_number)')
           .eq('cleaner_id', cleaner.id)
@@ -101,6 +102,9 @@ export default function FacilityChatPage() {
           .select('id, type, requested_time, request_date, message, status, rooms(room_number)')
           .in('room_id', roomIds)
           .order('created_at', { ascending: false }),
+        supabase.from('message_reads')
+          .select('reader, last_read_at')
+          .eq('facility_id', facilityId),
       ])
 
       // 同じroom_idの重複レコードを除去（最新1件のみ残す）
@@ -114,6 +118,15 @@ export default function FacilityChatPage() {
       const allReqs = (reqRes.data as unknown as EarlyLateRequest[]) || []
       setPendingRequests(allReqs.filter(r => r.status === 'pending'))
       setAllRequests(allReqs)
+
+      const adminRead = (readsRes.data || []).find(r => r.reader === 'admin')
+      setAdminLastReadAt(adminRead?.last_read_at || null)
+
+      // 清掃員の既読を登録
+      await supabase.from('message_reads').upsert(
+        { facility_id: facilityId, reader: 'cleaner', last_read_at: new Date().toISOString() },
+        { onConflict: 'facility_id,reader' }
+      )
       setLoading(false)
 
       // リアルタイム購読
@@ -129,6 +142,11 @@ export default function FacilityChatPage() {
             if (prev.some(m => m.id === payload.new.id)) return prev
             return [...prev, payload.new as ChatMessage]
           })
+          // 新着メッセージも即既読
+          supabase.from('message_reads').upsert(
+            { facility_id: facilityId, reader: 'cleaner', last_read_at: new Date().toISOString() },
+            { onConflict: 'facility_id,reader' }
+          )
         })
         .subscribe()
 
@@ -143,9 +161,25 @@ export default function FacilityChatPage() {
         })
         .subscribe()
 
+      // 管理者の既読状態をリアルタイムで監視
+      const readsChannel = supabase
+        .channel(`cleaner-reads:${facilityId}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'message_reads',
+          filter: `facility_id=eq.${facilityId}`,
+        }, payload => {
+          if (payload.new && (payload.new as { reader: string }).reader === 'admin') {
+            setAdminLastReadAt((payload.new as { last_read_at: string }).last_read_at)
+          }
+        })
+        .subscribe()
+
       return () => {
         supabase.removeChannel(msgChannel)
         supabase.removeChannel(recChannel)
+        supabase.removeChannel(readsChannel)
       }
     }
     init()
@@ -293,6 +327,12 @@ export default function FacilityChatPage() {
   const pendingRooms = records.filter(r => r.status === 'scheduled' || r.status === 'in_progress')
   const completedCount = records.filter(r => r.status === 'completed').length
 
+  // 自分が送った最後のメッセージのうち管理者が既読済みのもの
+  const myMessages = messages.filter(m => m.type === 'note' && m.sender_id === currentUserId)
+  const lastReadByAdminMsg = adminLastReadAt
+    ? [...myMessages].reverse().find(m => m.created_at <= adminLastReadAt)
+    : null
+
   if (loading) return <div className="min-h-screen flex items-center justify-center">読み込み中...</div>
 
   return (
@@ -369,6 +409,7 @@ export default function FacilityChatPage() {
               const isNote = msg.type === 'note'
               const isStatusUpdate = msg.type === 'status_update'
               const isMyMessage = isNote && msg.sender_id === currentUserId
+              const isLastReadByAdmin = lastReadByAdminMsg?.id === msg.id
 
               if (isNote) {
                 return (
@@ -387,9 +428,14 @@ export default function FacilityChatPage() {
                       }`}>
                         <p>{msg.content}</p>
                       </div>
-                      <p className={`text-xs mt-0.5 ${isMyMessage ? 'text-white/60 text-right' : 'text-gray-400 ml-1'}`}>
-                        {formatTime(msg.created_at)}
-                      </p>
+                      <div className={`flex items-center gap-1 mt-0.5 ${isMyMessage ? 'flex-row-reverse' : ''}`}>
+                        <p className={`text-xs ${isMyMessage ? 'text-white/60' : 'text-gray-400 ml-1'}`}>
+                          {formatTime(msg.created_at)}
+                        </p>
+                        {isMyMessage && isLastReadByAdmin && (
+                          <span className="text-xs text-white/70">既読</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )

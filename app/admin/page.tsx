@@ -47,6 +47,7 @@ export default function AdminPage() {
   const [tab, setTab] = useState<'records' | 'troubles' | 'requests' | 'photos' | 'chat'>('records')
   const [photos, setPhotos] = useState<{ id: string; photo_url: string; photo_type: string; created_at: string }[]>([])
   const [loading, setLoading] = useState(true)
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
 
   const [facilities, setFacilities] = useState<Facility[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
@@ -102,10 +103,37 @@ export default function AdminPage() {
       setRecords(Array.from(seenRooms.values()))
       setTroubles((troublesRes.data as unknown as TroubleReport[]) || [])
       setPhotos(photosRes.data || [])
-      setFacilities((facilitiesRes.data as Facility[]) || [])
+      const facilityList = (facilitiesRes.data as Facility[]) || []
+      setFacilities(facilityList)
       setRooms((roomsRes.data as Room[]) || [])
       setRequests((requestsRes.data as unknown as EarlyLateRequest[]) || [])
       setLoading(false)
+
+      // 管理者の未読カウント（清掃員からのメッセージで未読のもの）
+      if (facilityList.length > 0) {
+        const { data: reads } = await supabase
+          .from('message_reads')
+          .select('facility_id, last_read_at')
+          .eq('reader', 'admin')
+          .in('facility_id', facilityList.map(f => f.id))
+
+        const readMap: Record<string, string> = {}
+        for (const r of reads || []) readMap[r.facility_id] = r.last_read_at
+
+        const counts: Record<string, number> = {}
+        await Promise.all(facilityList.map(async f => {
+          const lastRead = readMap[f.id] || '1970-01-01'
+          const { count } = await supabase
+            .from('chat_messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('facility_id', f.id)
+            .eq('type', 'note')
+            .neq('sender_name', '管理者')
+            .gt('created_at', lastRead)
+          if (count && count > 0) counts[f.id] = count
+        }))
+        setUnreadCounts(counts)
+      }
 
       // リアルタイム: 清掃状況の更新
       const recChannel = supabase
@@ -509,7 +537,10 @@ export default function AdminPage() {
             {facilities.map(f => (
               <button
                 key={f.id}
-                onClick={() => router.push(`/admin/chat/${f.id}`)}
+                onClick={() => {
+                  setUnreadCounts(prev => { const n = { ...prev }; delete n[f.id]; return n })
+                  router.push(`/admin/chat/${f.id}`)
+                }}
                 className="w-full bg-white rounded-xl shadow-sm p-4 flex items-center gap-3 text-left"
               >
                 <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg flex-shrink-0">
@@ -519,7 +550,13 @@ export default function AdminPage() {
                   <p className="font-medium text-gray-800 text-sm truncate">{f.name}</p>
                   <p className="text-xs text-gray-400">{f.area}</p>
                 </div>
-                <span className="text-gray-300">›</span>
+                {unreadCounts[f.id] > 0 ? (
+                  <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
+                    {unreadCounts[f.id] > 99 ? '99+' : unreadCounts[f.id]}
+                  </span>
+                ) : (
+                  <span className="text-gray-300">›</span>
+                )}
               </button>
             ))}
           </div>
