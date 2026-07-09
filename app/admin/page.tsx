@@ -404,28 +404,36 @@ export default function AdminPage() {
 
       <div className="p-4 space-y-3">
         {/* 清掃状況タブ */}
-        {tab === 'records' && (
-          <>
-            {filteredRecords.length === 0 && <p className="text-center text-gray-400 mt-8">該当するタスクがありません</p>}
-            {filteredRecords.map(record => (
-              <div key={record.id} className="bg-white rounded-xl shadow-sm p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <p className="text-xs text-gray-400">{record.rooms?.facilities?.area}</p>
-                    <p className="font-medium text-gray-800">{record.rooms?.facilities?.name}</p>
-                    <p className="text-sm text-gray-500">{record.rooms?.room_number}号室</p>
-                    <p className="text-xs text-gray-400">{record.cleaners?.name}</p>
+        {tab === 'records' && (() => {
+          if (filteredRecords.length === 0) return <p className="text-center text-gray-400 mt-8">該当するタスクがありません</p>
+          const byArea: Record<string, typeof filteredRecords> = {}
+          for (const r of filteredRecords) {
+            const area = r.rooms?.facilities?.area || 'その他'
+            if (!byArea[area]) byArea[area] = []
+            byArea[area].push(r)
+          }
+          return Object.entries(byArea).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([area, recs]) => (
+            <div key={area}>
+              <p className="text-xs font-bold text-gray-400 px-1 py-1">{area}</p>
+              {recs.map(record => (
+                <div key={record.id} className="bg-white rounded-xl shadow-sm p-4 mb-2">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="font-medium text-gray-800">{record.rooms?.facilities?.name}</p>
+                      <p className="text-sm text-gray-500">{record.rooms?.room_number}号室</p>
+                      <p className="text-xs text-gray-400">{record.cleaners?.name}</p>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[record.status]}`}>
+                      {statusLabel[record.status]}
+                    </span>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[record.status]}`}>
-                    {statusLabel[record.status]}
-                  </span>
+                  {record.started_at && <p className="text-xs text-gray-400">開始: {new Date(record.started_at).toLocaleTimeString('ja-JP')}</p>}
+                  {record.completed_at && <p className="text-xs text-gray-400">完了: {new Date(record.completed_at).toLocaleTimeString('ja-JP')}</p>}
                 </div>
-                {record.started_at && <p className="text-xs text-gray-400">開始: {new Date(record.started_at).toLocaleTimeString('ja-JP')}</p>}
-                {record.completed_at && <p className="text-xs text-gray-400">完了: {new Date(record.completed_at).toLocaleTimeString('ja-JP')}</p>}
-              </div>
-            ))}
-          </>
-        )}
+              ))}
+            </div>
+          ))
+        })()}
 
         {/* トラブルタブ */}
         {tab === 'troubles' && troubles.map(trouble => (
@@ -535,36 +543,47 @@ export default function AdminPage() {
         )}
 
         {/* チャットタブ */}
-        {tab === 'chat' && (
-          <div className="space-y-2">
-            <p className="text-xs text-gray-500 pb-1">施設を選んでチャットを開く</p>
-            {facilities.map(f => (
-              <button
-                key={f.id}
-                onClick={() => {
-                  setUnreadCounts(prev => { const n = { ...prev }; delete n[f.id]; return n })
-                  router.push(`/admin/chat/${f.id}`)
-                }}
-                className="w-full bg-white rounded-xl shadow-sm p-4 flex items-center gap-3 text-left"
-              >
-                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg flex-shrink-0">
-                  🏠
+        {tab === 'chat' && (() => {
+          const chatByArea: Record<string, typeof facilities> = {}
+          for (const f of facilities) {
+            const area = f.area || 'その他'
+            if (!chatByArea[area]) chatByArea[area] = []
+            chatByArea[area].push(f)
+          }
+          return (
+            <div className="space-y-1">
+              {Object.entries(chatByArea).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([area, facs]) => (
+                <div key={area}>
+                  <div className="px-1 py-1.5 text-xs font-bold text-gray-400 tracking-wide">{area}</div>
+                  {facs.map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => {
+                        setUnreadCounts(prev => { const n = { ...prev }; delete n[f.id]; return n })
+                        router.push(`/admin/chat/${f.id}`)
+                      }}
+                      className="w-full bg-white border-b px-4 py-3 flex items-center gap-3 text-left active:bg-gray-50 mb-0"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg flex-shrink-0">
+                        🏠
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-800 text-sm truncate">{f.name}</p>
+                      </div>
+                      {unreadCounts[f.id] > 0 ? (
+                        <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
+                          {unreadCounts[f.id] > 99 ? '99+' : unreadCounts[f.id]}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300">›</span>
+                      )}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-800 text-sm truncate">{f.name}</p>
-                  <p className="text-xs text-gray-400">{f.area}</p>
-                </div>
-                {unreadCounts[f.id] > 0 ? (
-                  <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
-                    {unreadCounts[f.id] > 99 ? '99+' : unreadCounts[f.id]}
-                  </span>
-                ) : (
-                  <span className="text-gray-300">›</span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )
+        })()}
 
         {/* 写真タブ */}
         {tab === 'photos' && (
