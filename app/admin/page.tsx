@@ -251,7 +251,7 @@ export default function AdminPage() {
     })
 
     // Slack通知
-    fetch('/api/slack-notify', {
+    await fetch('/api/slack-notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -266,7 +266,7 @@ export default function AdminPage() {
         endTime: evEnd,
         note: evNote.trim() || null,
       }),
-    }).catch(() => {})
+    })
 
     setShowEventForm(false)
     setEvFacility(''); setEvRoom(''); setEvType('内覧'); setEvDate(new Date().toISOString().split('T')[0])

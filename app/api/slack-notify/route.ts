@@ -94,24 +94,10 @@ export async function POST(req: NextRequest) {
     const icon = eventType === '内覧' ? '👀' : '🔧'
     const roomText = roomNumber ? `${roomNumber}号室` : '施設全体'
     const dateLabel = new Date(eventDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })
-    text = `${icon} ${eventType}のお知らせ\n📍 ${area} / ${facilityName} ${roomText}\n📅 ${dateLabel} ${startTime.slice(0,5)}〜${endTime.slice(0,5)}`
-    if (note) text += `\n📝 ${note}`
-
-    // 対象施設のSlackスレッドに投稿
-    if (facilityId) {
-      const { data: thread } = await supabaseAdmin
-        .from('slack_threads')
-        .select('thread_ts')
-        .eq('facility_id', facilityId)
-        .eq('date', eventDate)
-        .single()
-      if (thread) {
-        await postToSlack(text, thread.thread_ts)
-      } else {
-        await postToSlack(text)
-      }
-      return NextResponse.json({ ok: true })
-    }
+    const slackText = `${icon} ${eventType}のお知らせ\n📍 ${area} / ${facilityName} ${roomText}\n📅 ${dateLabel} ${String(startTime).slice(0,5)}〜${String(endTime).slice(0,5)}`
+    const fullText = note ? slackText + `\n📝 ${note}` : slackText
+    await postToSlack(fullText)
+    return NextResponse.json({ ok: true })
   } else if (status === 'request') {
     const timeText = requestTime ? `（${requestTime}）` : ''
     text = `📨 ${requestType}依頼${timeText}\n📍 ${area} / ${facilityName} ${roomNumber}号室`
