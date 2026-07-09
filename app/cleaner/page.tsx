@@ -61,7 +61,12 @@ export default function CleanerHome() {
       const raw = (recRes.data as unknown as CleaningRecord[]) || []
       const seen = new Map<string, CleaningRecord>()
       for (const r of raw) { if (!seen.has(r.room_id)) seen.set(r.room_id, r) }
-      setRecords(Array.from(seen.values()))
+      // 担当施設のレコードのみに絞る
+      const allRecs = Array.from(seen.values())
+      const filtered = facilityIds.length > 0
+        ? allRecs.filter(r => facilityIds.includes(r.rooms?.facility_id || ''))
+        : allRecs
+      setRecords(filtered)
       setLoading(false)
 
       // 未読メッセージ数を計算
