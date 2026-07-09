@@ -32,6 +32,16 @@ type EarlyLateRequest = {
   status: string
   rooms?: { room_number: string } | null
 }
+type RoomEvent = {
+  id: string
+  room_id: string | null
+  event_type: '内覧' | '是正'
+  event_date: string
+  start_time: string
+  end_time: string
+  note: string | null
+  rooms: { room_number: string } | null
+}
 
 export default function FacilityChatPage() {
   const router = useRouter()
@@ -60,6 +70,7 @@ export default function FacilityChatPage() {
   const [showRequestList, setShowRequestList] = useState(false)
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({})
   const [adminLastReadAt, setAdminLastReadAt] = useState<string | null>(null)
+  const [roomEvents, setRoomEvents] = useState<RoomEvent[]>([])
   const requestRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
@@ -87,7 +98,7 @@ export default function FacilityChatPage() {
       if (roomIds.length === 0) { setLoading(false); return }
 
       // 部屋IDで清掃レコード・チャット・依頼を取得
-      const [recRes, msgRes, reqRes, readsRes] = await Promise.all([
+      const [recRes, msgRes, reqRes, readsRes, eventsRes] = await Promise.all([
         supabase.from('cleaning_records')
           .select('id, status, started_at, completed_at, room_id, rooms(id, room_number)')
           .eq('cleaner_id', cleaner.id)
@@ -105,6 +116,11 @@ export default function FacilityChatPage() {
         supabase.from('message_reads')
           .select('reader, last_read_at')
           .eq('facility_id', facilityId),
+        supabase.from('room_events')
+          .select('id, room_id, event_type, event_date, start_time, end_time, note, rooms(room_number)')
+          .eq('facility_id', facilityId)
+          .gte('event_date', today)
+          .order('event_date'),
       ])
 
       // 同じroom_idの重複レコードを除去（最新1件のみ残す）
@@ -119,6 +135,7 @@ export default function FacilityChatPage() {
       setPendingRequests(allReqs.filter(r => r.status === 'pending'))
       setAllRequests(allReqs)
 
+      setRoomEvents((eventsRes.data as unknown as RoomEvent[]) || [])
       const adminRead = (readsRes.data || []).find(r => r.reader === 'admin')
       setAdminLastReadAt(adminRead?.last_read_at || null)
 
@@ -367,6 +384,22 @@ export default function FacilityChatPage() {
           </button>
         </div>
       </header>
+
+      {/* 内覧・是正バナー */}
+      {roomEvents.length > 0 && (
+        <div style={{ position: 'sticky', top: '52px', zIndex: 19 }}
+          className="bg-purple-600 text-white px-4 py-2">
+          {roomEvents.map(ev => (
+            <div key={ev.id} className="flex items-center gap-2 text-xs py-0.5">
+              <span>{ev.event_type === '内覧' ? '👀' : '🔧'}</span>
+              <span className="font-bold">{ev.event_type}</span>
+              {ev.rooms ? <span>{ev.rooms.room_number}号室</span> : <span>施設全体</span>}
+              <span>{ev.start_time.slice(0,5)}〜{ev.end_time.slice(0,5)}</span>
+              {ev.note && <span className="opacity-80">/ {ev.note}</span>}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 未回答の依頼バナー（スクロールしても固定） */}
       {pendingRequests.length > 0 && (

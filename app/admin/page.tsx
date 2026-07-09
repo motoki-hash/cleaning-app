@@ -39,6 +39,18 @@ type EarlyLateRequest = {
 
 type Facility = { id: string; name: string; area: string }
 type Room = { id: string; room_number: string; facility_id: string }
+type RoomEvent = {
+  id: string
+  facility_id: string
+  room_id: string | null
+  event_type: '内覧' | '是正'
+  event_date: string
+  start_time: string
+  end_time: string
+  note: string | null
+  rooms: { room_number: string } | null
+  facilities: { name: string; area: string } | null
+}
 
 export default function AdminPage() {
   const router = useRouter()
@@ -55,6 +67,18 @@ export default function AdminPage() {
   const [selectedArea, setSelectedArea] = useState('')
   const [selectedFacility, setSelectedFacility] = useState('')
   const [selectedRoom, setSelectedRoom] = useState('')
+
+  // 内覧・是正
+  const [roomEvents, setRoomEvents] = useState<RoomEvent[]>([])
+  const [showEventForm, setShowEventForm] = useState(false)
+  const [evFacility, setEvFacility] = useState('')
+  const [evRoom, setEvRoom] = useState('')
+  const [evType, setEvType] = useState<'内覧' | '是正'>('内覧')
+  const [evDate, setEvDate] = useState(new Date().toISOString().split('T')[0])
+  const [evStart, setEvStart] = useState('')
+  const [evEnd, setEvEnd] = useState('')
+  const [evNote, setEvNote] = useState('')
+  const [evSaving, setEvSaving] = useState(false)
 
   // 依頼タブの展開日付
   const [expandedReqDates, setExpandedReqDates] = useState<Set<string>>(new Set())
@@ -81,7 +105,7 @@ export default function AdminPage() {
 
       const today = new Date().toISOString().split('T')[0]
 
-      const [recordsRes, troublesRes, photosRes, facilitiesRes, roomsRes, requestsRes] = await Promise.all([
+      const [recordsRes, troublesRes, photosRes, facilitiesRes, roomsRes, requestsRes, eventsRes] = await Promise.all([
         supabase
           .from('cleaning_records')
           .select('id, scheduled_date, status, started_at, completed_at, notes, room_id, rooms(room_number, facility_id, facilities(name, area)), cleaners(name, cleaning_companies(name))')
@@ -104,6 +128,11 @@ export default function AdminPage() {
           .select('id, type, status, request_date, requested_time, message, created_at, responded_at, rooms(room_number, facilities(name, area))')
           .order('request_date', { ascending: false })
           .limit(100),
+        supabase
+          .from('room_events')
+          .select('id, facility_id, room_id, event_type, event_date, start_time, end_time, note, rooms(room_number), facilities(name, area)')
+          .order('event_date', { ascending: false })
+          .limit(100),
       ])
 
       const rawRecords = (recordsRes.data as unknown as Record_[]) || []
@@ -117,9 +146,13 @@ export default function AdminPage() {
       setRooms((roomsRes.data as Room[]) || [])
       const reqData = (requestsRes.data as unknown as EarlyLateRequest[]) || []
       setRequests(reqData)
+      setRoomEvents((eventsRes.data as unknown as RoomEvent[]) || [])
       // 今日・未来の日付は最初から展開
       const today2 = new Date().toISOString().split('T')[0]
-      const futureDates = new Set(reqData.filter(r => r.request_date && r.request_date >= today2).map(r => r.request_date as string))
+      const futureDates = new Set([
+        ...reqData.filter(r => r.request_date && r.request_date >= today2).map(r => r.request_date as string),
+        ...((eventsRes.data as unknown as RoomEvent[]) || []).filter(e => e.event_date >= today2).map(e => e.event_date),
+      ])
       setExpandedReqDates(futureDates)
       setLoading(false)
 
@@ -186,6 +219,35 @@ export default function AdminPage() {
     router.push('/login')
   }
 
+  const createEvent = async () => {
+    if (!evFacility || !evDate || !evStart || !evEnd) return
+    setEvSaving(true)
+    await supabase.from('room_events').insert({
+      facility_id: evFacility,
+      room_id: evRoom || null,
+      event_type: evType,
+      event_date: evDate,
+      start_time: evStart,
+      end_time: evEnd,
+      note: evNote.trim() || null,
+    })
+    const { data } = await supabase
+      .from('room_events')
+      .select('id, facility_id, room_id, event_type, event_date, start_time, end_time, note, rooms(room_number), facilities(name, area)')
+      .order('event_date', { ascending: false }).limit(100)
+    setRoomEvents((data as unknown as RoomEvent[]) || [])
+    setShowEventForm(false)
+    setEvFacility(''); setEvRoom(''); setEvType('内覧'); setEvDate(new Date().toISOString().split('T')[0])
+    setEvStart(''); setEvEnd(''); setEvNote('')
+    setEvSaving(false)
+  }
+
+  const deleteEvent = async (id: string) => {
+    if (!confirm('このイベントを削除しますか？')) return
+    await supabase.from('room_events').delete().eq('id', id)
+    setRoomEvents(prev => prev.filter(e => e.id !== id))
+  }
+
   const resolveTrouble = async (id: string) => {
     await supabase.from('trouble_reports').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', id)
     setTroubles(prev => prev.filter(t => t.id !== id))
@@ -194,6 +256,21 @@ export default function AdminPage() {
   const createRequest = async () => {
     if (!reqRoom || !reqType || !reqDate || !reqTime) return
     setReqSaving(true)
+
+    // 内覧・是正との時間衝突チェック
+    const reqTimeMin = parseInt(reqTime.split(':')[0]) * 60 + parseInt(reqTime.split(':')[1])
+    const conflictingEvents = roomEvents.filter(ev => {
+      if (ev.event_date !== reqDate) return false
+      // 施設全体 or 同一部屋のイベント
+      if (ev.room_id && ev.room_id !== reqRoom) return false
+      const evStartMin = parseInt(ev.start_time.slice(0,2)) * 60 + parseInt(ev.start_time.slice(3,5))
+      return evStartMin < reqTimeMin
+    })
+    if (conflictingEvents.length > 0) {
+      const evLabels = conflictingEvents.map(ev => `${ev.event_type}(${ev.start_time.slice(0,5)}〜${ev.end_time.slice(0,5)})`).join(', ')
+      const ok = confirm(`⚠ この日時には ${evLabels} が登録されています。\nアーリー/レイト依頼と時間が衝突する可能性があります。\n\nそれでも依頼を作成しますか？`)
+      if (!ok) { setReqSaving(false); return }
+    }
 
     // 同じ部屋・日付・タイプの依頼が既にあるか確認
     const { data: existing } = await supabase
@@ -470,11 +547,67 @@ export default function AdminPage() {
         {/* 依頼タブ */}
         {tab === 'requests' && (
           <>
-            {/* 依頼作成ボタン */}
-            <button onClick={() => setShowRequestForm(!showRequestForm)}
-              className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-medium">
-              ＋ アーリー/レイト依頼を作成
-            </button>
+            {/* ボタン行 */}
+            <div className="flex gap-2">
+              <button onClick={() => { setShowEventForm(!showEventForm); setShowRequestForm(false) }}
+                className="flex-1 bg-purple-600 text-white py-3 rounded-xl text-sm font-medium">
+                🏠 内覧・是正を登録
+              </button>
+              <button onClick={() => { setShowRequestForm(!showRequestForm); setShowEventForm(false) }}
+                className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-medium">
+                ＋ アーリー/レイト依頼
+              </button>
+            </div>
+
+            {/* 内覧・是正登録フォーム */}
+            {showEventForm && (
+              <div className="bg-white rounded-xl shadow-sm p-4 space-y-3 border border-purple-200">
+                <p className="font-medium text-gray-800">内覧・是正を登録</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['内覧', '是正'] as const).map(t => (
+                    <button key={t} onClick={() => setEvType(t)}
+                      className={`py-2 rounded-lg text-sm font-medium border ${evType === t ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-300 text-gray-600'}`}>
+                      {t === '内覧' ? '👀 内覧' : '🔧 是正'}
+                    </button>
+                  ))}
+                </div>
+                <select value={evFacility} onChange={e => { setEvFacility(e.target.value); setEvRoom('') }}
+                  className="w-full border rounded-lg px-3 py-2 text-sm">
+                  <option value="">施設を選択（必須）</option>
+                  {facilities.map(f => <option key={f.id} value={f.id}>{f.area} / {f.name}</option>)}
+                </select>
+                <select value={evRoom} onChange={e => setEvRoom(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" disabled={!evFacility}>
+                  <option value="">施設全体（号室指定なし）</option>
+                  {rooms.filter(r => r.facility_id === evFacility).map(r => <option key={r.id} value={r.id}>{r.room_number}号室</option>)}
+                </select>
+                <input type="date" value={evDate} onChange={e => setEvDate(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">開始時間</label>
+                    <input type="time" value={evStart} onChange={e => setEvStart(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">終了時間</label>
+                    <input type="time" value={evEnd} onChange={e => setEvEnd(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                </div>
+                <textarea value={evNote} onChange={e => setEvNote(e.target.value)}
+                  placeholder="備考（任意）"
+                  className="w-full border rounded-lg px-3 py-2 text-sm h-16 resize-none" />
+                <div className="flex gap-2">
+                  <button onClick={() => setShowEventForm(false)}
+                    className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm">キャンセル</button>
+                  <button onClick={createEvent} disabled={evSaving || !evFacility || !evDate || !evStart || !evEnd}
+                    className="flex-1 bg-purple-600 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+                    {evSaving ? '登録中...' : '登録する'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* 依頼作成フォーム */}
             {showRequestForm && (
@@ -527,27 +660,28 @@ export default function AdminPage() {
             )}
 
             {/* 依頼一覧（日付→エリア→施設でグループ化） */}
-            {requests.length === 0 && !showRequestForm && (
-              <p className="text-center text-gray-400 mt-8">依頼はまだありません</p>
+            {requests.length === 0 && roomEvents.length === 0 && !showRequestForm && !showEventForm && (
+              <p className="text-center text-gray-400 mt-8">依頼・イベントはまだありません</p>
             )}
             {(() => {
-              // 日付でグループ化
-              const byDate: Record<string, EarlyLateRequest[]> = {}
-              for (const req of requests) {
-                const date = req.request_date || req.created_at.split('T')[0]
-                if (!byDate[date]) byDate[date] = []
-                byDate[date].push(req)
-              }
               const today2 = new Date().toISOString().split('T')[0]
-              return Object.entries(byDate).sort(([a], [b]) => b.localeCompare(a)).map(([date, reqs]) => {
+              // 全日付を収集
+              const allDates = new Set([
+                ...requests.map(r => r.request_date || r.created_at.split('T')[0]),
+                ...roomEvents.map(e => e.event_date),
+              ])
+
+              return [...allDates].sort((a, b) => b.localeCompare(a)).map(date => {
                 const isOpen = expandedReqDates.has(date)
                 const isPast = date < today2
-                const pendingCount = reqs.filter(r => r.status === 'pending').length
+                const dateReqs = requests.filter(r => (r.request_date || r.created_at.split('T')[0]) === date)
+                const dateEvents = roomEvents.filter(e => e.event_date === date)
+                const pendingCount = dateReqs.filter(r => r.status === 'pending').length
                 const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })
 
-                // エリア→施設でグループ化
+                // エリア→施設でグループ化（依頼）
                 const byArea: Record<string, Record<string, EarlyLateRequest[]>> = {}
-                for (const req of reqs) {
+                for (const req of dateReqs) {
                   const area = req.rooms?.facilities?.area || 'その他'
                   const fname = req.rooms?.facilities?.name || '不明'
                   if (!byArea[area]) byArea[area] = {}
@@ -555,15 +689,29 @@ export default function AdminPage() {
                   byArea[area][fname].push(req)
                 }
 
+                // エリア→施設でグループ化（イベント）
+                const evByArea: Record<string, Record<string, RoomEvent[]>> = {}
+                for (const ev of dateEvents) {
+                  const area = ev.facilities?.area || 'その他'
+                  const fname = ev.facilities?.name || '不明'
+                  if (!evByArea[area]) evByArea[area] = {}
+                  if (!evByArea[area][fname]) evByArea[area][fname] = []
+                  evByArea[area][fname].push(ev)
+                }
+
+                const allAreas = [...new Set([...Object.keys(byArea), ...Object.keys(evByArea)])].sort((a, b) => a.localeCompare(b, 'ja'))
+
                 return (
                   <div key={date} className="bg-white rounded-xl shadow-sm overflow-hidden">
-                    {/* 日付ヘッダー */}
-                    <button
-                      onClick={() => toggleReqDate(date)}
-                      className="w-full px-4 py-3 flex items-center justify-between text-left"
-                    >
-                      <div className="flex items-center gap-2">
+                    <button onClick={() => toggleReqDate(date)}
+                      className="w-full px-4 py-3 flex items-center justify-between text-left">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className={`font-bold text-sm ${isPast ? 'text-gray-400' : 'text-gray-800'}`}>{dateLabel}</span>
+                        {dateEvents.length > 0 && (
+                          <span className="bg-purple-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
+                            {dateEvents.map(e => e.event_type).filter((v, i, a) => a.indexOf(v) === i).join('・')}あり
+                          </span>
+                        )}
                         {pendingCount > 0 && (
                           <span className="bg-yellow-400 text-white text-xs font-bold rounded-full px-1.5 py-0.5">{pendingCount}件未回答</span>
                         )}
@@ -573,37 +721,72 @@ export default function AdminPage() {
 
                     {isOpen && (
                       <div className="border-t">
-                        {Object.entries(byArea).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([area, facMap]) => (
-                          <div key={area}>
-                            <div className="px-4 py-1.5 bg-gray-50 text-xs font-bold text-gray-400">{area}</div>
-                            {Object.entries(facMap).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([fname, reqs2]) => (
-                              <div key={fname} className="border-t px-4 py-3">
-                                <p className="text-xs font-bold text-gray-600 mb-2">{fname}</p>
-                                <div className="space-y-2">
-                                  {reqs2.map(req => {
-                                    const rt = req.requested_time || ''
-                                    const timeStr = rt ? (rt.includes(' ') ? rt.split(' ')[1].slice(0, 5) : rt.slice(0, 5)) : null
-                                    return (
-                                      <div key={req.id} className="flex items-start justify-between gap-2">
+                        {allAreas.map(area => {
+                          const areaReqFacs = byArea[area] || {}
+                          const areaEvFacs = evByArea[area] || {}
+                          const allFacNames = [...new Set([...Object.keys(areaReqFacs), ...Object.keys(areaEvFacs)])].sort((a, b) => a.localeCompare(b, 'ja'))
+                          return (
+                            <div key={area}>
+                              <div className="px-4 py-1.5 bg-gray-50 text-xs font-bold text-gray-400">{area}</div>
+                              {allFacNames.map(fname => {
+                                const facReqs = areaReqFacs[fname] || []
+                                const facEvents = areaEvFacs[fname] || []
+                                return (
+                                  <div key={fname} className="border-t px-4 py-3">
+                                    <p className="text-xs font-bold text-gray-600 mb-2">{fname}</p>
+
+                                    {/* 内覧・是正イベント */}
+                                    {facEvents.map(ev => (
+                                      <div key={ev.id} className="flex items-start justify-between gap-2 mb-2 bg-purple-50 rounded-lg px-3 py-2">
                                         <div className="flex-1">
                                           <div className="flex items-center gap-1.5">
-                                            <span className="text-sm">{req.type === 'early_checkin' ? '🌅' : '🌙'}</span>
-                                            <span className="text-sm text-gray-700">{req.rooms?.room_number}号室</span>
-                                            {timeStr && <span className="text-sm font-medium text-blue-600">{timeStr}</span>}
+                                            <span className="text-xs font-bold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
+                                              {ev.event_type === '内覧' ? '👀 内覧' : '🔧 是正'}
+                                            </span>
+                                            {ev.rooms ? <span className="text-xs text-gray-600">{ev.rooms.room_number}号室</span> : <span className="text-xs text-gray-400">施設全体</span>}
+                                            <span className="text-xs text-purple-600 font-medium">{ev.start_time.slice(0,5)}〜{ev.end_time.slice(0,5)}</span>
                                           </div>
-                                          {req.message && <p className="text-xs text-gray-400 mt-0.5">{req.message}</p>}
+                                          {ev.note && <p className="text-xs text-gray-400 mt-0.5">{ev.note}</p>}
                                         </div>
-                                        <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${reqStatusColor[req.status]}`}>
-                                          {reqStatusLabel[req.status]}
-                                        </span>
+                                        <button onClick={() => deleteEvent(ev.id)} className="text-gray-300 hover:text-red-400 text-xs">✕</button>
                                       </div>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
+                                    ))}
+
+                                    {/* アーリーレイト依頼 */}
+                                    <div className="space-y-2">
+                                      {facReqs.map(req => {
+                                        const rt = req.requested_time || ''
+                                        const timeStr = rt ? (rt.includes(' ') ? rt.split(' ')[1].slice(0, 5) : rt.slice(0, 5)) : null
+                                        // 時間衝突チェック
+                                        const reqTimeH = timeStr ? parseInt(timeStr.split(':')[0]) * 60 + parseInt(timeStr.split(':')[1]) : null
+                                        const conflict = facEvents.some(ev => {
+                                          const evStartH = parseInt(ev.start_time.slice(0,2)) * 60 + parseInt(ev.start_time.slice(3,5))
+                                          return reqTimeH !== null && evStartH < reqTimeH
+                                        })
+                                        return (
+                                          <div key={req.id} className={`flex items-start justify-between gap-2 ${conflict ? 'bg-red-50 rounded-lg px-2 py-1' : ''}`}>
+                                            <div className="flex-1">
+                                              <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="text-sm">{req.type === 'early_checkin' ? '🌅' : '🌙'}</span>
+                                                <span className="text-sm text-gray-700">{req.rooms?.room_number}号室</span>
+                                                {timeStr && <span className="text-sm font-medium text-blue-600">{timeStr}</span>}
+                                                {conflict && <span className="text-xs text-red-600 font-bold">⚠ 時間衝突</span>}
+                                              </div>
+                                              {req.message && <p className="text-xs text-gray-400 mt-0.5">{req.message}</p>}
+                                            </div>
+                                            <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${reqStatusColor[req.status]}`}>
+                                              {reqStatusLabel[req.status]}
+                                            </span>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
                   </div>
