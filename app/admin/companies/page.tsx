@@ -98,6 +98,14 @@ export default function CompaniesPage() {
     }
   }
 
+  const deleteCompany = async (companyId: string, companyName: string) => {
+    if (!confirm(`「${companyName}」を削除しますか？\n関連する施設の紐付けも削除されます。`)) return
+    await supabase.from('company_facilities').delete().eq('company_id', companyId)
+    await supabase.from('cleaning_companies').delete().eq('id', companyId)
+    await load()
+    if (selectedCompany === companyId) setSelectedCompany(null)
+  }
+
   const sendInvite = async (companyId: string) => {
     if (!inviteEmail.trim()) return
     setInviting(true)
@@ -196,21 +204,29 @@ export default function CompaniesPage() {
           return (
             <div key={company.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
               {/* 会社ヘッダー */}
-              <button
-                onClick={() => setSelectedCompany(isOpen ? null : company.id)}
-                className="w-full px-4 py-4 flex items-center gap-3 text-left"
-              >
-                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg flex-shrink-0">
-                  🏢
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-gray-800 text-sm">{company.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    担当施設 {assignedFacIds.length}件 · 清掃員 {cleaners.length}名
-                  </p>
-                </div>
-                <span className="text-gray-400">{isOpen ? '▲' : '▼'}</span>
-              </button>
+              <div className="px-4 py-4 flex items-center gap-3">
+                <button
+                  onClick={() => setSelectedCompany(isOpen ? null : company.id)}
+                  className="flex items-center gap-3 flex-1 text-left min-w-0"
+                >
+                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg flex-shrink-0">
+                    🏢
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-gray-800 text-sm">{company.name}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      担当施設 {assignedFacIds.length}件 · 清掃員 {cleaners.length}名
+                    </p>
+                  </div>
+                  <span className="text-gray-400">{isOpen ? '▲' : '▼'}</span>
+                </button>
+                <button
+                  onClick={() => deleteCompany(company.id, company.name)}
+                  className="text-red-400 text-xs border border-red-200 rounded-lg px-2 py-1 flex-shrink-0 hover:bg-red-50"
+                >
+                  削除
+                </button>
+              </div>
 
               {isOpen && (
                 <div className="border-t px-4 py-4 space-y-5">
