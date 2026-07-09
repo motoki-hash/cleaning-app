@@ -222,7 +222,7 @@ export default function AdminPage() {
   const createEvent = async () => {
     if (!evFacility || !evDate || !evStart || !evEnd) return
     setEvSaving(true)
-    const insertResult = await supabase.from('room_events').insert({
+    await supabase.from('room_events').insert({
       facility_id: evFacility,
       room_id: evRoom || null,
       event_type: evType,
@@ -231,7 +231,6 @@ export default function AdminPage() {
       end_time: evEnd,
       note: evNote.trim() || null,
     })
-    alert('DEBUG: insert完了 error=' + JSON.stringify(insertResult.error))
     const { data } = await supabase
       .from('room_events')
       .select('id, facility_id, room_id, event_type, event_date, start_time, end_time, note, rooms(room_number), facilities(name, area)')
@@ -245,7 +244,6 @@ export default function AdminPage() {
     const icon = evType === '内覧' ? '👀' : '🔧'
 
     // Slack通知（fire-and-forget）
-    alert('DEBUG: Slack fetch 実行 fac=' + (fac?.name || 'undefined'))
     fetch('/api/slack-notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
