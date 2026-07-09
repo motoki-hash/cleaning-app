@@ -331,7 +331,10 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-gray-900 text-white px-6 py-4 flex justify-between items-center">
         <h1 className="text-lg font-bold">管理者ダッシュボード</h1>
-        <button onClick={logout} className="text-sm bg-gray-700 px-3 py-1 rounded-lg">ログアウト</button>
+        <div className="flex gap-2">
+          <button onClick={() => router.push('/admin/companies')} className="text-sm bg-gray-700 px-3 py-1 rounded-lg">🏢 会社管理</button>
+          <button onClick={logout} className="text-sm bg-gray-700 px-3 py-1 rounded-lg">ログアウト</button>
+        </div>
       </header>
 
       {/* フィルター */}

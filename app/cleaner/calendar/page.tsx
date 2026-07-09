@@ -80,20 +80,38 @@ export default function CleanerCalendarPage() {
     const lastDay = new Date(year, month + 1, 0).getDate()
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-    const [recRes, reqRes] = await Promise.all([
-      supabase
-        .from('cleaning_records')
-        .select('id, scheduled_date, status, rooms(room_number, facility_id, facilities(id, name, area))')
-        .gte('scheduled_date', startDate)
-        .lte('scheduled_date', endDate)
-        .order('scheduled_date'),
-      supabase
-        .from('early_late_requests')
-        .select('id, type, status, request_date, requested_time, message, rooms(room_number, facility_id, facilities(id, name, area))')
-        .gte('request_date', startDate)
-        .lte('request_date', endDate)
-        .neq('status', 'declined'),
-    ])
+    // 会社の担当施設IDを取得
+    const { data: cleaner } = await supabase.from('cleaners').select('company_id').eq('user_id', user.id).single()
+    let roomIds: string[] = []
+    if (cleaner?.company_id) {
+      const { data: cf } = await supabase.from('company_facilities').select('facility_id').eq('company_id', cleaner.company_id)
+      const facilityIds = (cf || []).map(r => r.facility_id)
+      if (facilityIds.length > 0) {
+        const { data: roomsData } = await supabase.from('rooms').select('id').in('facility_id', facilityIds)
+        roomIds = (roomsData || []).map(r => r.id)
+      }
+    }
+
+    let recQuery = supabase
+      .from('cleaning_records')
+      .select('id, scheduled_date, status, rooms(room_number, facility_id, facilities(id, name, area))')
+      .gte('scheduled_date', startDate)
+      .lte('scheduled_date', endDate)
+      .order('scheduled_date')
+
+    let reqQuery = supabase
+      .from('early_late_requests')
+      .select('id, type, status, request_date, requested_time, message, rooms(room_number, facility_id, facilities(id, name, area))')
+      .gte('request_date', startDate)
+      .lte('request_date', endDate)
+      .neq('status', 'declined')
+
+    if (roomIds.length > 0) {
+      recQuery = recQuery.in('room_id', roomIds)
+      reqQuery = reqQuery.in('room_id', roomIds)
+    }
+
+    const [recRes, reqRes] = await Promise.all([recQuery, reqQuery])
 
     setRecords((recRes.data || []) as unknown as CalendarRecord[])
     setRequests((reqRes.data || []) as unknown as EarlyLateRequest[])

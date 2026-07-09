@@ -31,12 +31,25 @@ export default function CleanerHome() {
       setCurrentUserId(user.id)
 
       const { data: cleaner } = await supabase
-        .from('cleaners').select('id').eq('user_id', user.id).single()
+        .from('cleaners').select('id, company_id').eq('user_id', user.id).single()
       if (!cleaner) { setLoading(false); return }
 
       const today = new Date().toISOString().split('T')[0]
+
+      // 会社の担当施設IDを取得
+      let facilityIds: string[] = []
+      if (cleaner.company_id) {
+        const { data: cf } = await supabase
+          .from('company_facilities').select('facility_id').eq('company_id', cleaner.company_id)
+        facilityIds = (cf || []).map(r => r.facility_id)
+      }
+
+      const facQuery = facilityIds.length > 0
+        ? supabase.from('facilities').select('id, name, area').in('id', facilityIds).order('area').order('name')
+        : supabase.from('facilities').select('id, name, area').order('area').order('name')
+
       const [facRes, recRes] = await Promise.all([
-        supabase.from('facilities').select('id, name, area').order('area').order('name'),
+        facQuery,
         supabase.from('cleaning_records')
           .select('id, status, room_id, rooms(room_number, facility_id)')
           .eq('cleaner_id', cleaner.id)
