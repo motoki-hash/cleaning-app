@@ -251,22 +251,28 @@ export default function AdminPage() {
     })
 
     // Slack通知
-    await fetch('/api/slack-notify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        status: 'room_event',
-        facilityId: evFacility,
-        facilityName: fac?.name || '',
-        area: fac?.area || '',
-        roomNumber: room?.room_number || null,
-        eventType: evType,
-        eventDate: evDate,
-        startTime: evStart,
-        endTime: evEnd,
-        note: evNote.trim() || null,
-      }),
-    })
+    try {
+      const slackRes = await fetch('/api/slack-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'room_event',
+          facilityId: evFacility,
+          facilityName: fac?.name || '',
+          area: fac?.area || '',
+          roomNumber: room?.room_number || null,
+          eventType: evType,
+          eventDate: evDate,
+          startTime: evStart,
+          endTime: evEnd,
+          note: evNote.trim() || null,
+        }),
+      })
+      const slackData = await slackRes.json()
+      console.log('[createEvent] slack response:', slackData)
+    } catch (e) {
+      console.error('[createEvent] slack error:', e)
+    }
 
     setShowEventForm(false)
     setEvFacility(''); setEvRoom(''); setEvType('内覧'); setEvDate(new Date().toISOString().split('T')[0])

@@ -91,13 +91,16 @@ export async function POST(req: NextRequest) {
     }
     text = `💬 ${facilityName}にメッセージ\n👤 ${message}`
   } else if (status === 'room_event') {
+    console.log('[slack-notify] room_event payload:', { eventType, facilityName, area, roomNumber, eventDate, startTime, endTime, note })
     const icon = eventType === '内覧' ? '👀' : '🔧'
     const roomText = roomNumber ? `${roomNumber}号室` : '施設全体'
     const dateLabel = new Date(eventDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })
     const slackText = `${icon} ${eventType}のお知らせ\n📍 ${area} / ${facilityName} ${roomText}\n📅 ${dateLabel} ${String(startTime).slice(0,5)}〜${String(endTime).slice(0,5)}`
     const fullText = note ? slackText + `\n📝 ${note}` : slackText
-    await postToSlack(fullText)
-    return NextResponse.json({ ok: true })
+    console.log('[slack-notify] room_event text:', fullText)
+    const ts = await postToSlack(fullText)
+    console.log('[slack-notify] room_event postToSlack result:', ts)
+    return NextResponse.json({ ok: true, ts })
   } else if (status === 'request') {
     const timeText = requestTime ? `（${requestTime}）` : ''
     text = `📨 ${requestType}依頼${timeText}\n📍 ${area} / ${facilityName} ${roomNumber}号室`
