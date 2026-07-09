@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -28,12 +28,12 @@ export default function AdminChatPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [cleanerLastReadAt, setCleanerLastReadAt] = useState<string | null>(null)
 
-  const markAdminRead = async () => {
+  const markAdminRead = useCallback(async () => {
     await supabase.from('message_reads').upsert(
       { facility_id: facilityId, reader: 'admin', last_read_at: new Date().toISOString() },
       { onConflict: 'facility_id,reader' }
     )
-  }
+  }, [facilityId])
 
   useEffect(() => {
     const init = async () => {
