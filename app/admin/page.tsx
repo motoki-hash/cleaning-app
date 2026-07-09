@@ -626,30 +626,57 @@ export default function AdminPage() {
               {Object.entries(chatByArea).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([area, facs]) => (
                 <div key={area}>
                   <div className="px-1 py-1.5 text-xs font-bold text-gray-400 tracking-wide">{area}</div>
-                  {facs.map(f => (
-                    <button
-                      key={f.id}
-                      onClick={() => {
-                        setUnreadCounts(prev => { const n = { ...prev }; delete n[f.id]; return n })
-                        router.push(`/admin/chat/${f.id}`)
-                      }}
-                      className="w-full bg-white border-b px-4 py-3 flex items-center gap-3 text-left active:bg-gray-50 mb-0"
-                    >
-                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg flex-shrink-0">
-                        🏠
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-800 text-sm truncate">{f.name}</p>
-                      </div>
-                      {unreadCounts[f.id] > 0 ? (
-                        <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
-                          {unreadCounts[f.id] > 99 ? '99+' : unreadCounts[f.id]}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300">›</span>
-                      )}
-                    </button>
-                  ))}
+                  {facs.map(f => {
+                    const facRecs = records.filter(r => r.rooms?.facility_id === f.id)
+                    const total = facRecs.length
+                    const completed = facRecs.filter(r => r.status === 'completed').length
+                    const inProgress = facRecs.filter(r => r.status === 'in_progress').length
+                    const allDone = total > 0 && completed === total
+                    const hasProgress = inProgress > 0
+                    return (
+                      <button
+                        key={f.id}
+                        onClick={() => {
+                          setUnreadCounts(prev => { const n = { ...prev }; delete n[f.id]; return n })
+                          router.push(`/admin/chat/${f.id}`)
+                        }}
+                        className="w-full bg-white border-b px-4 py-3 flex items-center gap-3 text-left active:bg-gray-50"
+                      >
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${
+                          allDone ? 'bg-green-100' : hasProgress ? 'bg-yellow-100' : 'bg-gray-100'
+                        }`}>
+                          {allDone ? '✅' : hasProgress ? '🧹' : '🏠'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-800 text-sm truncate">{f.name}</p>
+                          {total > 0 && (
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {completed}/{total}部屋完了
+                              {inProgress > 0 && <span className="text-yellow-600 ml-1">・清掃中 {inProgress}部屋</span>}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex-shrink-0 flex items-center gap-1.5">
+                          {total > 0 && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              allDone ? 'bg-green-100 text-green-700' :
+                              hasProgress ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-gray-100 text-gray-500'
+                            }`}>
+                              {allDone ? '完了' : hasProgress ? '清掃中' : '未開始'}
+                            </span>
+                          )}
+                          {unreadCounts[f.id] > 0 ? (
+                            <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
+                              {unreadCounts[f.id] > 99 ? '99+' : unreadCounts[f.id]}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">›</span>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
               ))}
             </div>
