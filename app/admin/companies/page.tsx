@@ -6,12 +6,13 @@ import { supabase } from '@/lib/supabase'
 
 type Company = { id: string; name: string; contact_person: string | null; phone: string | null; email: string | null }
 type Facility = { id: string; name: string; area: string }
-type Cleaner = { id: string; name: string; user_id: string | null }
+type Cleaner = { id: string; name: string; user_id: string | null; company_id: string | null }
 
 export default function CompaniesPage() {
   const router = useRouter()
   const [companies, setCompanies] = useState<Company[]>([])
   const [facilities, setFacilities] = useState<Facility[]>([])
+  const [allCleaners, setAllCleaners] = useState<Cleaner[]>([])
   const [companyFacilities, setCompanyFacilities] = useState<Record<string, string[]>>({})
   const [cleanersByCompany, setCleanersByCompany] = useState<Record<string, Cleaner[]>>({})
   const [loading, setLoading] = useState(true)
@@ -30,6 +31,11 @@ export default function CompaniesPage() {
   const [inviting, setInviting] = useState(false)
   const [inviteMsg, setInviteMsg] = useState('')
 
+  // 既存ユーザー追加
+  const [showAddExisting, setShowAddExisting] = useState<string | null>(null)
+  const [existingSearch, setExistingSearch] = useState('')
+  const [addingCleaner, setAddingCleaner] = useState(false)
+
   useEffect(() => {
     load()
   }, [])
@@ -46,6 +52,9 @@ export default function CompaniesPage() {
     setCompanies((compRes.data || []) as Company[])
     setFacilities((facRes.data || []) as Facility[])
 
+    const allCl = (cleanerRes.data || []) as Cleaner[]
+    setAllCleaners(allCl)
+
     const cfMap: Record<string, string[]> = {}
     for (const cf of cfRes.data || []) {
       if (!cfMap[cf.company_id]) cfMap[cf.company_id] = []
@@ -54,7 +63,8 @@ export default function CompaniesPage() {
     setCompanyFacilities(cfMap)
 
     const clMap: Record<string, Cleaner[]> = {}
-    for (const c of (cleanerRes.data || []) as (Cleaner & { company_id: string })[]) {
+    for (const c of allCl) {
+      if (!c.company_id) continue
       if (!clMap[c.company_id]) clMap[c.company_id] = []
       clMap[c.company_id].push(c)
     }
@@ -107,6 +117,21 @@ export default function CompaniesPage() {
     await supabase.from('cleaning_companies').delete().eq('id', companyId)
     await load()
     if (selectedCompany === companyId) setSelectedCompany(null)
+  }
+
+  const assignCleaner = async (cleanerId: string, companyId: string) => {
+    setAddingCleaner(true)
+    await supabase.from('cleaners').update({ company_id: companyId }).eq('id', cleanerId)
+    setShowAddExisting(null)
+    setExistingSearch('')
+    setAddingCleaner(false)
+    await load()
+  }
+
+  const removeCleaner = async (cleanerId: string, cleanerName: string) => {
+    if (!confirm(`「${cleanerName}」をこの会社から外しますか？`)) return
+    await supabase.from('cleaners').update({ company_id: null }).eq('id', cleanerId)
+    await load()
   }
 
   const sendInvite = async (companyId: string) => {
@@ -210,6 +235,11 @@ export default function CompaniesPage() {
           const isOpen = selectedCompany === company.id
           const assignedFacIds = companyFacilities[company.id] || []
           const cleaners = cleanersByCompany[company.id] || []
+          // この会社に所属していない清掃員（検索フィルタ込み）
+          const unassignedCleaners = allCleaners.filter(c =>
+            c.company_id !== company.id &&
+            c.name.toLowerCase().includes(existingSearch.toLowerCase())
+          )
 
           return (
             <div key={company.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -298,25 +328,74 @@ export default function CompaniesPage() {
 
                   {/* 清掃員一覧 */}
                   <div>
-                    <p className="text-xs font-bold text-gray-500 mb-2">清掃員</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-bold text-gray-500">清掃員</p>
+                      <button
+                        onClick={() => setShowAddExisting(showAddExisting === company.id ? null : company.id)}
+                        className="text-xs text-blue-600 border border-blue-200 rounded-lg px-2 py-0.5"
+                      >
+                        ＋ 既存ユーザーを追加
+                      </button>
+                    </div>
                     {cleaners.length === 0 ? (
                       <p className="text-xs text-gray-400">まだ登録されていません</p>
                     ) : (
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         {cleaners.map(c => (
                           <div key={c.id} className="flex items-center gap-2 text-sm">
-                            <span className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs">{c.name.slice(0, 1)}</span>
-                            <span className="text-gray-700">{c.name}</span>
+                            <span className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs flex-shrink-0">{c.name.slice(0, 1)}</span>
+                            <span className="text-gray-700 flex-1">{c.name}</span>
                             {c.user_id && <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">登録済み</span>}
+                            <button
+                              onClick={() => removeCleaner(c.id, c.name)}
+                              className="text-xs text-red-400 hover:text-red-600"
+                            >外す</button>
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {/* 既存ユーザー追加パネル */}
+                    {showAddExisting === company.id && (
+                      <div className="mt-3 border border-blue-100 rounded-xl p-3 bg-blue-50">
+                        <p className="text-xs font-medium text-blue-700 mb-2">既存の清掃員を追加</p>
+                        <input
+                          type="text"
+                          value={existingSearch}
+                          onChange={e => setExistingSearch(e.target.value)}
+                          placeholder="名前で検索..."
+                          className="w-full border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-400 mb-2"
+                        />
+                        {unassignedCleaners.length === 0 ? (
+                          <p className="text-xs text-gray-400 text-center py-2">該当する清掃員がいません</p>
+                        ) : (
+                          <div className="space-y-1 max-h-40 overflow-y-auto">
+                            {unassignedCleaners.map(c => (
+                              <div key={c.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+                                <div>
+                                  <span className="text-sm text-gray-700">{c.name}</span>
+                                  {c.company_id && (
+                                    <span className="text-xs text-orange-500 ml-2">
+                                      ({companies.find(co => co.id === c.company_id)?.name || '他社'})
+                                    </span>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => assignCleaner(c.id, company.id)}
+                                  disabled={addingCleaner}
+                                  className="text-xs bg-blue-600 text-white px-2 py-1 rounded-lg disabled:opacity-50"
+                                >追加</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
 
                   {/* 招待 */}
                   <div>
-                    <p className="text-xs font-bold text-gray-500 mb-2">清掃員を招待</p>
+                    <p className="text-xs font-bold text-gray-500 mb-2">新規ユーザーを招待（メール）</p>
                     <div className="flex gap-2">
                       <input
                         type="email"
