@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-type Company = { id: string; name: string; contact_person: string | null; email: string | null }
+type Company = { id: string; name: string; contact_person: string | null; phone: string | null; email: string | null }
 type Facility = { id: string; name: string; area: string }
 type Cleaner = { id: string; name: string; user_id: string | null }
 
@@ -21,6 +21,7 @@ export default function CompaniesPage() {
   const [showAddCompany, setShowAddCompany] = useState(false)
   const [newCompanyName, setNewCompanyName] = useState('')
   const [newCompanyContact, setNewCompanyContact] = useState('')
+  const [newCompanyPhone, setNewCompanyPhone] = useState('')
   const [newCompanyEmail, setNewCompanyEmail] = useState('')
   const [savingCompany, setSavingCompany] = useState(false)
 
@@ -36,7 +37,7 @@ export default function CompaniesPage() {
   const load = async () => {
     setLoading(true)
     const [compRes, facRes, cfRes, cleanerRes] = await Promise.all([
-      supabase.from('cleaning_companies').select('id, name, contact_person, email').order('name'),
+      supabase.from('cleaning_companies').select('id, name, contact_person, phone, email').order('name'),
       supabase.from('facilities').select('id, name, area').order('area').order('name'),
       supabase.from('company_facilities').select('company_id, facility_id'),
       supabase.from('cleaners').select('id, name, user_id, company_id').eq('is_active', true),
@@ -67,10 +68,12 @@ export default function CompaniesPage() {
     await supabase.from('cleaning_companies').insert({
       name: newCompanyName.trim(),
       contact_person: newCompanyContact.trim() || null,
+      phone: newCompanyPhone.trim() || null,
       email: newCompanyEmail.trim() || null,
     })
     setNewCompanyName('')
     setNewCompanyContact('')
+    setNewCompanyPhone('')
     setNewCompanyEmail('')
     setShowAddCompany(false)
     setSavingCompany(false)
@@ -165,7 +168,14 @@ export default function CompaniesPage() {
                 type="text"
                 value={newCompanyContact}
                 onChange={e => setNewCompanyContact(e.target.value)}
-                placeholder="担当者名"
+                placeholder="窓口担当者名"
+                className="w-full border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500"
+              />
+              <input
+                type="tel"
+                value={newCompanyPhone}
+                onChange={e => setNewCompanyPhone(e.target.value)}
+                placeholder="電話番号"
                 className="w-full border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500"
               />
               <input
@@ -177,7 +187,7 @@ export default function CompaniesPage() {
               />
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setShowAddCompany(false); setNewCompanyName(''); setNewCompanyContact(''); setNewCompanyEmail('') }}
+                  onClick={() => { setShowAddCompany(false); setNewCompanyName(''); setNewCompanyContact(''); setNewCompanyPhone(''); setNewCompanyEmail('') }}
                   className="flex-1 border rounded-xl py-2.5 text-sm text-gray-600"
                 >キャンセル</button>
                 <button
@@ -230,6 +240,33 @@ export default function CompaniesPage() {
 
               {isOpen && (
                 <div className="border-t px-4 py-4 space-y-5">
+
+                  {/* 会社情報 */}
+                  {(company.contact_person || company.phone || company.email) && (
+                    <div>
+                      <p className="text-xs font-bold text-gray-500 mb-2">会社情報</p>
+                      <div className="bg-gray-50 rounded-xl px-3 py-2.5 space-y-1.5 text-sm">
+                        {company.contact_person && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-400 text-xs w-14 flex-shrink-0">担当者</span>
+                            <span className="text-gray-700">{company.contact_person}</span>
+                          </div>
+                        )}
+                        {company.phone && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-400 text-xs w-14 flex-shrink-0">電話</span>
+                            <a href={`tel:${company.phone}`} className="text-blue-600">{company.phone}</a>
+                          </div>
+                        )}
+                        {company.email && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-400 text-xs w-14 flex-shrink-0">メール</span>
+                            <span className="text-gray-700 break-all">{company.email}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* 担当施設 */}
                   <div>
