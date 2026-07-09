@@ -7,7 +7,6 @@ import { supabase } from '@/lib/supabase'
 type Facility = { id: string; name: string; area: string }
 type Room = { id: string; room_number: string; facility_id: string }
 
-const AREAS = ['港区', '渋谷区', '新宿区', '世田谷区', '台東区', '中野区', '品川区', '墨田区', '大阪府', 'その他']
 
 export default function FacilitiesPage() {
   const router = useRouter()
@@ -20,7 +19,6 @@ export default function FacilitiesPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
   const [newArea, setNewArea] = useState('')
-  const [newAreaCustom, setNewAreaCustom] = useState('')
   const [roomInputs, setRoomInputs] = useState<string[]>([''])
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
@@ -44,7 +42,7 @@ export default function FacilitiesPage() {
 
   const addFacility = async () => {
     const name = newName.trim()
-    const area = newArea === 'その他' ? newAreaCustom.trim() : newArea
+    const area = newArea.trim()
     if (!name || !area) { setSaveMsg('❌ 施設名とエリアは必須です'); return }
 
     const validRooms = roomInputs.map(r => r.trim()).filter(Boolean)
@@ -77,7 +75,6 @@ export default function FacilitiesPage() {
     setSaveMsg(`✅ ${name} を登録しました（${validRooms.length}室）`)
     setNewName('')
     setNewArea('')
-    setNewAreaCustom('')
     setRoomInputs([''])
     setShowAdd(false)
     setSaving(false)
@@ -147,26 +144,20 @@ export default function FacilitiesPage() {
 
               <div>
                 <p className="text-xs text-gray-500 mb-1.5">エリア（必須）</p>
-                <div className="flex flex-wrap gap-2">
-                  {AREAS.map(a => (
-                    <button
-                      key={a}
-                      onClick={() => setNewArea(a)}
-                      className={`text-xs px-3 py-1.5 rounded-full border ${
-                        newArea === a ? 'bg-gray-900 text-white border-gray-900' : 'text-gray-600 border-gray-300'
-                      }`}
-                    >{a}</button>
+                <input
+                  type="text"
+                  list="area-suggestions"
+                  value={newArea}
+                  onChange={e => setNewArea(e.target.value)}
+                  placeholder="例: 港区、渋谷区、大阪府..."
+                  className="w-full border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500"
+                />
+                <datalist id="area-suggestions">
+                  {[...new Set(facilities.map(f => f.area).filter(Boolean))].sort().map(a => (
+                    <option key={a} value={a} />
                   ))}
-                </div>
-                {newArea === 'その他' && (
-                  <input
-                    type="text"
-                    value={newAreaCustom}
-                    onChange={e => setNewAreaCustom(e.target.value)}
-                    placeholder="エリア名を入力"
-                    className="mt-2 w-full border rounded-xl px-4 py-2 text-sm outline-none focus:border-blue-500"
-                  />
-                )}
+                </datalist>
+                <p className="text-xs text-gray-400 mt-1">既存エリアを選ぶか、新しいエリア名を入力できます</p>
               </div>
 
               <div>
