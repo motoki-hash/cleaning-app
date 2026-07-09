@@ -267,9 +267,10 @@ export default function AdminPage() {
       return evStartMin < reqTimeMin
     })
     if (conflictingEvents.length > 0) {
-      const evLabels = conflictingEvents.map(ev => `${ev.event_type}(${ev.start_time.slice(0,5)}〜${ev.end_time.slice(0,5)})`).join(', ')
-      const ok = confirm(`⚠ この日時には ${evLabels} が登録されています。\nアーリー/レイト依頼と時間が衝突する可能性があります。\n\nそれでも依頼を作成しますか？`)
-      if (!ok) { setReqSaving(false); return }
+      const evLabels = conflictingEvents.map(ev => `${ev.event_type}（${ev.start_time.slice(0,5)}〜${ev.end_time.slice(0,5)}）`).join('、')
+      alert(`🚫 依頼できません\n\nこの日時には ${evLabels} が登録されているため、アーリー/レイト依頼は送れません。\n\n内覧・是正の時間帯を変更するか、依頼時間を調整してください。`)
+      setReqSaving(false)
+      return
     }
 
     // 同じ部屋・日付・タイプの依頼が既にあるか確認
