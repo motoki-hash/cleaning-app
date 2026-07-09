@@ -244,6 +244,7 @@ export default function AdminPage() {
     const icon = evType === '内覧' ? '👀' : '🔧'
 
     // Slack通知（fire-and-forget）
+    alert('DEBUG: Slack fetch 実行 fac=' + (fac?.name || 'undefined'))
     fetch('/api/slack-notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
