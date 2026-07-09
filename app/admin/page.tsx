@@ -237,42 +237,41 @@ export default function AdminPage() {
       .order('event_date', { ascending: false }).limit(100)
     setRoomEvents((data as unknown as RoomEvent[]) || [])
 
-    // 施設のチャットに通知
     const fac = facilities.find(f => f.id === evFacility)
     const room = evRoom ? rooms.find(r => r.id === evRoom) : null
     const roomText = room ? `${room.room_number}号室` : '施設全体'
     const dateLabel = new Date(evDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })
     const icon = evType === '内覧' ? '👀' : '🔧'
+
+    // Slack通知（fire-and-forget）
+    fetch('/api/slack-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'room_event',
+        facilityId: evFacility,
+        facilityName: fac?.name || '',
+        area: fac?.area || '',
+        roomNumber: room?.room_number || null,
+        eventType: evType,
+        eventDate: evDate,
+        startTime: evStart,
+        endTime: evEnd,
+        note: evNote.trim() || null,
+      }),
+    })
+
+    // 施設のチャットに通知
     const chatContent = `${icon} ${evType}のお知らせ：${roomText}\n📅 ${dateLabel} ${evStart}〜${evEnd}${evNote.trim() ? '\n📝 ' + evNote.trim() : ''}`
     await supabase.from('chat_messages').insert({
       facility_id: evFacility,
       type: 'system',
       content: chatContent,
+      cleaning_record_id: null,
+      early_late_request_id: null,
+      sender_id: null,
+      sender_name: '管理者',
     })
-
-    // Slack通知
-    try {
-      const slackRes = await fetch('/api/slack-notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'room_event',
-          facilityId: evFacility,
-          facilityName: fac?.name || '',
-          area: fac?.area || '',
-          roomNumber: room?.room_number || null,
-          eventType: evType,
-          eventDate: evDate,
-          startTime: evStart,
-          endTime: evEnd,
-          note: evNote.trim() || null,
-        }),
-      })
-      const slackData = await slackRes.json()
-      console.log('[createEvent] slack response:', slackData)
-    } catch (e) {
-      console.error('[createEvent] slack error:', e)
-    }
 
     setShowEventForm(false)
     setEvFacility(''); setEvRoom(''); setEvType('内覧'); setEvDate(new Date().toISOString().split('T')[0])
