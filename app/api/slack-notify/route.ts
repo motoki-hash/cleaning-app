@@ -36,7 +36,7 @@ async function postToSlack(text: string, threadTs?: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const { status, facilityName, facilityId, roomNumber, area, requestType, requestTime, message, photoType, photoCount } = await req.json()
+  const { status, facilityName, facilityId, roomNumber, area, requestType, requestTime, message, photoType, photoCount, eventType, eventDate, startTime, endTime, note } = await req.json()
 
   let text = ''
 
@@ -90,6 +90,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
     text = `💬 ${facilityName}にメッセージ\n👤 ${message}`
+  } else if (status === 'room_event') {
+    const icon = eventType === '内覧' ? '👀' : '🔧'
+    const roomText = roomNumber ? `${roomNumber}号室` : '施設全体'
+    const dateLabel = new Date(eventDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })
+    text = `${icon} ${eventType}のお知らせ\n📍 ${area} / ${facilityName} ${roomText}\n📅 ${dateLabel} ${startTime.slice(0,5)}〜${endTime.slice(0,5)}`
+    if (note) text += `\n📝 ${note}`
+
+    // 対象施設のSlackスレッドに投稿
+    if (facilityId) {
+      const { data: thread } = await supabaseAdmin
+        .from('slack_threads')
+        .select('thread_ts')
+        .eq('facility_id', facilityId)
+        .eq('date', eventDate)
+        .single()
+      if (thread) {
+        await postToSlack(text, thread.thread_ts)
+      } else {
+        await postToSlack(text)
+      }
+      return NextResponse.json({ ok: true })
+    }
   } else if (status === 'request') {
     const timeText = requestTime ? `（${requestTime}）` : ''
     text = `📨 ${requestType}依頼${timeText}\n📍 ${area} / ${facilityName} ${roomNumber}号室`

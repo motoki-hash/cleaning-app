@@ -236,6 +236,38 @@ export default function AdminPage() {
       .select('id, facility_id, room_id, event_type, event_date, start_time, end_time, note, rooms(room_number), facilities(name, area)')
       .order('event_date', { ascending: false }).limit(100)
     setRoomEvents((data as unknown as RoomEvent[]) || [])
+
+    // 施設のチャットに通知
+    const fac = facilities.find(f => f.id === evFacility)
+    const room = evRoom ? rooms.find(r => r.id === evRoom) : null
+    const roomText = room ? `${room.room_number}号室` : '施設全体'
+    const dateLabel = new Date(evDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })
+    const icon = evType === '内覧' ? '👀' : '🔧'
+    const chatContent = `${icon} ${evType}のお知らせ：${roomText}\n📅 ${dateLabel} ${evStart}〜${evEnd}${evNote.trim() ? '\n📝 ' + evNote.trim() : ''}`
+    await supabase.from('chat_messages').insert({
+      facility_id: evFacility,
+      type: 'system',
+      content: chatContent,
+    })
+
+    // Slack通知
+    fetch('/api/slack-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'room_event',
+        facilityId: evFacility,
+        facilityName: fac?.name || '',
+        area: fac?.area || '',
+        roomNumber: room?.room_number || null,
+        eventType: evType,
+        eventDate: evDate,
+        startTime: evStart,
+        endTime: evEnd,
+        note: evNote.trim() || null,
+      }),
+    }).catch(() => {})
+
     setShowEventForm(false)
     setEvFacility(''); setEvRoom(''); setEvType('内覧'); setEvDate(new Date().toISOString().split('T')[0])
     setEvStart(''); setEvEnd(''); setEvNote('')
