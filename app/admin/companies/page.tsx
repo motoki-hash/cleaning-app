@@ -36,6 +36,9 @@ export default function CompaniesPage() {
   const [existingSearch, setExistingSearch] = useState('')
   const [addingCleaner, setAddingCleaner] = useState(false)
 
+  // 施設編集モード
+  const [editingFacilities, setEditingFacilities] = useState<string | null>(null)
+
   useEffect(() => {
     load()
   }, [])
@@ -300,30 +303,63 @@ export default function CompaniesPage() {
 
                   {/* 担当施設 */}
                   <div>
-                    <p className="text-xs font-bold text-gray-500 mb-3">担当施設</p>
-                    {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([area, facs]) => (
-                      <div key={area} className="mb-3">
-                        <p className="text-xs text-gray-400 font-medium mb-1.5">{area}</p>
-                        <div className="space-y-1.5">
-                          {facs.map(f => {
-                            const checked = assignedFacIds.includes(f.id)
-                            return (
-                              <label key={f.id} className="flex items-center gap-3 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => toggleFacility(company.id, f.id)}
-                                  className="w-4 h-4 accent-blue-600"
-                                />
-                                <span className={`text-sm ${checked ? 'text-gray-800 font-medium' : 'text-gray-500'}`}>
-                                  {f.name}
-                                </span>
-                              </label>
-                            )
-                          })}
-                        </div>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-bold text-gray-500">担当施設</p>
+                      <button
+                        onClick={() => setEditingFacilities(editingFacilities === company.id ? null : company.id)}
+                        className={`text-xs px-2.5 py-1 rounded-lg border ${
+                          editingFacilities === company.id
+                            ? 'bg-gray-800 text-white border-gray-800'
+                            : 'text-gray-500 border-gray-300'
+                        }`}
+                      >
+                        {editingFacilities === company.id ? '✓ 完了' : '編集'}
+                      </button>
+                    </div>
+
+                    {editingFacilities === company.id ? (
+                      /* 編集モード: チェックボックス */
+                      <div className="border border-blue-200 rounded-xl p-3 bg-blue-50">
+                        {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([area, facs]) => (
+                          <div key={area} className="mb-3">
+                            <p className="text-xs text-gray-400 font-medium mb-1.5">{area}</p>
+                            <div className="space-y-1.5">
+                              {facs.map(f => {
+                                const checked = assignedFacIds.includes(f.id)
+                                return (
+                                  <label key={f.id} className="flex items-center gap-3 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => toggleFacility(company.id, f.id)}
+                                      className="w-4 h-4 accent-blue-600"
+                                    />
+                                    <span className={`text-sm ${checked ? 'text-gray-800 font-medium' : 'text-gray-500'}`}>
+                                      {f.name}
+                                    </span>
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    ) : (
+                      /* 表示モード: 割り当て済み施設のみ */
+                      assignedFacIds.length === 0 ? (
+                        <p className="text-xs text-gray-400">施設が割り当てられていません</p>
+                      ) : (
+                        <div className="space-y-1">
+                          {facilities.filter(f => assignedFacIds.includes(f.id)).map(f => (
+                            <div key={f.id} className="flex items-center gap-2 text-sm">
+                              <span className="text-blue-500 text-xs">✓</span>
+                              <span className="text-gray-700">{f.name}</span>
+                              <span className="text-xs text-gray-400">{f.area}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    )}
                   </div>
 
                   {/* 清掃員一覧 */}
