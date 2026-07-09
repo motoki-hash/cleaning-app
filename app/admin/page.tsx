@@ -29,11 +29,12 @@ type EarlyLateRequest = {
   id: string
   type: 'early_checkin' | 'late_checkout'
   status: 'pending' | 'accepted' | 'declined' | 'hold'
+  request_date: string | null
   requested_time: string | null
   message: string | null
   created_at: string
   responded_at: string | null
-  rooms: { room_number: string; facilities: { name: string } | null } | null
+  rooms: { room_number: string; facilities: { name: string; area: string } | null } | null
 }
 
 type Facility = { id: string; name: string; area: string }
@@ -54,6 +55,14 @@ export default function AdminPage() {
   const [selectedArea, setSelectedArea] = useState('')
   const [selectedFacility, setSelectedFacility] = useState('')
   const [selectedRoom, setSelectedRoom] = useState('')
+
+  // 依頼タブの展開日付
+  const [expandedReqDates, setExpandedReqDates] = useState<Set<string>>(new Set())
+  const toggleReqDate = (date: string) => setExpandedReqDates(prev => {
+    const next = new Set(prev)
+    next.has(date) ? next.delete(date) : next.add(date)
+    return next
+  })
 
   // 依頼作成フォーム
   const [showRequestForm, setShowRequestForm] = useState(false)
@@ -92,9 +101,9 @@ export default function AdminPage() {
         supabase.from('rooms').select('id, room_number, facility_id').order('room_number'),
         supabase
           .from('early_late_requests')
-          .select('id, type, status, requested_time, message, created_at, responded_at, rooms(room_number, facilities(name))')
-          .order('created_at', { ascending: false })
-          .limit(30),
+          .select('id, type, status, request_date, requested_time, message, created_at, responded_at, rooms(room_number, facilities(name, area))')
+          .order('request_date', { ascending: false })
+          .limit(100),
       ])
 
       const rawRecords = (recordsRes.data as unknown as Record_[]) || []
@@ -106,7 +115,12 @@ export default function AdminPage() {
       const facilityList = (facilitiesRes.data as Facility[]) || []
       setFacilities(facilityList)
       setRooms((roomsRes.data as Room[]) || [])
-      setRequests((requestsRes.data as unknown as EarlyLateRequest[]) || [])
+      const reqData = (requestsRes.data as unknown as EarlyLateRequest[]) || []
+      setRequests(reqData)
+      // 今日・未来の日付は最初から展開
+      const today2 = new Date().toISOString().split('T')[0]
+      const futureDates = new Set(reqData.filter(r => r.request_date && r.request_date >= today2).map(r => r.request_date as string))
+      setExpandedReqDates(futureDates)
       setLoading(false)
 
       // 管理者の未読カウント（清掃員からのメッセージで未読のもの）
@@ -512,33 +526,90 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* 依頼一覧 */}
+            {/* 依頼一覧（日付→エリア→施設でグループ化） */}
             {requests.length === 0 && !showRequestForm && (
               <p className="text-center text-gray-400 mt-8">依頼はまだありません</p>
             )}
-            {requests.map(req => (
-              <div key={req.id} className="bg-white rounded-xl shadow-sm p-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium text-gray-800">
-                        {req.type === 'early_checkin' ? '🌅 アーリーチェックイン' : '🌙 レイトチェックアウト'}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600">{req.rooms?.facilities?.name} {req.rooms?.room_number}号室</p>
-                    {req.requested_time && <p className="text-xs text-gray-500">希望時間: {req.requested_time}</p>}
-                    {req.message && <p className="text-xs text-gray-500 mt-1">{req.message}</p>}
-                    <p className="text-xs text-gray-400 mt-1">{new Date(req.created_at).toLocaleString('ja-JP')}</p>
-                    {req.responded_at && (
-                      <p className="text-xs text-gray-400">回答: {new Date(req.responded_at).toLocaleString('ja-JP')}</p>
+            {(() => {
+              // 日付でグループ化
+              const byDate: Record<string, EarlyLateRequest[]> = {}
+              for (const req of requests) {
+                const date = req.request_date || req.created_at.split('T')[0]
+                if (!byDate[date]) byDate[date] = []
+                byDate[date].push(req)
+              }
+              const today2 = new Date().toISOString().split('T')[0]
+              return Object.entries(byDate).sort(([a], [b]) => b.localeCompare(a)).map(([date, reqs]) => {
+                const isOpen = expandedReqDates.has(date)
+                const isPast = date < today2
+                const pendingCount = reqs.filter(r => r.status === 'pending').length
+                const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })
+
+                // エリア→施設でグループ化
+                const byArea: Record<string, Record<string, EarlyLateRequest[]>> = {}
+                for (const req of reqs) {
+                  const area = req.rooms?.facilities?.area || 'その他'
+                  const fname = req.rooms?.facilities?.name || '不明'
+                  if (!byArea[area]) byArea[area] = {}
+                  if (!byArea[area][fname]) byArea[area][fname] = []
+                  byArea[area][fname].push(req)
+                }
+
+                return (
+                  <div key={date} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                    {/* 日付ヘッダー */}
+                    <button
+                      onClick={() => toggleReqDate(date)}
+                      className="w-full px-4 py-3 flex items-center justify-between text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`font-bold text-sm ${isPast ? 'text-gray-400' : 'text-gray-800'}`}>{dateLabel}</span>
+                        {pendingCount > 0 && (
+                          <span className="bg-yellow-400 text-white text-xs font-bold rounded-full px-1.5 py-0.5">{pendingCount}件未回答</span>
+                        )}
+                      </div>
+                      <span className="text-gray-400">{isOpen ? '▲' : '▼'}</span>
+                    </button>
+
+                    {isOpen && (
+                      <div className="border-t">
+                        {Object.entries(byArea).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([area, facMap]) => (
+                          <div key={area}>
+                            <div className="px-4 py-1.5 bg-gray-50 text-xs font-bold text-gray-400">{area}</div>
+                            {Object.entries(facMap).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([fname, reqs2]) => (
+                              <div key={fname} className="border-t px-4 py-3">
+                                <p className="text-xs font-bold text-gray-600 mb-2">{fname}</p>
+                                <div className="space-y-2">
+                                  {reqs2.map(req => {
+                                    const rt = req.requested_time || ''
+                                    const timeStr = rt ? (rt.includes(' ') ? rt.split(' ')[1].slice(0, 5) : rt.slice(0, 5)) : null
+                                    return (
+                                      <div key={req.id} className="flex items-start justify-between gap-2">
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-sm">{req.type === 'early_checkin' ? '🌅' : '🌙'}</span>
+                                            <span className="text-sm text-gray-700">{req.rooms?.room_number}号室</span>
+                                            {timeStr && <span className="text-sm font-medium text-blue-600">{timeStr}</span>}
+                                          </div>
+                                          {req.message && <p className="text-xs text-gray-400 mt-0.5">{req.message}</p>}
+                                        </div>
+                                        <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${reqStatusColor[req.status]}`}>
+                                          {reqStatusLabel[req.status]}
+                                        </span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ml-2 ${reqStatusColor[req.status]}`}>
-                    {reqStatusLabel[req.status]}
-                  </span>
-                </div>
-              </div>
-            ))}
+                )
+              })
+            })()}
           </>
         )}
 
