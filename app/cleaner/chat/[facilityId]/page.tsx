@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getCleanerId } from '@/lib/cleanerAuth'
 
 type Room = { id: string; room_number: string }
 type CleaningRecord = {
@@ -75,7 +76,7 @@ export default function FacilityChatPage() {
 
   useEffect(() => {
     const init = async () => {
-      const cleanerId = localStorage.getItem('cleanerId')
+      const cleanerId = getCleanerId()
       if (!cleanerId) { router.push('/login'); return }
 
       setCurrentUserId(cleanerId)

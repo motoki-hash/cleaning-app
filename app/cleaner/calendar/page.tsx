@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getCleanerId } from '@/lib/cleanerAuth'
 
 type CalendarRecord = {
   id: string
@@ -87,7 +88,7 @@ export default function CleanerCalendarPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const cleanerId = localStorage.getItem('cleanerId')
+    const cleanerId = getCleanerId()
     if (!cleanerId) { router.push('/login'); return }
 
     const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`

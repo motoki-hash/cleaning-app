@@ -11,6 +11,8 @@ export default function CleanerEntryPage() {
     const cleanerId = params.cleanerId as string
     if (cleanerId) {
       localStorage.setItem('cleanerId', cleanerId)
+      // PWAホーム画面追加時のためcookieにも保存（1年間有効）
+      document.cookie = `cleanerId=${cleanerId}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`
       router.replace('/cleaner')
     }
   }, [params.cleanerId, router])

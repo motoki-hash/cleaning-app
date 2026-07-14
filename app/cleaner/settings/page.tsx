@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getCleanerId } from '@/lib/cleanerAuth'
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -24,7 +25,7 @@ export default function CleanerSettingsPage() {
 
   useEffect(() => {
     const init = async () => {
-      const storedCleanerId = localStorage.getItem('cleanerId')
+      const storedCleanerId = getCleanerId()
       if (!storedCleanerId) { router.push('/login'); return }
       setUserId(storedCleanerId)
 

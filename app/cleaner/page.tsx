@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { usePushNotification } from '@/lib/usePushNotification'
+import { getCleanerId } from '@/lib/cleanerAuth'
 
 type Facility = { id: string; name: string; area: string }
 type CleaningRecord = {
@@ -26,7 +27,7 @@ export default function CleanerHome() {
 
   useEffect(() => {
     const init = async () => {
-      const cleanerId = localStorage.getItem('cleanerId')
+      const cleanerId = getCleanerId()
       if (!cleanerId) { router.push('/login'); return }
       setCurrentUserId(cleanerId)
 
