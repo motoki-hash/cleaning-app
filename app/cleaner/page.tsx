@@ -48,25 +48,28 @@ export default function CleanerHome() {
         ? supabase.from('facilities').select('id, name, area').in('id', facilityIds).order('area').order('name')
         : supabase.from('facilities').select('id, name, area').order('area').order('name')
 
-      const [facRes, recRes] = await Promise.all([
-        facQuery,
-        supabase.from('cleaning_records')
-          .select('id, status, room_id, rooms(room_number, facility_id)')
-          .eq('cleaner_id', cleaner.id)
-          .eq('scheduled_date', today),
-      ])
+      // 会社施設の全部屋IDを取得
+      let roomIds: string[] = []
+      if (facilityIds.length > 0) {
+        const { data: roomsData } = await supabase.from('rooms').select('id').in('facility_id', facilityIds)
+        roomIds = (roomsData || []).map(r => r.id)
+      }
+
+      let recQuery = supabase.from('cleaning_records')
+        .select('id, status, room_id, rooms(room_number, facility_id)')
+        .eq('scheduled_date', today)
+      if (roomIds.length > 0) {
+        recQuery = recQuery.in('room_id', roomIds)
+      }
+
+      const [facRes, recRes] = await Promise.all([facQuery, recQuery])
       const facilityList = (facRes.data as Facility[]) || []
       setFacilities(facilityList)
-      // 同じroom_idの重複レコードを除去（チャット画面と同じロジック）
+      // 同じroom_idの重複レコードを除去
       const raw = (recRes.data as unknown as CleaningRecord[]) || []
       const seen = new Map<string, CleaningRecord>()
       for (const r of raw) { if (!seen.has(r.room_id)) seen.set(r.room_id, r) }
-      // 担当施設のレコードのみに絞る
-      const allRecs = Array.from(seen.values())
-      const filtered = facilityIds.length > 0
-        ? allRecs.filter(r => facilityIds.includes(r.rooms?.facility_id || ''))
-        : allRecs
-      setRecords(filtered)
+      setRecords(Array.from(seen.values()))
       setLoading(false)
 
       // 未読メッセージ数を計算
