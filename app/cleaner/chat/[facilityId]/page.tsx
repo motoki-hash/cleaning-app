@@ -101,7 +101,6 @@ export default function FacilityChatPage() {
       const [recRes, msgRes, reqRes, readsRes, eventsRes] = await Promise.all([
         supabase.from('cleaning_records')
           .select('id, status, started_at, completed_at, room_id, rooms(id, room_number)')
-          .eq('cleaner_id', cleaner.id)
           .eq('scheduled_date', today)
           .in('room_id', roomIds)
           .order('created_at'),
