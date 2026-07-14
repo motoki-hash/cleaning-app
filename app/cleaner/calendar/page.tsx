@@ -25,6 +25,7 @@ type RoomEvent = {
   facility_id: string
   room_id: string | null
   rooms: { room_number: string } | null
+  facilities: { name: string; area: string } | null
 }
 
 type EarlyLateRequest = {
@@ -130,7 +131,7 @@ export default function CleanerCalendarPage() {
 
     let evQuery = supabase
       .from('room_events')
-      .select('id, event_type, event_date, start_time, end_time, note, facility_id, room_id, rooms(room_number)')
+      .select('id, event_type, event_date, start_time, end_time, note, facility_id, room_id, rooms(room_number), facilities(name, area)')
       .gte('event_date', startDate)
       .lte('event_date', endDate)
       .order('event_date')
@@ -296,7 +297,8 @@ export default function CleanerCalendarPage() {
                   <span>{ev.event_type === '内覧' ? '👀' : '🔧'}</span>
                   <div>
                     <span className="font-bold">{ev.event_type}</span>
-                    {ev.rooms ? <span className="ml-1">{ev.rooms.room_number}号室</span> : <span className="ml-1">施設全体</span>}
+                    <span className="ml-1 text-purple-900 font-medium">{ev.facilities?.name || ''}</span>
+                    {ev.rooms ? <span className="ml-1">{ev.rooms.room_number}号室</span> : <span className="ml-1 text-purple-500">（施設全体）</span>}
                     <span className="ml-1 text-purple-600">{ev.start_time.slice(0,5)}〜{ev.end_time.slice(0,5)}</span>
                     {ev.note && <p className="text-purple-500 mt-0.5">{ev.note}</p>}
                   </div>
