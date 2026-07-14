@@ -381,7 +381,14 @@ export default function CompaniesPage() {
                           <div key={c.id} className="flex items-center gap-2 text-sm">
                             <span className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs flex-shrink-0">{c.name.slice(0, 1)}</span>
                             <span className="text-gray-700 flex-1">{c.name}</span>
-                            {c.user_id && <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">登録済み</span>}
+                            <button
+                              onClick={() => {
+                                const url = `${window.location.origin}/c/${c.id}`
+                                navigator.clipboard.writeText(url)
+                                alert(`URLをコピーしました:\n${url}`)
+                              }}
+                              className="text-xs text-blue-500 hover:text-blue-700 border border-blue-200 rounded px-1.5 py-0.5"
+                            >URL</button>
                             <button
                               onClick={() => removeCleaner(c.id, c.name)}
                               className="text-xs text-red-400 hover:text-red-600"

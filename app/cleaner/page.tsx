@@ -26,12 +26,12 @@ export default function CleanerHome() {
 
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-      setCurrentUserId(user.id)
+      const cleanerId = localStorage.getItem('cleanerId')
+      if (!cleanerId) { router.push('/login'); return }
+      setCurrentUserId(cleanerId)
 
       const { data: cleaner } = await supabase
-        .from('cleaners').select('id, company_id').eq('user_id', user.id).single()
+        .from('cleaners').select('id, company_id').eq('id', cleanerId).single()
       if (!cleaner) { setLoading(false); return }
 
       const today = new Date().toISOString().split('T')[0]

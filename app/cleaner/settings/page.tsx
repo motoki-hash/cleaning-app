@@ -24,13 +24,12 @@ export default function CleanerSettingsPage() {
 
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-      setEmail(user.email || '')
-      setUserId(user.id)
+      const storedCleanerId = localStorage.getItem('cleanerId')
+      if (!storedCleanerId) { router.push('/login'); return }
+      setUserId(storedCleanerId)
 
       const { data: cleaner } = await supabase
-        .from('cleaners').select('id, name').eq('user_id', user.id).single()
+        .from('cleaners').select('id, name').eq('id', storedCleanerId).single()
       if (cleaner) {
         setCleanerId(cleaner.id)
         setName(cleaner.name || '')
@@ -46,7 +45,6 @@ export default function CleanerSettingsPage() {
             const reg = await navigator.serviceWorker.register('/sw.js')
             await navigator.serviceWorker.ready
             let sub = await reg.pushManager.getSubscription()
-            // サブスクリプションがない場合は新規作成
             if (!sub) {
               sub = await reg.pushManager.subscribe({
                 userVisibleOnly: true,
@@ -56,7 +54,7 @@ export default function CleanerSettingsPage() {
             const res = await fetch('/api/push-subscribe', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ subscription: sub.toJSON(), userId: user.id }),
+              body: JSON.stringify({ subscription: sub.toJSON(), userId: storedCleanerId }),
             })
             if (res.ok) setNotifStatus('granted')
             else setNotifStatus('unknown')
@@ -157,13 +155,6 @@ export default function CleanerSettingsPage() {
             className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <p className="text-xs text-gray-400">チャットで他の清掃員に表示される名前です</p>
-        </div>
-
-        {/* メールアドレス（表示のみ） */}
-        <div className="bg-white rounded-xl p-4 space-y-2 shadow-sm">
-          <label className="text-sm font-medium text-gray-700">メールアドレス</label>
-          <p className="text-sm text-gray-600 px-1">{email}</p>
-          <p className="text-xs text-gray-400">メールアドレスは変更できません</p>
         </div>
 
         {/* プッシュ通知 */}

@@ -75,13 +75,13 @@ export default function FacilityChatPage() {
 
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+      const cleanerId = localStorage.getItem('cleanerId')
+      if (!cleanerId) { router.push('/login'); return }
 
-      setCurrentUserId(user.id)
+      setCurrentUserId(cleanerId)
 
       const { data: cleaner } = await supabase
-        .from('cleaners').select('id, name').eq('user_id', user.id).single()
+        .from('cleaners').select('id, name').eq('id', cleanerId).single()
       if (!cleaner) { setLoading(false); return }
       if (cleaner.name) setCurrentUserName(cleaner.name)
 

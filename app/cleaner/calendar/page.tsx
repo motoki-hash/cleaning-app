@@ -73,15 +73,15 @@ export default function CleanerCalendarPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
+    const cleanerId = localStorage.getItem('cleanerId')
+    if (!cleanerId) { router.push('/login'); return }
 
     const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
     const lastDay = new Date(year, month + 1, 0).getDate()
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
     // 会社の担当施設IDを取得
-    const { data: cleaner } = await supabase.from('cleaners').select('company_id').eq('user_id', user.id).single()
+    const { data: cleaner } = await supabase.from('cleaners').select('company_id').eq('id', cleanerId).single()
     let roomIds: string[] = []
     if (cleaner?.company_id) {
       const { data: cf } = await supabase.from('company_facilities').select('facility_id').eq('company_id', cleaner.company_id)
