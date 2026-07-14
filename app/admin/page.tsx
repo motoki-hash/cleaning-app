@@ -589,7 +589,7 @@ export default function AdminPage() {
             <div className="flex gap-2">
               <button onClick={() => { setShowEventForm(!showEventForm); setShowRequestForm(false) }}
                 className="flex-1 bg-purple-600 text-white py-3 rounded-xl text-sm font-medium">
-                🏠 内覧・是正を登録
+                🏠 内覧・是正・修繕・点検の登録
               </button>
               <button onClick={() => { setShowRequestForm(!showRequestForm); setShowEventForm(false) }}
                 className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-medium">
