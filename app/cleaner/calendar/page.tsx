@@ -15,6 +15,18 @@ type CalendarRecord = {
   } | null
 }
 
+type RoomEvent = {
+  id: string
+  event_type: '内覧' | '是正'
+  event_date: string
+  start_time: string
+  end_time: string
+  note: string | null
+  facility_id: string
+  room_id: string | null
+  rooms: { room_number: string } | null
+}
+
 type EarlyLateRequest = {
   id: string
   type: string
@@ -65,6 +77,7 @@ export default function CleanerCalendarPage() {
   })
   const [records, setRecords] = useState<CalendarRecord[]>([])
   const [requests, setRequests] = useState<EarlyLateRequest[]>([])
+  const [roomEvents, setRoomEvents] = useState<RoomEvent[]>([])
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -111,10 +124,26 @@ export default function CleanerCalendarPage() {
       reqQuery = reqQuery.in('room_id', roomIds)
     }
 
-    const [recRes, reqRes] = await Promise.all([recQuery, reqQuery])
+    const facilityIds = cleaner?.company_id
+      ? ((await supabase.from('company_facilities').select('facility_id').eq('company_id', cleaner.company_id)).data || []).map(r => r.facility_id)
+      : []
+
+    let evQuery = supabase
+      .from('room_events')
+      .select('id, event_type, event_date, start_time, end_time, note, facility_id, room_id, rooms(room_number)')
+      .gte('event_date', startDate)
+      .lte('event_date', endDate)
+      .order('event_date')
+
+    if (facilityIds.length > 0) {
+      evQuery = evQuery.in('facility_id', facilityIds)
+    }
+
+    const [recRes, reqRes, evRes] = await Promise.all([recQuery, reqQuery, evQuery])
 
     setRecords((recRes.data || []) as unknown as CalendarRecord[])
     setRequests((reqRes.data || []) as unknown as EarlyLateRequest[])
+    setRoomEvents((evRes.data || []) as unknown as RoomEvent[])
     setLoading(false)
   }, [year, month, router])
 
@@ -138,8 +167,15 @@ export default function CleanerCalendarPage() {
     requestsByDate[date].push(r)
   }
 
+  const eventsByDate: Record<string, RoomEvent[]> = {}
+  for (const ev of roomEvents) {
+    if (!eventsByDate[ev.event_date]) eventsByDate[ev.event_date] = []
+    eventsByDate[ev.event_date].push(ev)
+  }
+
   const selectedRecords = selectedDate ? (recordsByDate[selectedDate] || []) : []
   const selectedRequests = selectedDate ? (requestsByDate[selectedDate] || []) : []
+  const selectedEvents = selectedDate ? (eventsByDate[selectedDate] || []) : []
 
   // エリア → 施設名 でグループ化（依頼も含める）
   const byArea: Record<string, Record<string, { records: CalendarRecord[]; requests: EarlyLateRequest[] }>> = {}
@@ -189,6 +225,7 @@ export default function CleanerCalendarPage() {
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
             const dayRecs = recordsByDate[dateStr] || []
             const dayReqs = requestsByDate[dateStr] || []
+            const dayEvs = eventsByDate[dateStr] || []
             const isToday = dateStr === today
             const isSelected = dateStr === selectedDate
             const dow = (firstDow + i) % 7
@@ -222,6 +259,13 @@ export default function CleanerCalendarPage() {
                     </span>
                   </div>
                 )}
+                {dayEvs.length > 0 && (
+                  <div className="flex items-center gap-0.5 mt-0.5">
+                    <span className="text-xs leading-none text-purple-500">
+                      {dayEvs.some(e => e.event_type === '内覧') ? '👀' : ''}{dayEvs.some(e => e.event_type === '是正') ? '🔧' : ''}
+                    </span>
+                  </div>
+                )}
               </button>
             )
           })}
@@ -233,6 +277,7 @@ export default function CleanerCalendarPage() {
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />清掃完了</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-200 inline-block" />未完了</span>
         <span className="flex items-center gap-1"><span className="text-orange-500">🔔</span>アーリー/レイト依頼</span>
+        <span className="flex items-center gap-1"><span>👀🔧</span>内覧・是正</span>
       </div>
 
       {/* 選択日の詳細 */}
@@ -242,10 +287,28 @@ export default function CleanerCalendarPage() {
             {new Date(selectedDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
           </h3>
 
+          {/* 内覧・是正 */}
+          {selectedEvents.length > 0 && (
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 space-y-1.5">
+              <p className="text-xs font-bold text-purple-700 mb-1">内覧・是正</p>
+              {selectedEvents.map(ev => (
+                <div key={ev.id} className="text-xs text-purple-800 flex items-start gap-2">
+                  <span>{ev.event_type === '内覧' ? '👀' : '🔧'}</span>
+                  <div>
+                    <span className="font-bold">{ev.event_type}</span>
+                    {ev.rooms ? <span className="ml-1">{ev.rooms.room_number}号室</span> : <span className="ml-1">施設全体</span>}
+                    <span className="ml-1 text-purple-600">{ev.start_time.slice(0,5)}〜{ev.end_time.slice(0,5)}</span>
+                    {ev.note && <p className="text-purple-500 mt-0.5">{ev.note}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* エリア別 施設一覧（依頼込み） */}
-          {Object.keys(byArea).length === 0 ? (
+          {Object.keys(byArea).length === 0 && selectedEvents.length === 0 ? (
             <p className="text-gray-400 text-sm text-center py-8">この日のデータはありません</p>
-          ) : (
+          ) : Object.keys(byArea).length > 0 && (
             <div className="space-y-3">
               {Object.entries(byArea).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([area, facilities]) => (
                 <div key={area}>
