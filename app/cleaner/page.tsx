@@ -28,7 +28,6 @@ export default function CleanerHome() {
   useEffect(() => {
     const init = async () => {
       const cleanerId = getCleanerId()
-      alert(`DEBUG ls=${localStorage.getItem('cleanerId')} cookie=${document.cookie} result=${cleanerId}`)
       if (!cleanerId) { router.push('/login'); return }
       setCurrentUserId(cleanerId)
 
