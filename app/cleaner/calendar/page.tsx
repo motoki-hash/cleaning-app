@@ -178,21 +178,28 @@ export default function CleanerCalendarPage() {
   const selectedRequests = selectedDate ? (requestsByDate[selectedDate] || []) : []
   const selectedEvents = selectedDate ? (eventsByDate[selectedDate] || []) : []
 
-  // エリア → 施設名 でグループ化（依頼も含める）
-  const byArea: Record<string, Record<string, { records: CalendarRecord[]; requests: EarlyLateRequest[] }>> = {}
+  // エリア → 施設名 でグループ化（依頼・内覧是正も含める）
+  const byArea: Record<string, Record<string, { records: CalendarRecord[]; requests: EarlyLateRequest[]; events: RoomEvent[] }>> = {}
   for (const r of selectedRecords) {
     const area = r.rooms?.facilities?.area || 'その他'
     const fname = r.rooms?.facilities?.name || '不明'
     if (!byArea[area]) byArea[area] = {}
-    if (!byArea[area][fname]) byArea[area][fname] = { records: [], requests: [] }
+    if (!byArea[area][fname]) byArea[area][fname] = { records: [], requests: [], events: [] }
     byArea[area][fname].records.push(r)
   }
   for (const req of selectedRequests) {
     const area = req.rooms?.facilities?.area || 'その他'
     const fname = req.rooms?.facilities?.name || '不明'
     if (!byArea[area]) byArea[area] = {}
-    if (!byArea[area][fname]) byArea[area][fname] = { records: [], requests: [] }
+    if (!byArea[area][fname]) byArea[area][fname] = { records: [], requests: [], events: [] }
     byArea[area][fname].requests.push(req)
+  }
+  for (const ev of selectedEvents) {
+    const area = ev.facilities?.area || 'その他'
+    const fname = ev.facilities?.name || '不明'
+    if (!byArea[area]) byArea[area] = {}
+    if (!byArea[area][fname]) byArea[area][fname] = { records: [], requests: [], events: [] }
+    byArea[area][fname].events.push(ev)
   }
 
   return (
@@ -288,37 +295,32 @@ export default function CleanerCalendarPage() {
             {new Date(selectedDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
           </h3>
 
-          {/* 内覧・是正 */}
-          {selectedEvents.length > 0 && (
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 space-y-1.5">
-              <p className="text-xs font-bold text-purple-700 mb-1">内覧・是正</p>
-              {selectedEvents.map(ev => (
-                <div key={ev.id} className="text-xs text-purple-800 flex items-start gap-2">
-                  <span>{ev.event_type === '内覧' ? '👀' : '🔧'}</span>
-                  <div>
-                    <span className="font-bold">{ev.event_type}</span>
-                    <span className="ml-1 text-purple-900 font-medium">{ev.facilities?.name || ''}</span>
-                    {ev.rooms ? <span className="ml-1">{ev.rooms.room_number}号室</span> : <span className="ml-1 text-purple-500">（施設全体）</span>}
-                    <span className="ml-1 text-purple-600">{ev.start_time.slice(0,5)}〜{ev.end_time.slice(0,5)}</span>
-                    {ev.note && <p className="text-purple-500 mt-0.5">{ev.note}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* エリア別 施設一覧（依頼込み） */}
-          {Object.keys(byArea).length === 0 && selectedEvents.length === 0 ? (
+          {/* エリア別 施設一覧 */}
+          {Object.keys(byArea).length === 0 ? (
             <p className="text-gray-400 text-sm text-center py-8">この日のデータはありません</p>
-          ) : Object.keys(byArea).length > 0 && (
+          ) : (
             <div className="space-y-3">
               {Object.entries(byArea).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([area, facilities]) => (
                 <div key={area}>
                   <div className="px-1 py-1 text-xs font-bold text-gray-400 tracking-wide">{area}</div>
                   <div className="space-y-2">
-                    {Object.entries(facilities).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([fname, { records: recs, requests: reqs }]) => (
+                    {Object.entries(facilities).sort(([a], [b]) => a.localeCompare(b, 'ja')).map(([fname, { records: recs, requests: reqs, events: evs }]) => (
                       <div key={fname} className="bg-white rounded-xl p-3 shadow-sm">
                         <p className="text-sm font-bold text-gray-700 mb-2">{fname}</p>
+                        {/* 内覧・是正 */}
+                        {evs.length > 0 && (
+                          <div className="mb-2 space-y-1.5 border-l-2 border-purple-300 pl-2">
+                            {evs.map(ev => (
+                              <div key={ev.id} className="text-xs text-purple-800">
+                                <span>{ev.event_type === '内覧' ? '👀' : '🔧'}</span>
+                                <span className="font-bold ml-1">{ev.event_type}</span>
+                                {ev.rooms ? <span className="ml-1">{ev.rooms.room_number}号室</span> : <span className="ml-1 text-purple-500">（施設全体）</span>}
+                                <span className="ml-1 text-purple-600">{ev.start_time.slice(0,5)}〜{ev.end_time.slice(0,5)}</span>
+                                {ev.note && <p className="text-purple-500 mt-0.5">{ev.note}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         {/* アーリー/レイト依頼 */}
                         {reqs.length > 0 && (
                           <div className="mb-2 space-y-1.5 border-l-2 border-orange-300 pl-2">
@@ -347,16 +349,18 @@ export default function CleanerCalendarPage() {
                           </div>
                         )}
                         {/* 清掃部屋 */}
-                        <div className="flex flex-wrap gap-1.5">
-                          {recs
-                            .sort((a, b) => (a.rooms?.room_number || '').localeCompare(b.rooms?.room_number || '', 'ja', { numeric: true }))
-                            .map(r => (
-                              <span key={r.id} className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_STYLE[r.status] || STATUS_STYLE.scheduled}`}>
-                                {r.rooms?.room_number}号室
-                                <span className="opacity-60 ml-1">({STATUS_LABEL[r.status] || r.status})</span>
-                              </span>
-                            ))}
-                        </div>
+                        {recs.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {recs
+                              .sort((a, b) => (a.rooms?.room_number || '').localeCompare(b.rooms?.room_number || '', 'ja', { numeric: true }))
+                              .map(r => (
+                                <span key={r.id} className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_STYLE[r.status] || STATUS_STYLE.scheduled}`}>
+                                  {r.rooms?.room_number}号室
+                                  <span className="opacity-60 ml-1">({STATUS_LABEL[r.status] || r.status})</span>
+                                </span>
+                              ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
