@@ -197,7 +197,7 @@ export default function AdminChatPage() {
                       <p className={`text-xs ${isMyMessage ? 'text-white/60' : 'text-gray-400 ml-1'}`}>
                         {formatTime(msg.created_at)}
                       </p>
-                      {isMyMessage && isLastReadByCleanerMsg && (
+                      {isMyMessage && lastReadByCleanerMsg?.id === msg.id && (
                         <span className="text-xs text-white/70">既読</span>
                       )}
                     </div>
