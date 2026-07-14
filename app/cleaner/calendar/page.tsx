@@ -17,7 +17,7 @@ type CalendarRecord = {
 
 type RoomEvent = {
   id: string
-  event_type: '内覧' | '是正'
+  event_type: '内覧' | '是正' | '修繕' | '点検'
   event_date: string
   start_time: string
   end_time: string
@@ -270,7 +270,7 @@ export default function CleanerCalendarPage() {
                 {dayEvs.length > 0 && (
                   <div className="flex items-center gap-0.5 mt-0.5">
                     <span className="text-xs leading-none text-purple-500">
-                      {dayEvs.some(e => e.event_type === '内覧') ? '👀' : ''}{dayEvs.some(e => e.event_type === '是正') ? '🔧' : ''}
+                      {dayEvs.some(e => e.event_type === '内覧') ? '👀' : ''}{dayEvs.some(e => e.event_type === '是正') ? '🔧' : ''}{dayEvs.some(e => e.event_type === '修繕') ? '🔨' : ''}{dayEvs.some(e => e.event_type === '点検') ? '🔍' : ''}
                     </span>
                   </div>
                 )}
@@ -312,7 +312,7 @@ export default function CleanerCalendarPage() {
                           <div className="mb-2 space-y-1.5 border-l-2 border-purple-300 pl-2">
                             {evs.map(ev => (
                               <div key={ev.id} className="text-xs text-purple-800">
-                                <span>{ev.event_type === '内覧' ? '👀' : '🔧'}</span>
+                                <span>{ev.event_type === '内覧' ? '👀' : ev.event_type === '是正' ? '🔧' : ev.event_type === '修繕' ? '🔨' : '🔍'}</span>
                                 <span className="font-bold ml-1">{ev.event_type}</span>
                                 {ev.rooms ? <span className="ml-1">{ev.rooms.room_number}号室</span> : <span className="ml-1 text-purple-500">（施設全体）</span>}
                                 <span className="ml-1 text-purple-600">{ev.start_time.slice(0,5)}〜{ev.end_time.slice(0,5)}</span>

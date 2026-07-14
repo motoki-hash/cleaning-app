@@ -35,7 +35,7 @@ type EarlyLateRequest = {
 type RoomEvent = {
   id: string
   room_id: string | null
-  event_type: '内覧' | '是正'
+  event_type: '内覧' | '是正' | '修繕' | '点検'
   event_date: string
   start_time: string
   end_time: string
@@ -390,7 +390,7 @@ export default function FacilityChatPage() {
           className="bg-purple-600 text-white px-4 py-2">
           {roomEvents.map(ev => (
             <div key={ev.id} className="flex items-center gap-2 text-xs py-0.5">
-              <span>{ev.event_type === '内覧' ? '👀' : '🔧'}</span>
+              <span>{ev.event_type === '内覧' ? '👀' : ev.event_type === '是正' ? '🔧' : ev.event_type === '修繕' ? '🔨' : '🔍'}</span>
               <span className="font-bold">{ev.event_type}</span>
               {ev.rooms ? <span>{ev.rooms.room_number}号室</span> : <span>施設全体</span>}
               <span>{ev.start_time.slice(0,5)}〜{ev.end_time.slice(0,5)}</span>

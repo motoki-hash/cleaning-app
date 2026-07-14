@@ -43,7 +43,7 @@ type RoomEvent = {
   id: string
   facility_id: string
   room_id: string | null
-  event_type: '内覧' | '是正'
+  event_type: '内覧' | '是正' | '修繕' | '点検'
   event_date: string
   start_time: string
   end_time: string
@@ -73,7 +73,7 @@ export default function AdminPage() {
   const [showEventForm, setShowEventForm] = useState(false)
   const [evFacility, setEvFacility] = useState('')
   const [evRoom, setEvRoom] = useState('')
-  const [evType, setEvType] = useState<'内覧' | '是正'>('内覧')
+  const [evType, setEvType] = useState<'内覧' | '是正' | '修繕' | '点検'>('内覧')
   const [evDate, setEvDate] = useState(new Date().toISOString().split('T')[0])
   const [evStart, setEvStart] = useState('')
   const [evEnd, setEvEnd] = useState('')
@@ -241,7 +241,7 @@ export default function AdminPage() {
     const room = evRoom ? rooms.find(r => r.id === evRoom) : null
     const roomText = room ? `${room.room_number}号室` : '施設全体'
     const dateLabel = new Date(evDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })
-    const icon = evType === '内覧' ? '👀' : '🔧'
+    const icon = evType === '内覧' ? '👀' : evType === '是正' ? '🔧' : evType === '修繕' ? '🔨' : '🔍'
 
     // Slack通知（fire-and-forget）
     fetch('/api/slack-notify', {
@@ -274,7 +274,7 @@ export default function AdminPage() {
     })
 
     setShowEventForm(false)
-    setEvFacility(''); setEvRoom(''); setEvType('内覧'); setEvDate(new Date().toISOString().split('T')[0])
+    setEvFacility(''); setEvRoom(''); setEvType('内覧' as '内覧' | '是正' | '修繕' | '点検'); setEvDate(new Date().toISOString().split('T')[0])
     setEvStart(''); setEvEnd(''); setEvNote('')
     setEvSaving(false)
   }
@@ -600,12 +600,12 @@ export default function AdminPage() {
             {/* 内覧・是正登録フォーム */}
             {showEventForm && (
               <div className="bg-white rounded-xl shadow-sm p-4 space-y-3 border border-purple-200">
-                <p className="font-medium text-gray-800">内覧・是正を登録</p>
+                <p className="font-medium text-gray-800">イベントを登録</p>
                 <div className="grid grid-cols-2 gap-2">
-                  {(['内覧', '是正'] as const).map(t => (
+                  {([['内覧', '👀'], ['是正', '🔧'], ['修繕', '🔨'], ['点検', '🔍']] as const).map(([t, icon]) => (
                     <button key={t} onClick={() => setEvType(t)}
                       className={`py-2 rounded-lg text-sm font-medium border ${evType === t ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-300 text-gray-600'}`}>
-                      {t === '内覧' ? '👀 内覧' : '🔧 是正'}
+                      {icon} {t}
                     </button>
                   ))}
                 </div>
@@ -779,7 +779,7 @@ export default function AdminPage() {
                                         <div className="flex-1">
                                           <div className="flex items-center gap-1.5">
                                             <span className="text-xs font-bold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
-                                              {ev.event_type === '内覧' ? '👀 内覧' : '🔧 是正'}
+                                              {ev.event_type === '内覧' ? '👀 内覧' : ev.event_type === '是正' ? '🔧 是正' : ev.event_type === '修繕' ? '🔨 修繕' : '🔍 点検'}
                                             </span>
                                             {ev.rooms ? <span className="text-xs text-gray-600">{ev.rooms.room_number}号室</span> : <span className="text-xs text-gray-400">施設全体</span>}
                                             <span className="text-xs text-purple-600 font-medium">{ev.start_time.slice(0,5)}〜{ev.end_time.slice(0,5)}</span>

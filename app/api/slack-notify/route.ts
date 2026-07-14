@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     text = `💬 ${facilityName}にメッセージ\n👤 ${message}`
   } else if (status === 'room_event') {
     console.log('[slack-notify] room_event payload:', { eventType, facilityName, area, roomNumber, eventDate, startTime, endTime, note })
-    const icon = eventType === '内覧' ? '👀' : '🔧'
+    const icon = eventType === '内覧' ? '👀' : eventType === '是正' ? '🔧' : eventType === '修繕' ? '🔨' : '🔍'
     const roomText = roomNumber ? `${roomNumber}号室` : '施設全体'
     const dateLabel = new Date(eventDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })
     const slackText = `${icon} ${eventType}のお知らせ\n📍 ${area} / ${facilityName} ${roomText}\n📅 ${dateLabel} ${String(startTime).slice(0,5)}〜${String(endTime).slice(0,5)}`
