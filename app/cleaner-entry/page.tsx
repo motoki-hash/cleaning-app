@@ -1,16 +1,20 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { getCleanerId } from '@/lib/cleanerAuth'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
-export default function CleanerEntryPage() {
+function CleanerEntryInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
-    // localStorageにcookieの値を同期
-    const id = getCleanerId()
-    if (id) localStorage.setItem('cleanerId', id)
+    const id = searchParams.get('id')
+    if (id) {
+      // URLからcleanerIdを取得してlocalStorageとcookieに保存
+      localStorage.setItem('cleanerId', id)
+      document.cookie = `cleanerId=${id}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`
+    }
 
     // PWAスタンドアロンモードなら即リダイレクト
     const isStandalone =
@@ -18,10 +22,10 @@ export default function CleanerEntryPage() {
       ('standalone' in window.navigator &&
         (window.navigator as { standalone?: boolean }).standalone === true)
 
-    if (isStandalone) {
+    if (isStandalone && id) {
       router.replace('/cleaner')
     }
-  }, [router])
+  }, [router, searchParams])
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6">
@@ -49,5 +53,13 @@ export default function CleanerEntryPage() {
         </button>
       </div>
     </div>
+  )
+}
+
+export default function CleanerEntryPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">読み込み中...</p></div>}>
+      <CleanerEntryInner />
+    </Suspense>
   )
 }
