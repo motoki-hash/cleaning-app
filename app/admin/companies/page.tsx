@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 
 type Company = { id: string; name: string; contact_person: string | null; phone: string | null; email: string | null }
 type Facility = { id: string; name: string; area: string }
-type Cleaner = { id: string; name: string; user_id: string | null; company_id: string | null }
+type Cleaner = { id: string; name: string; email: string | null; user_id: string | null; company_id: string | null }
 
 export default function CompaniesPage() {
   const router = useRouter()
@@ -26,15 +26,22 @@ export default function CompaniesPage() {
   const [newCompanyEmail, setNewCompanyEmail] = useState('')
   const [savingCompany, setSavingCompany] = useState(false)
 
-  // 招待フォーム
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviting, setInviting] = useState(false)
-  const [inviteMsg, setInviteMsg] = useState('')
+  // 新規清掃員追加フォーム
+  const [showAddCleaner, setShowAddCleaner] = useState<string | null>(null)
+  const [newCleanerName, setNewCleanerName] = useState('')
+  const [newCleanerEmail, setNewCleanerEmail] = useState('')
+  const [addingNewCleaner, setAddingNewCleaner] = useState(false)
+  const [addCleanerMsg, setAddCleanerMsg] = useState('')
 
   // 既存ユーザー追加
   const [showAddExisting, setShowAddExisting] = useState<string | null>(null)
   const [existingSearch, setExistingSearch] = useState('')
   const [addingCleaner, setAddingCleaner] = useState(false)
+
+  // メアド編集
+  const [editingEmail, setEditingEmail] = useState<string | null>(null)
+  const [editEmailValue, setEditEmailValue] = useState('')
+  const [savingEmail, setSavingEmail] = useState(false)
 
   // 施設編集モード
   const [editingFacilities, setEditingFacilities] = useState<string | null>(null)
@@ -49,7 +56,7 @@ export default function CompaniesPage() {
       supabase.from('cleaning_companies').select('id, name, contact_person, phone, email').order('name'),
       supabase.from('facilities').select('id, name, area').order('area').order('name'),
       supabase.from('company_facilities').select('company_id, facility_id'),
-      supabase.from('cleaners').select('id, name, user_id, company_id').eq('is_active', true),
+      supabase.from('cleaners').select('id, name, email, user_id, company_id').eq('is_active', true),
     ])
 
     setCompanies((compRes.data || []) as Company[])
@@ -137,24 +144,41 @@ export default function CompaniesPage() {
     await load()
   }
 
-  const sendInvite = async (companyId: string) => {
-    if (!inviteEmail.trim()) return
-    setInviting(true)
-    setInviteMsg('')
-    const res = await fetch('/api/invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: inviteEmail.trim() }),
+  const addNewCleaner = async (companyId: string) => {
+    if (!newCleanerName.trim()) return
+    setAddingNewCleaner(true)
+    setAddCleanerMsg('')
+    const emailVal = newCleanerEmail.trim().toLowerCase() || null
+    const { error } = await supabase.from('cleaners').insert({
+      name: newCleanerName.trim(),
+      email: emailVal,
+      company_id: companyId,
+      is_active: true,
     })
-    const json = await res.json()
-    if (json.ok) {
-      setInviteMsg(`✅ ${inviteEmail} に招待メールを送りました`)
-      setInviteEmail('')
+    if (error) {
+      setAddCleanerMsg(error.message.includes('unique') ? '❌ そのメアドはすでに登録済みです' : `❌ エラー: ${error.message}`)
     } else {
-      setInviteMsg(`❌ エラー: ${json.error}`)
+      setAddCleanerMsg(`✅ ${newCleanerName} を追加しました`)
+      setNewCleanerName('')
+      setNewCleanerEmail('')
+      await load()
     }
-    setInviting(false)
+    setAddingNewCleaner(false)
   }
+
+  const saveEmail = async (cleanerId: string) => {
+    setSavingEmail(true)
+    const emailVal = editEmailValue.trim().toLowerCase() || null
+    const { error } = await supabase.from('cleaners').update({ email: emailVal }).eq('id', cleanerId)
+    if (error) {
+      alert(error.message.includes('unique') ? 'そのメアドはすでに登録済みです' : `エラー: ${error.message}`)
+    } else {
+      setEditingEmail(null)
+      await load()
+    }
+    setSavingEmail(false)
+  }
+
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">読み込み中...</div>
 
@@ -366,33 +390,97 @@ export default function CompaniesPage() {
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-xs font-bold text-gray-500">清掃員</p>
-                      <button
-                        onClick={() => setShowAddExisting(showAddExisting === company.id ? null : company.id)}
-                        className="text-xs text-blue-600 border border-blue-200 rounded-lg px-2 py-0.5"
-                      >
-                        ＋ 既存ユーザーを追加
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setShowAddCleaner(showAddCleaner === company.id ? null : company.id); setAddCleanerMsg('') }}
+                          className="text-xs text-blue-600 border border-blue-200 rounded-lg px-2 py-0.5"
+                        >
+                          ＋ 新規追加
+                        </button>
+                        <button
+                          onClick={() => setShowAddExisting(showAddExisting === company.id ? null : company.id)}
+                          className="text-xs text-gray-500 border border-gray-200 rounded-lg px-2 py-0.5"
+                        >
+                          既存を追加
+                        </button>
+                      </div>
                     </div>
+
+                    {/* 新規清掃員追加フォーム */}
+                    {showAddCleaner === company.id && (
+                      <div className="mb-3 border border-blue-100 rounded-xl p-3 bg-blue-50">
+                        <p className="text-xs font-medium text-blue-700 mb-2">新規清掃員を追加</p>
+                        <input
+                          type="text"
+                          value={newCleanerName}
+                          onChange={e => setNewCleanerName(e.target.value)}
+                          placeholder="名前（必須）"
+                          className="w-full border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-400 mb-2"
+                        />
+                        <input
+                          type="email"
+                          value={newCleanerEmail}
+                          onChange={e => setNewCleanerEmail(e.target.value)}
+                          placeholder="メールアドレス（ログインに使用）"
+                          className="w-full border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-400 mb-2"
+                        />
+                        <button
+                          onClick={() => addNewCleaner(company.id)}
+                          disabled={addingNewCleaner || !newCleanerName.trim()}
+                          className="w-full bg-blue-600 text-white rounded-lg py-1.5 text-sm font-medium disabled:opacity-50"
+                        >
+                          {addingNewCleaner ? '追加中...' : '追加する'}
+                        </button>
+                        {addCleanerMsg && <p className="text-xs mt-2 text-gray-600">{addCleanerMsg}</p>}
+                      </div>
+                    )}
+
                     {cleaners.length === 0 ? (
                       <p className="text-xs text-gray-400">まだ登録されていません</p>
                     ) : (
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         {cleaners.map(c => (
-                          <div key={c.id} className="flex items-center gap-2 text-sm">
-                            <span className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs flex-shrink-0">{c.name.slice(0, 1)}</span>
-                            <span className="text-gray-700 flex-1">{c.name}</span>
-                            <button
-                              onClick={() => {
-                                const url = `${window.location.origin}/c/${c.id}`
-                                navigator.clipboard.writeText(url)
-                                alert(`URLをコピーしました:\n${url}`)
-                              }}
-                              className="text-xs text-blue-500 hover:text-blue-700 border border-blue-200 rounded px-1.5 py-0.5"
-                            >URL</button>
-                            <button
-                              onClick={() => removeCleaner(c.id, c.name)}
-                              className="text-xs text-red-400 hover:text-red-600"
-                            >外す</button>
+                          <div key={c.id} className="bg-gray-50 rounded-xl px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs flex-shrink-0">{c.name.slice(0, 1)}</span>
+                              <span className="text-gray-800 text-sm font-medium flex-1">{c.name}</span>
+                              <button
+                                onClick={() => removeCleaner(c.id, c.name)}
+                                className="text-xs text-red-400 hover:text-red-600"
+                              >外す</button>
+                            </div>
+                            {/* メアド表示・編集 */}
+                            {editingEmail === c.id ? (
+                              <div className="flex gap-2 mt-1.5">
+                                <input
+                                  type="email"
+                                  value={editEmailValue}
+                                  onChange={e => setEditEmailValue(e.target.value)}
+                                  placeholder="メールアドレス"
+                                  className="flex-1 border rounded-lg px-2 py-1 text-xs outline-none focus:border-blue-400"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => saveEmail(c.id)}
+                                  disabled={savingEmail}
+                                  className="text-xs bg-blue-600 text-white px-2 py-1 rounded-lg disabled:opacity-50"
+                                >保存</button>
+                                <button
+                                  onClick={() => setEditingEmail(null)}
+                                  className="text-xs text-gray-400 px-1"
+                                >✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 mt-1">
+                                <span className="text-xs text-gray-400 flex-1">
+                                  {c.email ? `📧 ${c.email}` : '📧 メアド未設定'}
+                                </span>
+                                <button
+                                  onClick={() => { setEditingEmail(c.id); setEditEmailValue(c.email || '') }}
+                                  className="text-xs text-blue-500 border border-blue-200 rounded px-1.5 py-0.5"
+                                >編集</button>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -400,8 +488,8 @@ export default function CompaniesPage() {
 
                     {/* 既存ユーザー追加パネル */}
                     {showAddExisting === company.id && (
-                      <div className="mt-3 border border-blue-100 rounded-xl p-3 bg-blue-50">
-                        <p className="text-xs font-medium text-blue-700 mb-2">既存の清掃員を追加</p>
+                      <div className="mt-3 border border-gray-200 rounded-xl p-3 bg-gray-50">
+                        <p className="text-xs font-medium text-gray-700 mb-2">既存の清掃員を追加</p>
                         <input
                           type="text"
                           value={existingSearch}
@@ -436,28 +524,6 @@ export default function CompaniesPage() {
                     )}
                   </div>
 
-                  {/* 招待 */}
-                  <div>
-                    <p className="text-xs font-bold text-gray-500 mb-2">新規ユーザーを招待（メール）</p>
-                    <div className="flex gap-2">
-                      <input
-                        type="email"
-                        value={inviteEmail}
-                        onChange={e => setInviteEmail(e.target.value)}
-                        placeholder="メールアドレス"
-                        className="flex-1 border rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
-                      />
-                      <button
-                        onClick={() => sendInvite(company.id)}
-                        disabled={inviting || !inviteEmail.trim()}
-                        className="bg-blue-600 text-white rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50 whitespace-nowrap"
-                      >
-                        {inviting ? '送信中...' : '招待'}
-                      </button>
-                    </div>
-                    {inviteMsg && <p className="text-xs mt-2 text-gray-600">{inviteMsg}</p>}
-                  </div>
-
                 </div>
               )}
             </div>
@@ -466,4 +532,5 @@ export default function CompaniesPage() {
       </div>
     </div>
   )
+
 }
