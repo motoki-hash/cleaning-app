@@ -27,6 +27,14 @@ function CleanerEntryInner() {
     }
   }, [router, searchParams])
 
+  const handleOpen = () => {
+    const id = searchParams.get('id')
+    if (id) {
+      localStorage.setItem('cleanerId', id)
+    }
+    router.replace('/cleaner')
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6">
       <div className="bg-white rounded-2xl shadow-sm p-6 w-full max-w-sm text-center space-y-5">
@@ -46,7 +54,7 @@ function CleanerEntryInner() {
         </div>
 
         <button
-          onClick={() => router.replace('/cleaner')}
+          onClick={handleOpen}
           className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-base"
         >
           ホーム画面追加済み → アプリを開く
