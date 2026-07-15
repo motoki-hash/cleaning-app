@@ -4,9 +4,9 @@ import CleanerEntryClient from './client'
 export default async function CleanerEntryPage({
   params,
 }: {
-  params: Promise<{ cleanerId: string }>
+  params: { cleanerId: string }
 }) {
-  const { cleanerId } = await params
+  const { cleanerId } = params
 
   if (cleanerId) {
     // サーバーサイドでcookieを設定（PWAでも確実に動作）
