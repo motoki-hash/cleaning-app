@@ -10,7 +10,7 @@ export default async function CleanerEntryPage({
 
   if (cleanerId) {
     // サーバーサイドでcookieを設定（PWAでも確実に動作）
-    const cookieStore = await cookies()
+    const cookieStore = cookies()
     cookieStore.set('cleanerId', cleanerId, {
       path: '/',
       maxAge: 60 * 60 * 24 * 365,
