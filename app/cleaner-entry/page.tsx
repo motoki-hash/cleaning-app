@@ -2,14 +2,15 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { getCleanerId } from '@/lib/cleanerAuth'
 
-export default function CleanerEntryClient({ cleanerId }: { cleanerId: string }) {
+export default function CleanerEntryPage() {
   const router = useRouter()
 
   useEffect(() => {
-    if (!cleanerId) return
-    // localStorageにも同期（通常のSafariブラウザ用）
-    localStorage.setItem('cleanerId', cleanerId)
+    // localStorageにcookieの値を同期
+    const id = getCleanerId()
+    if (id) localStorage.setItem('cleanerId', id)
 
     // PWAスタンドアロンモードなら即リダイレクト
     const isStandalone =
@@ -20,7 +21,7 @@ export default function CleanerEntryClient({ cleanerId }: { cleanerId: string })
     if (isStandalone) {
       router.replace('/cleaner')
     }
-  }, [cleanerId, router])
+  }, [router])
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6">
