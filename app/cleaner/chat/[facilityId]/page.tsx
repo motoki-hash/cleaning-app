@@ -75,6 +75,7 @@ export default function FacilityChatPage() {
   const requestRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
+    const uid = Date.now()
     let msgChannel: ReturnType<typeof supabase.channel> | null = null
     let recChannel: ReturnType<typeof supabase.channel> | null = null
     let readsChannel: ReturnType<typeof supabase.channel> | null = null
@@ -152,7 +153,7 @@ export default function FacilityChatPage() {
 
       // リアルタイム購読
       msgChannel = supabase
-        .channel(`chat:${facilityId}`)
+        .channel(`chat:${facilityId}:${uid}`)
         .on('postgres_changes', {
           event: 'INSERT',
           schema: 'public',
@@ -171,7 +172,7 @@ export default function FacilityChatPage() {
         .subscribe()
 
       recChannel = supabase
-        .channel(`records:${facilityId}`)
+        .channel(`records:${facilityId}:${uid}`)
         .on('postgres_changes', {
           event: 'UPDATE',
           schema: 'public',
@@ -182,7 +183,7 @@ export default function FacilityChatPage() {
         .subscribe()
 
       readsChannel = supabase
-        .channel(`cleaner-reads:${facilityId}`)
+        .channel(`cleaner-reads:${facilityId}:${uid}`)
         .on('postgres_changes', {
           event: '*',
           schema: 'public',
@@ -202,7 +203,8 @@ export default function FacilityChatPage() {
       if (recChannel) supabase.removeChannel(recChannel)
       if (readsChannel) supabase.removeChannel(readsChannel)
     }
-  }, [facilityId, router])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facilityId])
 
   useEffect(() => {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)

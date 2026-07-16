@@ -36,6 +36,7 @@ export default function AdminChatPage() {
   }, [facilityId])
 
   useEffect(() => {
+    const uid = Date.now()
     let channel: ReturnType<typeof supabase.channel> | null = null
     let readsChannel: ReturnType<typeof supabase.channel> | null = null
 
@@ -55,11 +56,14 @@ export default function AdminChatPage() {
       const cleanerRead = (readsRes.data || []).find(r => r.reader === 'cleaner')
       setCleanerLastReadAt(cleanerRead?.last_read_at || null)
 
-      await markAdminRead()
+      await supabase.from('message_reads').upsert(
+        { facility_id: facilityId, reader: 'admin', last_read_at: new Date().toISOString() },
+        { onConflict: 'facility_id,reader' }
+      )
       setLoading(false)
 
       channel = supabase
-        .channel(`admin-chat:${facilityId}`)
+        .channel(`admin-chat:${facilityId}:${uid}`)
         .on('postgres_changes', {
           event: 'INSERT',
           schema: 'public',
@@ -70,12 +74,15 @@ export default function AdminChatPage() {
             if (prev.some(m => m.id === payload.new.id)) return prev
             return [...prev, payload.new as ChatMessage]
           })
-          markAdminRead()
+          supabase.from('message_reads').upsert(
+            { facility_id: facilityId, reader: 'admin', last_read_at: new Date().toISOString() },
+            { onConflict: 'facility_id,reader' }
+          )
         })
         .subscribe()
 
       readsChannel = supabase
-        .channel(`admin-reads:${facilityId}`)
+        .channel(`admin-reads:${facilityId}:${uid}`)
         .on('postgres_changes', {
           event: '*',
           schema: 'public',
@@ -94,7 +101,8 @@ export default function AdminChatPage() {
       if (channel) supabase.removeChannel(channel)
       if (readsChannel) supabase.removeChannel(readsChannel)
     }
-  }, [facilityId, router, markAdminRead])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facilityId])
 
   useEffect(() => {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
