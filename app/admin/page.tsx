@@ -59,6 +59,8 @@ export default function AdminPage() {
   const [records, setRecords] = useState<Record_[]>([])
   const [troubles, setTroubles] = useState<TroubleReport[]>([])
   const [collapsedFacilities, setCollapsedFacilities] = useState<Record<string, boolean>>({})
+  const [collapsedRooms, setCollapsedRooms] = useState<Record<string, boolean>>({})
+  const [collapsedDates, setCollapsedDates] = useState<Record<string, boolean>>({})
   const [requests, setRequests] = useState<EarlyLateRequest[]>([])
   const [tab, setTab] = useState<'records' | 'troubles' | 'requests' | 'photos' | 'chat'>('records')
   const [photos, setPhotos] = useState<{ id: string; photo_url: string; photo_type: string; created_at: string }[]>([])
@@ -610,52 +612,66 @@ export default function AdminPage() {
               </button>
 
               {/* 号室ごと（折りたたみ） */}
-              {!isCollapsed && Object.entries(fac.rooms).map(([roomNum, room]) => (
+              {!isCollapsed && Object.entries(fac.rooms).map(([roomNum, room]) => {
+                const roomKey = `${facId}-${roomNum}`
+                const roomCollapsed = collapsedRooms[roomKey]
+                const roomTotal = Object.values(room.dates).reduce((s, d) => s + d.length, 0)
+                return (
                 <div key={roomNum} className="border-t border-gray-100">
-                  <div className="bg-gray-50 px-4 py-2 flex items-center gap-2">
+                  <button
+                    onClick={() => setCollapsedRooms(prev => ({ ...prev, [roomKey]: !prev[roomKey] }))}
+                    className="w-full bg-gray-50 px-4 py-2 flex items-center gap-2 text-left"
+                  >
                     <span className="text-sm text-gray-500">🚪</span>
-                    <p className="font-medium text-gray-700 text-sm">{roomNum}号室</p>
-                  </div>
+                    <p className="font-medium text-gray-700 text-sm flex-1">{roomNum}号室</p>
+                    <span className="text-xs text-gray-400 mr-1">{roomTotal}件</span>
+                    <span className="text-gray-400 text-xs">{roomCollapsed ? '▼' : '▲'}</span>
+                  </button>
 
                   {/* 日付ごと */}
-                  {Object.entries(room.dates).sort(([a], [b]) => b.localeCompare(a)).map(([date, reports]) => (
-                    <div key={date} className="px-4 py-3 border-t border-gray-50 space-y-3">
-                      <p className="text-xs text-gray-400 font-medium">
-                        📅 {new Date(date).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
-                      </p>
-                      {reports.map(trouble => (
-                        <div key={trouble.id} className="bg-gray-50 rounded-xl p-3 space-y-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="font-medium text-gray-800 text-sm">{trouble.title}</p>
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${priorityColor[trouble.priority]}`}>
-                              {priorityLabel[trouble.priority]}
-                            </span>
-                          </div>
-                          {trouble.description && (
-                            <p className="text-xs text-gray-600 leading-relaxed">{trouble.description}</p>
-                          )}
-                          <p className="text-xs text-gray-400">
-                            {new Date(trouble.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                          {trouble.cleaning_photos && trouble.cleaning_photos.length > 0 && (
-                            <div className="flex gap-2 flex-wrap">
-                              {trouble.cleaning_photos.map((p, i) => (
-                                <a key={i} href={p.photo_url} target="_blank" rel="noopener noreferrer">
-                                  <img src={p.photo_url} className="w-20 h-20 object-cover rounded-lg border" />
-                                </a>
-                              ))}
+                  {!roomCollapsed && Object.entries(room.dates).sort(([a], [b]) => b.localeCompare(a)).map(([date, reports]) => {
+                    const dateKey = `${roomKey}-${date}`
+                    const dateCollapsed = collapsedDates[dateKey]
+                    return (
+                    <div key={date} className="border-t border-gray-50">
+                      <button
+                        onClick={() => setCollapsedDates(prev => ({ ...prev, [dateKey]: !prev[dateKey] }))}
+                        className="w-full px-4 py-2 flex items-center gap-2 text-left hover:bg-gray-50"
+                      >
+                        <p className="text-xs text-gray-400 font-medium flex-1">
+                          📅 {new Date(date).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
+                        </p>
+                        <span className="text-xs text-gray-400 mr-1">{reports.length}件</span>
+                        <span className="text-gray-400 text-xs">{dateCollapsed ? '▼' : '▲'}</span>
+                      </button>
+                      {!dateCollapsed && (
+                        <div className="px-4 pb-3 space-y-3">
+                          {reports.map(trouble => (
+                            <div key={trouble.id} className="bg-gray-50 rounded-xl p-3 space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="font-medium text-gray-800 text-sm">{trouble.title}</p>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${priorityColor[trouble.priority]}`}>
+                                  {priorityLabel[trouble.priority]}
+                                </span>
+                              </div>
+                              {trouble.description && (
+                                <p className="text-xs text-gray-600 leading-relaxed">{trouble.description}</p>
+                              )}
+                              <p className="text-xs text-gray-400">
+                                {new Date(trouble.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                              <button onClick={() => resolveTrouble(trouble.id)}
+                                className="w-full text-xs bg-green-500 text-white py-1.5 rounded-lg">
+                                ✅ 解決済みにする
+                              </button>
                             </div>
-                          )}
-                          <button onClick={() => resolveTrouble(trouble.id)}
-                            className="w-full text-xs bg-green-500 text-white py-1.5 rounded-lg">
-                            ✅ 解決済みにする
-                          </button>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
-                  ))}
+                  )})}
                 </div>
-              ))}
+              )})}
             </div>
           )})
         })()}
