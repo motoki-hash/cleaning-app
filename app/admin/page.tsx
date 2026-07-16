@@ -58,6 +58,7 @@ export default function AdminPage() {
   const router = useRouter()
   const [records, setRecords] = useState<Record_[]>([])
   const [troubles, setTroubles] = useState<TroubleReport[]>([])
+  const [collapsedFacilities, setCollapsedFacilities] = useState<Record<string, boolean>>({})
   const [requests, setRequests] = useState<EarlyLateRequest[]>([])
   const [tab, setTab] = useState<'records' | 'troubles' | 'requests' | 'photos' | 'chat'>('records')
   const [photos, setPhotos] = useState<{ id: string; photo_url: string; photo_type: string; created_at: string }[]>([])
@@ -589,19 +590,27 @@ export default function AdminPage() {
             byFacility[facId].rooms[roomNum].dates[date].push(t)
           }
 
-          return Object.entries(byFacility).map(([facId, fac]) => (
+          return Object.entries(byFacility).map(([facId, fac]) => {
+            const isCollapsed = collapsedFacilities[facId]
+            const totalReports = Object.values(fac.rooms).reduce((sum, r) => sum + Object.values(r.dates).reduce((s, d) => s + d.length, 0), 0)
+            return (
             <div key={facId} className="bg-white rounded-xl shadow-sm overflow-hidden">
-              {/* 施設ヘッダー */}
-              <div className="bg-gray-800 text-white px-4 py-2.5 flex items-center gap-2">
+              {/* 施設ヘッダー（タップでトグル） */}
+              <button
+                onClick={() => setCollapsedFacilities(prev => ({ ...prev, [facId]: !prev[facId] }))}
+                className="w-full bg-gray-800 text-white px-4 py-2.5 flex items-center gap-2 text-left"
+              >
                 <span className="text-base">🏠</span>
-                <div>
+                <div className="flex-1">
                   <p className="font-bold text-sm">{fac.name}</p>
                   {fac.area && <p className="text-xs text-gray-300">{fac.area}</p>}
                 </div>
-              </div>
+                <span className="text-xs text-gray-400 mr-1">{totalReports}件</span>
+                <span className="text-gray-400 text-sm">{isCollapsed ? '▼' : '▲'}</span>
+              </button>
 
-              {/* 号室ごと */}
-              {Object.entries(fac.rooms).map(([roomNum, room]) => (
+              {/* 号室ごと（折りたたみ） */}
+              {!isCollapsed && Object.entries(fac.rooms).map(([roomNum, room]) => (
                 <div key={roomNum} className="border-t border-gray-100">
                   <div className="bg-gray-50 px-4 py-2 flex items-center gap-2">
                     <span className="text-sm text-gray-500">🚪</span>
@@ -648,7 +657,7 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
-          ))
+          )})
         })()}
 
         {/* 依頼タブ */}
