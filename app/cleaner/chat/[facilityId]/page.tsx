@@ -57,6 +57,8 @@ export default function FacilityChatPage() {
   const [uploading, setUploading] = useState<string | null>(null)
   const [selectedRecord, setSelectedRecord] = useState<string | null>(null)
   const [showTroubleForm, setShowTroubleForm] = useState<string | null>(null)
+  const [showCompleteFlow, setShowCompleteFlow] = useState<string | null>(null)
+  const [afterPhotoUploaded, setAfterPhotoUploaded] = useState(false)
   const [troubleTitle, setTroubleTitle] = useState('')
   const [troubleDesc, setTroubleDesc] = useState('')
   const [troublePriority, setTroublePriority] = useState<'low'|'medium'|'high'|'urgent'>('medium')
@@ -611,70 +613,147 @@ export default function FacilityChatPage() {
           {selectedRecord && (() => {
             const record = records.find(r => r.id === selectedRecord)
             if (!record) return null
+            const closeAll = () => {
+              setSelectedRecord(null)
+              setShowTroubleForm(null)
+              setShowCompleteFlow(null)
+              setAfterPhotoUploaded(false)
+              setTroubleTitle('')
+              setTroubleDesc('')
+            }
             return (
-              <div className="fixed inset-0 z-50 flex items-end" onClick={() => { setSelectedRecord(null); setShowTroubleForm(null) }}>
-                <div className="w-full bg-white rounded-t-2xl shadow-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
+              <div className="fixed inset-0 z-50 flex items-end" onClick={closeAll}>
+                <div className="w-full bg-white rounded-t-2xl shadow-2xl p-4 space-y-3 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-between">
                     <p className="font-bold text-gray-800">{record.rooms?.room_number}号室</p>
-                    <button onClick={() => { setSelectedRecord(null); setShowTroubleForm(null) }} className="text-gray-400 text-2xl leading-none">×</button>
+                    <button onClick={closeAll} className="text-gray-400 text-2xl leading-none">×</button>
                   </div>
-                  <div className="flex gap-2">
-                    {record.status === 'scheduled' && (
-                      <button onClick={() => updateStatus(record.id, 'in_progress')}
-                        className="flex-1 bg-yellow-500 text-white py-3 rounded-xl text-base font-bold">
-                        🧹 清掃開始
-                      </button>
-                    )}
-                    {record.status === 'in_progress' && (
-                      <button onClick={() => updateStatus(record.id, 'completed')}
+
+                  {/* 清掃開始 */}
+                  {record.status === 'scheduled' && (
+                    <button onClick={() => updateStatus(record.id, 'in_progress')}
+                      className="w-full bg-yellow-500 text-white py-3 rounded-xl text-base font-bold">
+                      🧹 清掃開始
+                    </button>
+                  )}
+
+                  {/* 清掃中: 完了フロー or 問題報告 */}
+                  {record.status === 'in_progress' && !showCompleteFlow && !showTroubleForm && (
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => { setShowCompleteFlow(record.id); setAfterPhotoUploaded(false) }}
                         className="flex-1 bg-green-500 text-white py-3 rounded-xl text-base font-bold">
                         ✅ 清掃完了
                       </button>
-                    )}
-                  </div>
-
-                  {/* 写真アップロード */}
-                  {record.status !== 'scheduled' && (
-                    <div className="flex gap-2">
-                      {(['after', 'issue'] as const).map(type => (
-                        <label key={type} className="flex-1 cursor-pointer">
-                          <input type="file" accept="image/*" multiple className="hidden"
-                            onChange={e => {
-                              const files = Array.from(e.target.files || [])
-                              if (files.length > 0) uploadPhotos(record.id, files, type)
-                              e.target.value = ''
-                            }} />
-                          <span className={`block text-center text-xs py-2 rounded-xl border ${
-                            uploading === `${record.id}-${type}` ? 'bg-gray-100 text-gray-400' : 'border-gray-300 text-gray-600'
-                          }`}>
-                            {uploading === `${record.id}-${type}` ? '...' :
-                              type === 'after' ? '📷清掃後' : '📷問題'}
-                          </span>
-                        </label>
-                      ))}
+                      <button
+                        onClick={() => setShowTroubleForm(record.id)}
+                        className="flex-1 bg-red-500 text-white py-3 rounded-xl text-base font-bold">
+                        ⚠️ 問題報告
+                      </button>
                     </div>
                   )}
 
-                  {/* トラブル報告フォーム */}
-                  {showTroubleForm === record.id && (
-                    <div className="space-y-2 bg-red-50 p-3 rounded-xl">
-                      <input type="text" placeholder="タイトル" value={troubleTitle}
-                        onChange={e => setTroubleTitle(e.target.value)}
-                        className="w-full border rounded-lg px-3 py-2 text-sm" />
-                      <textarea placeholder="詳細..." value={troubleDesc}
-                        onChange={e => setTroubleDesc(e.target.value)}
-                        className="w-full border rounded-lg px-3 py-2 text-sm h-16" />
+                  {/* 清掃完了フロー: 清掃後写真 */}
+                  {showCompleteFlow === record.id && (
+                    <div className="space-y-3">
+                      <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                        <p className="font-bold text-green-800 mb-1">📷 清掃後の写真を撮影してください</p>
+                        <p className="text-xs text-green-600 mb-3">撮影後に「完了にする」ボタンが押せます</p>
+                        <label className="block cursor-pointer">
+                          <input type="file" accept="image/*" multiple capture="environment" className="hidden"
+                            onChange={async e => {
+                              const files = Array.from(e.target.files || [])
+                              if (files.length > 0) {
+                                await uploadPhotos(record.id, files, 'after')
+                                setAfterPhotoUploaded(true)
+                              }
+                              e.target.value = ''
+                            }} />
+                          <span className={`flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed font-medium ${
+                            afterPhotoUploaded
+                              ? 'border-green-400 bg-green-100 text-green-700'
+                              : uploading === `${record.id}-after`
+                              ? 'border-gray-300 bg-gray-50 text-gray-400'
+                              : 'border-green-400 text-green-700'
+                          }`}>
+                            {uploading === `${record.id}-after` ? '📤 アップロード中...' :
+                             afterPhotoUploaded ? '✅ 写真を添付しました（追加も可）' : '📷 写真を選択・撮影'}
+                          </span>
+                        </label>
+                      </div>
                       <div className="flex gap-2">
+                        <button
+                          onClick={() => { setShowCompleteFlow(null); setAfterPhotoUploaded(false) }}
+                          className="flex-1 border border-gray-300 text-gray-600 py-3 rounded-xl text-sm">
+                          戻る
+                        </button>
+                        <button
+                          onClick={() => updateStatus(record.id, 'completed')}
+                          disabled={!afterPhotoUploaded}
+                          className={`flex-1 py-3 rounded-xl text-base font-bold transition-colors ${
+                            afterPhotoUploaded
+                              ? 'bg-green-500 text-white'
+                              : 'bg-gray-200 text-gray-400'
+                          }`}>
+                          完了にする
+                        </button>
+                      </div>
+                      {!afterPhotoUploaded && (
+                        <button
+                          onClick={() => updateStatus(record.id, 'completed')}
+                          className="w-full text-xs text-gray-400 underline text-center py-1">
+                          写真なしでスキップして完了にする
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 問題報告フォーム */}
+                  {showTroubleForm === record.id && (
+                    <div className="space-y-3">
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-2">
+                        <p className="font-bold text-red-800">⚠️ 問題報告</p>
+                        <input type="text" placeholder="タイトル（例：水漏れ、破損など）" value={troubleTitle}
+                          onChange={e => setTroubleTitle(e.target.value)}
+                          className="w-full border rounded-lg px-3 py-2.5 text-sm" />
+                        <textarea placeholder="状況の詳細を入力..." value={troubleDesc}
+                          onChange={e => setTroubleDesc(e.target.value)}
+                          className="w-full border rounded-lg px-3 py-2.5 text-sm h-20 resize-none" />
                         <select value={troublePriority}
                           onChange={e => setTroublePriority(e.target.value as 'low'|'medium'|'high'|'urgent')}
-                          className="flex-1 border rounded-lg px-2 py-2 text-sm">
-                          <option value="low">低</option>
-                          <option value="medium">中</option>
-                          <option value="high">高</option>
-                          <option value="urgent">緊急</option>
+                          className="w-full border rounded-lg px-3 py-2.5 text-sm">
+                          <option value="low">優先度：低</option>
+                          <option value="medium">優先度：中</option>
+                          <option value="high">優先度：高</option>
+                          <option value="urgent">優先度：緊急</option>
                         </select>
+                        {/* 問題写真アップロード */}
+                        <label className="block cursor-pointer">
+                          <input type="file" accept="image/*" multiple capture="environment" className="hidden"
+                            onChange={e => {
+                              const files = Array.from(e.target.files || [])
+                              if (files.length > 0) uploadPhotos(record.id, files, 'issue')
+                              e.target.value = ''
+                            }} />
+                          <span className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed text-sm ${
+                            uploading === `${record.id}-issue`
+                              ? 'border-gray-300 text-gray-400'
+                              : 'border-red-300 text-red-600'
+                          }`}>
+                            {uploading === `${record.id}-issue` ? '📤 アップロード中...' : '📷 問題の写真を添付（任意）'}
+                          </span>
+                        </label>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setShowTroubleForm(null)}
+                          className="flex-1 border border-gray-300 text-gray-600 py-3 rounded-xl text-sm">
+                          戻る
+                        </button>
                         <button onClick={() => submitTrouble(record.id)}
-                          className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-medium">送信</button>
+                          className="flex-1 bg-red-600 text-white py-3 rounded-xl text-sm font-bold">
+                          送信する
+                        </button>
                       </div>
                     </div>
                   )}
