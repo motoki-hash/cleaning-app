@@ -71,8 +71,12 @@ export default function CleanerSettingsPage() {
   const save = async () => {
     if (!cleanerId || !name.trim()) return
     setSaving(true)
-    await supabase.from('cleaners').update({ name: name.trim() }).eq('id', cleanerId)
+    const { data, error } = await supabase.from('cleaners').update({ name: name.trim() }).eq('id', cleanerId).select()
     setSaving(false)
+    if (error || !data || data.length === 0) {
+      alert(`保存できませんでした: ${error?.message || 'RLSポリシーによりブロックされました'}`)
+      return
+    }
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
