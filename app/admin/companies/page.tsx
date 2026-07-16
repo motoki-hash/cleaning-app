@@ -169,9 +169,13 @@ export default function CompaniesPage() {
   const saveEmail = async (cleanerId: string) => {
     setSavingEmail(true)
     const emailVal = editEmailValue.trim().toLowerCase() || null
-    const { error } = await supabase.from('cleaners').update({ email: emailVal }).eq('id', cleanerId)
+    console.log('saveEmail:', cleanerId, emailVal)
+    const { data, error } = await supabase.from('cleaners').update({ email: emailVal }).eq('id', cleanerId).select()
+    console.log('saveEmail result:', data, error)
     if (error) {
       alert(error.message.includes('unique') ? 'そのメアドはすでに登録済みです' : `エラー: ${error.message}`)
+    } else if (!data || data.length === 0) {
+      alert('更新できませんでした（RLSポリシーでブロックされている可能性があります）')
     } else {
       setEditingEmail(null)
       await load()
