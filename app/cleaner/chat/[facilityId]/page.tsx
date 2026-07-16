@@ -638,13 +638,20 @@ export default function FacilityChatPage() {
                   )}
 
                   {/* 清掃中: 完了フロー or 問題報告 */}
-                  {record.status === 'in_progress' && !showCompleteFlow && !showTroubleForm && (
+                  {(record.status === 'in_progress' || record.status === 'completed') && !showCompleteFlow && !showTroubleForm && (
                     <div className="flex gap-3">
-                      <button
-                        onClick={() => { setShowCompleteFlow(record.id); setAfterPhotoUploaded(false) }}
-                        className="flex-1 bg-green-500 text-white py-3 rounded-xl text-base font-bold">
-                        ✅ 清掃完了
-                      </button>
+                      {record.status === 'in_progress' && (
+                        <button
+                          onClick={() => { setShowCompleteFlow(record.id); setAfterPhotoUploaded(false) }}
+                          className="flex-1 bg-green-500 text-white py-3 rounded-xl text-base font-bold">
+                          ✅ 清掃完了
+                        </button>
+                      )}
+                      {record.status === 'completed' && (
+                        <div className="flex-1 bg-gray-100 text-gray-500 py-3 rounded-xl text-base font-bold text-center">
+                          ✅ 清掃完了済み
+                        </div>
+                      )}
                       <button
                         onClick={() => setShowTroubleForm(record.id)}
                         className="flex-1 bg-red-500 text-white py-3 rounded-xl text-base font-bold">
