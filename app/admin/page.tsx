@@ -116,7 +116,7 @@ export default function AdminPage() {
         supabase
           .from('trouble_reports')
           .select('id, title, description, priority, status, created_at, rooms(room_number, facility_id, facilities(name, area)), cleaning_photos(photo_url)')
-          .neq('status', 'closed')
+          .or('status.neq.closed,status.is.null')
           .order('created_at', { ascending: false }),
         supabase
           .from('cleaning_photos')

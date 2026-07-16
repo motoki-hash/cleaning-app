@@ -326,6 +326,7 @@ export default function FacilityChatPage() {
       title: troubleTitle,
       description: troubleDesc || null,
       priority: troublePriority,
+      status: 'open',
     }
     console.log('submitTrouble payload:', payload)
     const { error } = await supabase.from('trouble_reports').insert(payload)
