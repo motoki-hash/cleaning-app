@@ -539,11 +539,10 @@ export default function FacilityChatPage() {
 
           {/* 下部アクションエリア */}
           <div className="bg-white border-t safe-area-bottom">
-            {pendingRooms.length > 0 ? (
-              <div className="px-3 pt-3 pb-2">
+            <div className="px-3 pt-3 pb-2">
                 <p className="text-xs text-gray-400 mb-2">部屋を選択してアクションを実行</p>
                 <div className="flex flex-wrap gap-2">
-                  {pendingRooms.map(record => (
+                  {records.map(record => (
                     <button
                       key={record.id}
                       onClick={() => setSelectedRecord(selectedRecord === record.id ? null : record.id)}
@@ -552,20 +551,21 @@ export default function FacilityChatPage() {
                           ? 'bg-blue-600 text-white border-blue-600'
                           : record.status === 'in_progress'
                           ? 'bg-yellow-50 text-yellow-700 border-yellow-300'
+                          : record.status === 'completed'
+                          ? 'bg-green-50 text-green-700 border-green-300'
                           : 'bg-gray-50 text-gray-700 border-gray-300'
                       }`}
                     >
                       {record.rooms?.room_number}号室
                       {record.status === 'in_progress' && ' 🧹'}
+                      {record.status === 'completed' && ' ✅'}
                     </button>
                   ))}
                 </div>
-              </div>
-            ) : (
-              <div className="px-4 py-3 text-center text-sm text-green-600 font-medium">
-                🎉 全部屋の清掃が完了しました！
-              </div>
-            )}
+                {completedCount === records.length && records.length > 0 && (
+                  <p className="text-center text-sm text-green-600 font-medium mt-2">🎉 全部屋の清掃が完了しました！</p>
+                )}
+            </div>
           </div>
 
           {/* 未回答依頼モーダル */}
