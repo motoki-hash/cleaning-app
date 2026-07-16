@@ -320,13 +320,16 @@ export default function FacilityChatPage() {
   const submitTrouble = async (recordId: string) => {
     if (!troubleTitle) return
     const record = records.find(r => r.id === recordId)
-    const { error } = await supabase.from('trouble_reports').insert({
-      room_id: record?.room_id,
-      cleaning_record_id: recordId,
+    console.log('submitTrouble record:', record)
+    const payload = {
+      room_id: record?.room_id || null,
       title: troubleTitle,
-      description: troubleDesc,
+      description: troubleDesc || null,
       priority: troublePriority,
-    })
+    }
+    console.log('submitTrouble payload:', payload)
+    const { error } = await supabase.from('trouble_reports').insert(payload)
+    console.log('submitTrouble error:', error)
     if (error) {
       alert(`送信エラー: ${error.message}`)
       return
