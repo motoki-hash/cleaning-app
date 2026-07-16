@@ -75,6 +75,10 @@ export default function FacilityChatPage() {
   const requestRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
+    let msgChannel: ReturnType<typeof supabase.channel> | null = null
+    let recChannel: ReturnType<typeof supabase.channel> | null = null
+    let readsChannel: ReturnType<typeof supabase.channel> | null = null
+
     const init = async () => {
       const cleanerId = getCleanerId()
       if (!cleanerId) { router.push('/login'); return }
@@ -147,7 +151,7 @@ export default function FacilityChatPage() {
       setLoading(false)
 
       // リアルタイム購読
-      const msgChannel = supabase
+      msgChannel = supabase
         .channel(`chat:${facilityId}`)
         .on('postgres_changes', {
           event: 'INSERT',
@@ -159,7 +163,6 @@ export default function FacilityChatPage() {
             if (prev.some(m => m.id === payload.new.id)) return prev
             return [...prev, payload.new as ChatMessage]
           })
-          // 新着メッセージも即既読
           supabase.from('message_reads').upsert(
             { facility_id: facilityId, reader: 'cleaner', last_read_at: new Date().toISOString() },
             { onConflict: 'facility_id,reader' }
@@ -167,7 +170,7 @@ export default function FacilityChatPage() {
         })
         .subscribe()
 
-      const recChannel = supabase
+      recChannel = supabase
         .channel(`records:${facilityId}`)
         .on('postgres_changes', {
           event: 'UPDATE',
@@ -178,8 +181,7 @@ export default function FacilityChatPage() {
         })
         .subscribe()
 
-      // 管理者の既読状態をリアルタイムで監視
-      const readsChannel = supabase
+      readsChannel = supabase
         .channel(`cleaner-reads:${facilityId}`)
         .on('postgres_changes', {
           event: '*',
@@ -192,14 +194,14 @@ export default function FacilityChatPage() {
           }
         })
         .subscribe()
-
-      return () => {
-        supabase.removeChannel(msgChannel)
-        supabase.removeChannel(recChannel)
-        supabase.removeChannel(readsChannel)
-      }
     }
     init()
+
+    return () => {
+      if (msgChannel) supabase.removeChannel(msgChannel)
+      if (recChannel) supabase.removeChannel(recChannel)
+      if (readsChannel) supabase.removeChannel(readsChannel)
+    }
   }, [facilityId, router])
 
   useEffect(() => {

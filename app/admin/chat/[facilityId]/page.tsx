@@ -36,6 +36,9 @@ export default function AdminChatPage() {
   }, [facilityId])
 
   useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    let readsChannel: ReturnType<typeof supabase.channel> | null = null
+
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
@@ -55,7 +58,7 @@ export default function AdminChatPage() {
       await markAdminRead()
       setLoading(false)
 
-      const channel = supabase
+      channel = supabase
         .channel(`admin-chat:${facilityId}`)
         .on('postgres_changes', {
           event: 'INSERT',
@@ -71,8 +74,7 @@ export default function AdminChatPage() {
         })
         .subscribe()
 
-      // 清掃員の既読状態をリアルタイムで監視
-      const readsChannel = supabase
+      readsChannel = supabase
         .channel(`admin-reads:${facilityId}`)
         .on('postgres_changes', {
           event: '*',
@@ -85,14 +87,14 @@ export default function AdminChatPage() {
           }
         })
         .subscribe()
-
-      return () => {
-        supabase.removeChannel(channel)
-        supabase.removeChannel(readsChannel)
-      }
     }
     init()
-  }, [facilityId, router])
+
+    return () => {
+      if (channel) supabase.removeChannel(channel)
+      if (readsChannel) supabase.removeChannel(readsChannel)
+    }
+  }, [facilityId, router, markAdminRead])
 
   useEffect(() => {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
