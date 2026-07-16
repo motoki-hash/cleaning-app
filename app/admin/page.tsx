@@ -115,7 +115,7 @@ export default function AdminPage() {
           .order('created_at'),
         supabase
           .from('trouble_reports')
-          .select('id, title, description, priority, status, created_at, rooms(room_number, facility_id, facilities(name, area)), cleaning_photos(photo_url)')
+          .select('id, title, description, priority, status, created_at, rooms(room_number, facility_id, facilities(name, area))')
           .in('status', ['open', 'in_progress'])
           .order('created_at', { ascending: false }),
         supabase
