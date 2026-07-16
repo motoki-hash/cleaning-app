@@ -320,13 +320,17 @@ export default function FacilityChatPage() {
   const submitTrouble = async (recordId: string) => {
     if (!troubleTitle) return
     const record = records.find(r => r.id === recordId)
-    await supabase.from('trouble_reports').insert({
+    const { error } = await supabase.from('trouble_reports').insert({
       room_id: record?.room_id,
       cleaning_record_id: recordId,
       title: troubleTitle,
       description: troubleDesc,
       priority: troublePriority,
     })
+    if (error) {
+      alert(`送信エラー: ${error.message}`)
+      return
+    }
     await addMessage('system', `⚠️ ${record?.rooms?.room_number}号室 トラブル報告「${troubleTitle}」`, recordId)
     setShowTroubleForm(null)
     setTroubleTitle('')
