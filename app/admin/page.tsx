@@ -19,10 +19,12 @@ type Record_ = {
 type TroubleReport = {
   id: string
   title: string
+  description: string | null
   priority: string
   status: string
   created_at: string
-  rooms: { room_number: string; facilities: { name: string } | null } | null
+  rooms: { room_number: string; facility_id: string; facilities: { name: string; area: string } | null } | null
+  cleaning_photos?: { photo_url: string }[]
 }
 
 type EarlyLateRequest = {
@@ -113,7 +115,7 @@ export default function AdminPage() {
           .order('created_at'),
         supabase
           .from('trouble_reports')
-          .select('id, title, priority, status, created_at, rooms(room_number, facilities(name))')
+          .select('id, title, description, priority, status, created_at, rooms(room_number, facility_id, facilities(name, area)), cleaning_photos(photo_url)')
           .neq('status', 'closed')
           .order('created_at', { ascending: false }),
         supabase
@@ -564,23 +566,90 @@ export default function AdminPage() {
           ))
         })()}
 
-        {/* トラブルタブ */}
-        {tab === 'troubles' && troubles.map(trouble => (
-          <div key={trouble.id} className="bg-white rounded-xl shadow-sm p-4">
-            <div className="flex justify-between items-start mb-2">
-              <div className="flex-1">
-                <p className="font-medium text-gray-800">{trouble.title}</p>
-                <p className="text-sm text-gray-500">{trouble.rooms?.facilities?.name} {trouble.rooms?.room_number}号室</p>
-                <p className="text-xs text-gray-400">{new Date(trouble.created_at).toLocaleString('ja-JP')}</p>
-              </div>
-              <span className={`text-xs px-2 py-1 rounded-full font-medium ${priorityColor[trouble.priority]}`}>
-                {priorityLabel[trouble.priority]}
-              </span>
+        {/* トラブルタブ: 施設 → 号室 → 日付 */}
+        {tab === 'troubles' && (() => {
+          if (troubles.length === 0) return (
+            <div className="text-center py-12 text-gray-400">
+              <p className="text-4xl mb-2">✅</p>
+              <p className="text-sm">トラブル報告はありません</p>
             </div>
-            <button onClick={() => resolveTrouble(trouble.id)}
-              className="w-full text-sm bg-green-500 text-white py-2 rounded-lg mt-2">解決済みにする</button>
-          </div>
-        ))}
+          )
+
+          // 施設ごとにグループ化
+          const byFacility: Record<string, { name: string; area: string; rooms: Record<string, { roomNumber: string; dates: Record<string, TroubleReport[]> }> }> = {}
+          for (const t of troubles) {
+            const facId = t.rooms?.facility_id || 'unknown'
+            const facName = t.rooms?.facilities?.name || '不明'
+            const facArea = t.rooms?.facilities?.area || ''
+            const roomNum = t.rooms?.room_number || '?'
+            const date = t.created_at.split('T')[0]
+            if (!byFacility[facId]) byFacility[facId] = { name: facName, area: facArea, rooms: {} }
+            if (!byFacility[facId].rooms[roomNum]) byFacility[facId].rooms[roomNum] = { roomNumber: roomNum, dates: {} }
+            if (!byFacility[facId].rooms[roomNum].dates[date]) byFacility[facId].rooms[roomNum].dates[date] = []
+            byFacility[facId].rooms[roomNum].dates[date].push(t)
+          }
+
+          return Object.entries(byFacility).map(([facId, fac]) => (
+            <div key={facId} className="bg-white rounded-xl shadow-sm overflow-hidden">
+              {/* 施設ヘッダー */}
+              <div className="bg-gray-800 text-white px-4 py-2.5 flex items-center gap-2">
+                <span className="text-base">🏠</span>
+                <div>
+                  <p className="font-bold text-sm">{fac.name}</p>
+                  {fac.area && <p className="text-xs text-gray-300">{fac.area}</p>}
+                </div>
+              </div>
+
+              {/* 号室ごと */}
+              {Object.entries(fac.rooms).map(([roomNum, room]) => (
+                <div key={roomNum} className="border-t border-gray-100">
+                  <div className="bg-gray-50 px-4 py-2 flex items-center gap-2">
+                    <span className="text-sm text-gray-500">🚪</span>
+                    <p className="font-medium text-gray-700 text-sm">{roomNum}号室</p>
+                  </div>
+
+                  {/* 日付ごと */}
+                  {Object.entries(room.dates).sort(([a], [b]) => b.localeCompare(a)).map(([date, reports]) => (
+                    <div key={date} className="px-4 py-3 border-t border-gray-50 space-y-3">
+                      <p className="text-xs text-gray-400 font-medium">
+                        📅 {new Date(date).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
+                      </p>
+                      {reports.map(trouble => (
+                        <div key={trouble.id} className="bg-gray-50 rounded-xl p-3 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-medium text-gray-800 text-sm">{trouble.title}</p>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${priorityColor[trouble.priority]}`}>
+                              {priorityLabel[trouble.priority]}
+                            </span>
+                          </div>
+                          {trouble.description && (
+                            <p className="text-xs text-gray-600 leading-relaxed">{trouble.description}</p>
+                          )}
+                          <p className="text-xs text-gray-400">
+                            {new Date(trouble.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                          {trouble.cleaning_photos && trouble.cleaning_photos.length > 0 && (
+                            <div className="flex gap-2 flex-wrap">
+                              {trouble.cleaning_photos.map((p, i) => (
+                                <a key={i} href={p.photo_url} target="_blank" rel="noopener noreferrer">
+                                  <img src={p.photo_url} className="w-20 h-20 object-cover rounded-lg border" />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                          <button onClick={() => resolveTrouble(trouble.id)}
+                            className="w-full text-xs bg-green-500 text-white py-1.5 rounded-lg">
+                            ✅ 解決済みにする
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))
+        })()}
 
         {/* 依頼タブ */}
         {tab === 'requests' && (
