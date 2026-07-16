@@ -16,6 +16,7 @@ body {
 input, textarea, select {
   color: #111827;
   background-color: #ffffff;
+  font-size: 16px;
 }
 
 input::placeholder, textarea::placeholder {
