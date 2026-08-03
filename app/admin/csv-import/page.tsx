@@ -40,10 +40,10 @@ export default function CsvImportPage() {
     setError(null)
     setResult(null)
     const text = await file.text()
-    const lines = text.split('\n').filter(l => l.trim())
-    if (lines.length < 2) { setError('データがありません'); return }
+    const allRows = parseCsv(text)
+    if (allRows.length < 2) { setError('データがありません'); return }
 
-    const headers = lines[0].split(',')
+    const headers = allRows[0]
     const idx = (name: string) => headers.indexOf(name)
 
     const iDate = idx('清掃日')
@@ -65,9 +65,8 @@ export default function CsvImportPage() {
     ])
 
     const parsed: ParsedRow[] = []
-    for (let i = 1; i < lines.length; i++) {
-      // handle quoted fields with commas
-      const cols = splitCsvLine(lines[i])
+    for (let i = 1; i < allRows.length; i++) {
+      const cols = allRows[i]
       const scheduled_date = parseDate(cols[iDate] || '')
       if (!scheduled_date) continue
 
@@ -280,21 +279,31 @@ export default function CsvImportPage() {
   )
 }
 
-function splitCsvLine(line: string): string[] {
-  const result: string[] = []
-  let current = ''
+// Full CSV parser that handles multi-line quoted fields
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
   let inQuotes = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]
-    if (ch === '"') {
-      inQuotes = !inQuotes
-    } else if (ch === ',' && !inQuotes) {
-      result.push(current)
-      current = ''
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    const next = text[i + 1]
+    if (inQuotes) {
+      if (ch === '"' && next === '"') { field += '"'; i++ }
+      else if (ch === '"') { inQuotes = false }
+      else { field += ch }
     } else {
-      current += ch
+      if (ch === '"') { inQuotes = true }
+      else if (ch === ',') { row.push(field); field = '' }
+      else if (ch === '\n') {
+        row.push(field); field = ''
+        if (row.some(c => c.trim())) rows.push(row)
+        row = []
+      } else if (ch === '\r') { /* skip */ }
+      else { field += ch }
     }
   }
-  result.push(current)
-  return result
+  row.push(field)
+  if (row.some(c => c.trim())) rows.push(row)
+  return rows
 }
