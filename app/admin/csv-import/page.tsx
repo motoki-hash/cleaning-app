@@ -82,10 +82,18 @@ export default function CsvImportPage() {
       )
       const facility_id = fac?.id
 
-      // match room
-      const room = facility_id
-        ? rooms?.find(r => r.facility_id === facility_id && r.room_number.toLowerCase() === room_number.toLowerCase())
-        : undefined
+      // match room — try multiple strategies
+      const roomCandidates = facility_id ? rooms?.filter(r => r.facility_id === facility_id) ?? [] : []
+      // 1. exact  2. strip leading letter+space (e.g. "b 601" → "601")  3. numeric only  4. no spaces
+      const numericPart = room_number.replace(/^[a-z]\s*/i, '').replace(/\s+/g, '')
+      const room = roomCandidates.find(r => {
+        const rn = r.room_number.toLowerCase()
+        const csv = room_number.toLowerCase()
+        return rn === csv ||
+          rn === numericPart.toLowerCase() ||
+          rn.replace(/\s+/g, '') === csv.replace(/\s+/g, '') ||
+          rn.replace(/\s+/g, '') === numericPart.toLowerCase()
+      })
       const room_id = room?.id
 
       const match_status: ParsedRow['match_status'] =
