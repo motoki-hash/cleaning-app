@@ -126,8 +126,32 @@ export default function CsvImportPage() {
     setError(null)
 
     let inserted = 0, updated = 0, skipped = 0
+    let firstError: string | null = null
 
-    for (const row of okRows) {
+    // test insert with first row to catch errors early
+    const testRow = okRows[0]
+    const testRecord = {
+      room_id: testRow.room_id!,
+      scheduled_date: testRow.scheduled_date,
+      cleaning_type: testRow.cleaning_type || null,
+      guest_name: testRow.guest_name || null,
+      checkout_time: testRow.checkout_time || null,
+      next_guest_name: testRow.next_guest_name || null,
+      next_checkin_date: testRow.next_checkin_date || null,
+      next_checkin_time: testRow.next_checkin_time || null,
+      same_day_turnover: testRow.same_day_turnover,
+      notes: testRow.notes || null,
+      status: 'scheduled',
+    }
+    const { error: testErr } = await supabase.from('cleaning_records').insert(testRecord)
+    if (testErr) {
+      setImporting(false)
+      setError(`DBエラー: ${testErr.message} (code: ${testErr.code})`)
+      return
+    }
+    inserted++
+
+    for (const row of okRows.slice(1)) {
       const record = {
         room_id: row.room_id!,
         scheduled_date: row.scheduled_date,
@@ -155,18 +179,19 @@ export default function CsvImportPage() {
           .from('cleaning_records')
           .update(record)
           .eq('id', existing.id)
-        if (err) { skipped++; continue }
+        if (err) { if (!firstError) firstError = err.message; skipped++; continue }
         updated++
       } else {
         const { error: err } = await supabase
           .from('cleaning_records')
           .insert(record)
-        if (err) { skipped++; continue }
+        if (err) { if (!firstError) firstError = err.message; skipped++; continue }
         inserted++
       }
     }
 
     setImporting(false)
+    if (firstError) setError(`一部エラー: ${firstError}`)
     setResult({ inserted, updated, skipped })
   }
 
