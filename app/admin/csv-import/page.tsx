@@ -32,8 +32,10 @@ export default function CsvImportPage() {
 
   const parseDate = (s: string) => {
     if (!s) return ''
-    // 2026/08/03 or 2026-08-03
-    return s.replace(/\//g, '-').slice(0, 10)
+    const d = s.replace(/\//g, '-').slice(0, 10)
+    // reject invalid dates like "N-A", "N/A", etc.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return ''
+    return d
   }
 
   const handleFile = async (file: File) => {
