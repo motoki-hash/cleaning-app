@@ -889,27 +889,39 @@ function RequestReplyButtons({ requestId, facilityId, initialStatus, onReplied }
     initialStatus && initialStatus !== 'pending' && initialStatus !== 'hold' ? initialStatus : null
   )
   const [saving, setSaving] = useState(false)
+  const [showNameInput, setShowNameInput] = useState(false)
+  const [responderName, setResponderName] = useState('')
+  const [responderNameSaved, setResponderNameSaved] = useState<string | null>(null)
 
   useEffect(() => {
     if (!requestId) return
     if (initialStatus && initialStatus !== 'pending' && initialStatus !== 'hold') return
-    supabase.from('early_late_requests').select('status').eq('id', requestId).single()
-      .then(({ data }) => { if (data && data.status !== 'pending' && data.status !== 'hold') setStatus(data.status) })
+    supabase.from('early_late_requests').select('status, responder_name').eq('id', requestId).single()
+      .then(({ data }) => {
+        if (data && data.status !== 'pending' && data.status !== 'hold') {
+          setStatus(data.status)
+          if (data.responder_name) setResponderNameSaved(data.responder_name)
+        }
+      })
   }, [requestId, initialStatus])
 
-  const reply = async (answer: 'accepted' | 'declined' | 'hold') => {
+  const reply = async (answer: 'accepted' | 'declined' | 'hold', name?: string) => {
     if (!requestId) return
     setSaving(true)
 
-    const { error } = await supabase.from('early_late_requests').update({
+    const updateData: Record<string, string> = {
       status: answer,
       responded_at: new Date().toISOString(),
-    }).eq('id', requestId)
+    }
+    if (name) updateData.responder_name = name
+
+    const { error } = await supabase.from('early_late_requests').update(updateData).eq('id', requestId)
     if (error) {
       await supabase.from('early_late_requests').update({ status: answer }).eq('id', requestId)
     }
 
-    const label = answer === 'accepted' ? '✅ 受けます' : answer === 'declined' ? '❌ 受けれません' : '⏸ 保留中（後で返答します）'
+    const nameText = name ? `（${name}）` : ''
+    const label = answer === 'accepted' ? `✅ 受けます${nameText}` : answer === 'declined' ? '❌ 受けれません' : '⏸ 保留中（後で返答します）'
     await supabase.from('chat_messages').insert({
       facility_id: facilityId,
       type: 'status_update',
@@ -920,20 +932,51 @@ function RequestReplyButtons({ requestId, facilityId, initialStatus, onReplied }
 
     if (answer !== 'hold') {
       setStatus(answer)
+      if (name) setResponderNameSaved(name)
     }
 
     setSaving(false)
+    setShowNameInput(false)
     onReplied?.(answer)
   }
 
   if (status) {
     const label = status === 'accepted' ? '✅ 受けます' : status === 'declined' ? '❌ 受けれません' : '⏸ 保留'
-    return <p className="text-xs font-medium mt-2 text-gray-600">回答済み: {label}</p>
+    return (
+      <div className="mt-2">
+        <p className="text-xs font-medium text-gray-600">回答済み: {label}</p>
+        {responderNameSaved && <p className="text-xs text-gray-500">担当: {responderNameSaved}</p>}
+      </div>
+    )
+  }
+
+  if (showNameInput) {
+    return (
+      <div className="mt-2 space-y-2">
+        <p className="text-xs text-gray-600 font-medium">担当者名を入力してください</p>
+        <input
+          type="text"
+          value={responderName}
+          onChange={e => setResponderName(e.target.value)}
+          placeholder="例：田中"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          autoFocus
+        />
+        <div className="flex gap-2">
+          <button onClick={() => setShowNameInput(false)} disabled={saving}
+            className="flex-1 border border-gray-300 text-gray-600 text-xs py-1.5 rounded-lg">戻る</button>
+          <button onClick={() => reply('accepted', responderName.trim() || undefined)} disabled={saving}
+            className="flex-1 bg-green-500 text-white text-xs py-1.5 rounded-lg font-medium">
+            {saving ? '送信中...' : '確定する'}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="flex gap-2 mt-2">
-      <button onClick={() => reply('accepted')} disabled={saving}
+      <button onClick={() => setShowNameInput(true)} disabled={saving}
         className="flex-1 bg-green-500 text-white text-xs py-1.5 rounded-lg font-medium">受ける</button>
       <button onClick={() => reply('declined')} disabled={saving}
         className="flex-1 bg-red-500 text-white text-xs py-1.5 rounded-lg font-medium">受けれない</button>
