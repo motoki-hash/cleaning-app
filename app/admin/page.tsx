@@ -36,6 +36,8 @@ type EarlyLateRequest = {
   message: string | null
   created_at: string
   responded_at: string | null
+  responder_name: string | null
+  decline_reason: string | null
   rooms: { room_number: string; facilities: { name: string; area: string } | null } | null
 }
 
@@ -130,7 +132,7 @@ export default function AdminPage() {
         supabase.from('rooms').select('id, room_number, facility_id').order('room_number'),
         supabase
           .from('early_late_requests')
-          .select('id, type, status, request_date, requested_time, message, created_at, responded_at, rooms(room_number, facilities(name, area))')
+          .select('id, type, status, request_date, requested_time, message, created_at, responded_at, responder_name, decline_reason, rooms(room_number, facilities(name, area))')
           .order('request_date', { ascending: false })
           .limit(100),
         supabase
@@ -188,8 +190,9 @@ export default function AdminPage() {
       }
 
       // リアルタイム: 清掃状況の更新
+      const uid = Date.now()
       const recChannel = supabase
-        .channel('admin:cleaning_records')
+        .channel(`admin:cleaning_records:${uid}`)
         .on('postgres_changes', {
           event: 'UPDATE',
           schema: 'public',
@@ -201,7 +204,7 @@ export default function AdminPage() {
 
       // リアルタイム: 依頼への回答
       const reqChannel = supabase
-        .channel('admin:early_late_requests')
+        .channel(`admin:early_late_requests:${uid}`)
         .on('postgres_changes', {
           event: 'UPDATE',
           schema: 'public',
@@ -907,9 +910,13 @@ export default function AdminPage() {
                                               </div>
                                               {req.message && <p className="text-xs text-gray-400 mt-0.5">{req.message}</p>}
                                             </div>
-                                            <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${reqStatusColor[req.status]}`}>
-                                              {reqStatusLabel[req.status]}
-                                            </span>
+                                            <div className="flex flex-col items-end gap-0.5">
+                                              <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${reqStatusColor[req.status]}`}>
+                                                {reqStatusLabel[req.status]}
+                                              </span>
+                                              {req.responder_name && <span className="text-xs text-gray-400">担当: {req.responder_name}</span>}
+                                              {req.decline_reason && <span className="text-xs text-red-400">理由: {req.decline_reason}</span>}
+                                            </div>
                                           </div>
                                         )
                                       })}
