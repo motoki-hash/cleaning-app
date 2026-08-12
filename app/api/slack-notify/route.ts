@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
       if (thread) {
         await postToSlack(`👤 ${message}`, thread.thread_ts)
       } else {
-        const ts = await postToSlack(`💬 ${facilityName} 本日のチャット\n👤 ${message}`)
+        const ts = await postToSlack(`<!subteam^S074B6KJV5G> 💬 ${facilityName} 本日のチャット\n👤 ${message}`)
         if (ts) {
           await supabaseAdmin.from('slack_threads').insert({ facility_id: resolvedFacilityId, date: today, thread_ts: ts })
         }
