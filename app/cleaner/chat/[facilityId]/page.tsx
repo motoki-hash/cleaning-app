@@ -367,7 +367,7 @@ export default function FacilityChatPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center">読み込み中...</div>
 
   return (
-    <div className="min-h-screen bg-[#b2c9d7] flex flex-col">
+    <div className="h-screen bg-[#b2c9d7] flex flex-col overflow-hidden">
       {/* ヘッダー（LINE風） */}
       <header className="bg-[#00b900] text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
         <button onClick={() => router.push('/cleaner')} className="text-white text-2xl leading-none">‹</button>

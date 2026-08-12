@@ -152,7 +152,7 @@ export default function AdminChatPage() {
   let lastDate = ''
 
   return (
-    <div className="min-h-screen bg-[#b2c9d7] flex flex-col">
+    <div className="h-screen bg-[#b2c9d7] flex flex-col overflow-hidden">
       <header className="bg-gray-900 text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
         <button onClick={() => router.push('/admin?tab=chat')} className="text-white text-2xl leading-none">‹</button>
         <div className="flex-1 min-w-0">
