@@ -889,23 +889,26 @@ function RequestReplyButtons({ requestId, facilityId, initialStatus, onReplied }
     initialStatus && initialStatus !== 'pending' && initialStatus !== 'hold' ? initialStatus : null
   )
   const [saving, setSaving] = useState(false)
-  const [showNameInput, setShowNameInput] = useState(false)
+  const [mode, setMode] = useState<null | 'accept' | 'decline' | 'decline_confirm'>( null)
   const [responderName, setResponderName] = useState('')
+  const [declineReason, setDeclineReason] = useState('')
   const [responderNameSaved, setResponderNameSaved] = useState<string | null>(null)
+  const [declineReasonSaved, setDeclineReasonSaved] = useState<string | null>(null)
 
   useEffect(() => {
     if (!requestId) return
     if (initialStatus && initialStatus !== 'pending' && initialStatus !== 'hold') return
-    supabase.from('early_late_requests').select('status, responder_name').eq('id', requestId).single()
+    supabase.from('early_late_requests').select('status, responder_name, decline_reason').eq('id', requestId).single()
       .then(({ data }) => {
         if (data && data.status !== 'pending' && data.status !== 'hold') {
           setStatus(data.status)
           if (data.responder_name) setResponderNameSaved(data.responder_name)
+          if (data.decline_reason) setDeclineReasonSaved(data.decline_reason)
         }
       })
   }, [requestId, initialStatus])
 
-  const reply = async (answer: 'accepted' | 'declined' | 'hold', name?: string) => {
+  const reply = async (answer: 'accepted' | 'declined' | 'hold', name?: string, reason?: string) => {
     if (!requestId) return
     setSaving(true)
 
@@ -914,14 +917,18 @@ function RequestReplyButtons({ requestId, facilityId, initialStatus, onReplied }
       responded_at: new Date().toISOString(),
     }
     if (name) updateData.responder_name = name
+    if (reason) updateData.decline_reason = reason
 
-    const { error } = await supabase.from('early_late_requests').update(updateData).eq('id', requestId)
-    if (error) {
-      await supabase.from('early_late_requests').update({ status: answer }).eq('id', requestId)
-    }
+    await supabase.from('early_late_requests').update(updateData).eq('id', requestId)
 
     const nameText = name ? `（${name}）` : ''
-    const label = answer === 'accepted' ? `✅ 受けます${nameText}` : answer === 'declined' ? '❌ 受けれません' : '⏸ 保留中（後で返答します）'
+    const reasonText = reason ? `\n理由：${reason}` : ''
+    const label = answer === 'accepted'
+      ? `✅ 受けます${nameText}`
+      : answer === 'declined'
+      ? `❌ 受けれません${nameText}${reasonText}`
+      : '⏸ 保留中（後で返答します）'
+
     await supabase.from('chat_messages').insert({
       facility_id: facilityId,
       type: 'status_update',
@@ -933,37 +940,35 @@ function RequestReplyButtons({ requestId, facilityId, initialStatus, onReplied }
     if (answer !== 'hold') {
       setStatus(answer)
       if (name) setResponderNameSaved(name)
+      if (reason) setDeclineReasonSaved(reason)
     }
 
     setSaving(false)
-    setShowNameInput(false)
+    setMode(null)
     onReplied?.(answer)
   }
 
   if (status) {
     const label = status === 'accepted' ? '✅ 受けます' : status === 'declined' ? '❌ 受けれません' : '⏸ 保留'
     return (
-      <div className="mt-2">
+      <div className="mt-2 space-y-0.5">
         <p className="text-xs font-medium text-gray-600">回答済み: {label}</p>
         {responderNameSaved && <p className="text-xs text-gray-500">担当: {responderNameSaved}</p>}
+        {declineReasonSaved && <p className="text-xs text-gray-500">理由: {declineReasonSaved}</p>}
       </div>
     )
   }
 
-  if (showNameInput) {
+  // 受ける：担当者名入力
+  if (mode === 'accept') {
     return (
       <div className="mt-2 space-y-2">
         <p className="text-xs text-gray-600 font-medium">担当者名を入力してください</p>
-        <input
-          type="text"
-          value={responderName}
-          onChange={e => setResponderName(e.target.value)}
-          placeholder="例：田中"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          autoFocus
-        />
+        <input type="text" value={responderName} onChange={e => setResponderName(e.target.value)}
+          placeholder="例：田中" autoFocus
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
         <div className="flex gap-2">
-          <button onClick={() => setShowNameInput(false)} disabled={saving}
+          <button onClick={() => setMode(null)} disabled={saving}
             className="flex-1 border border-gray-300 text-gray-600 text-xs py-1.5 rounded-lg">戻る</button>
           <button onClick={() => reply('accepted', responderName.trim() || undefined)} disabled={saving}
             className="flex-1 bg-green-500 text-white text-xs py-1.5 rounded-lg font-medium">
@@ -974,11 +979,53 @@ function RequestReplyButtons({ requestId, facilityId, initialStatus, onReplied }
     )
   }
 
+  // 受けない：担当者名＋理由入力
+  if (mode === 'decline') {
+    return (
+      <div className="mt-2 space-y-2">
+        <p className="text-xs text-gray-600 font-medium">担当者名と理由を入力してください</p>
+        <input type="text" value={responderName} onChange={e => setResponderName(e.target.value)}
+          placeholder="担当者名（例：田中）" autoFocus
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+        <textarea value={declineReason} onChange={e => setDeclineReason(e.target.value)}
+          placeholder="受けられない理由を入力..." rows={2}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none" />
+        <div className="flex gap-2">
+          <button onClick={() => setMode(null)} disabled={saving}
+            className="flex-1 border border-gray-300 text-gray-600 text-xs py-1.5 rounded-lg">戻る</button>
+          <button onClick={() => setMode('decline_confirm')} disabled={saving || !responderName.trim()}
+            className="flex-1 bg-red-500 text-white text-xs py-1.5 rounded-lg font-medium">次へ</button>
+        </div>
+      </div>
+    )
+  }
+
+  // 受けない：最終確認
+  if (mode === 'decline_confirm') {
+    return (
+      <div className="mt-2 space-y-2 bg-red-50 rounded-xl p-3 border border-red-200">
+        <p className="text-sm font-bold text-red-700 text-center">⚠️ 本当に受けないで大丈夫ですか？</p>
+        <div className="text-xs text-gray-600 space-y-0.5">
+          {responderName && <p>担当: {responderName}</p>}
+          {declineReason && <p>理由: {declineReason}</p>}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setMode('decline')} disabled={saving}
+            className="flex-1 border border-gray-300 text-gray-600 text-xs py-1.5 rounded-lg">戻る</button>
+          <button onClick={() => reply('declined', responderName.trim() || undefined, declineReason.trim() || undefined)} disabled={saving}
+            className="flex-1 bg-red-600 text-white text-xs py-1.5 rounded-lg font-bold">
+            {saving ? '送信中...' : '受けないで確定'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex gap-2 mt-2">
-      <button onClick={() => setShowNameInput(true)} disabled={saving}
+      <button onClick={() => setMode('accept')} disabled={saving}
         className="flex-1 bg-green-500 text-white text-xs py-1.5 rounded-lg font-medium">受ける</button>
-      <button onClick={() => reply('declined')} disabled={saving}
+      <button onClick={() => setMode('decline')} disabled={saving}
         className="flex-1 bg-red-500 text-white text-xs py-1.5 rounded-lg font-medium">受けれない</button>
       <button onClick={() => reply('hold')} disabled={saving}
         className="flex-1 bg-yellow-500 text-white text-xs py-1.5 rounded-lg font-medium">保留</button>
