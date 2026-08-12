@@ -993,8 +993,8 @@ function RequestReplyButtons({ requestId, facilityId, initialStatus, onReplied }
         <div className="flex gap-2">
           <button onClick={() => setMode(null)} disabled={saving}
             className="flex-1 border border-gray-300 text-gray-600 text-xs py-1.5 rounded-lg">戻る</button>
-          <button onClick={() => setMode('decline_confirm')} disabled={saving || !responderName.trim()}
-            className="flex-1 bg-red-500 text-white text-xs py-1.5 rounded-lg font-medium">次へ</button>
+          <button onClick={() => setMode('decline_confirm')} disabled={saving || !responderName.trim() || !declineReason.trim()}
+            className="flex-1 bg-red-500 text-white text-xs py-1.5 rounded-lg font-medium disabled:opacity-40">次へ</button>
         </div>
       </div>
     )
