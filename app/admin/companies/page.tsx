@@ -38,6 +38,11 @@ export default function CompaniesPage() {
   const [existingSearch, setExistingSearch] = useState('')
   const [addingCleaner, setAddingCleaner] = useState(false)
 
+  // 会社名編集
+  const [editingCompanyName, setEditingCompanyName] = useState<string | null>(null)
+  const [editCompanyNameValue, setEditCompanyNameValue] = useState('')
+  const [savingCompanyName, setSavingCompanyName] = useState(false)
+
   // メアド編集
   const [editingEmail, setEditingEmail] = useState<string | null>(null)
   const [editEmailValue, setEditEmailValue] = useState('')
@@ -166,6 +171,15 @@ export default function CompaniesPage() {
     setAddingNewCleaner(false)
   }
 
+  const saveCompanyName = async (companyId: string) => {
+    if (!editCompanyNameValue.trim()) return
+    setSavingCompanyName(true)
+    await supabase.from('cleaning_companies').update({ name: editCompanyNameValue.trim() }).eq('id', companyId)
+    setEditingCompanyName(null)
+    setSavingCompanyName(false)
+    await load()
+  }
+
   const saveEmail = async (cleanerId: string) => {
     setSavingEmail(true)
     const emailVal = editEmailValue.trim().toLowerCase() || null
@@ -284,7 +298,30 @@ export default function CompaniesPage() {
                     🏢
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-gray-800 text-sm">{company.name}</p>
+                    {editingCompanyName === company.id ? (
+                      <div className="flex gap-1.5 items-center" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          value={editCompanyNameValue}
+                          onChange={e => setEditCompanyNameValue(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveCompanyName(company.id); if (e.key === 'Escape') setEditingCompanyName(null) }}
+                          autoFocus
+                          className="flex-1 border border-blue-400 rounded-lg px-2 py-1 text-sm font-bold outline-none"
+                        />
+                        <button onClick={() => saveCompanyName(company.id)} disabled={savingCompanyName}
+                          className="text-xs bg-blue-600 text-white px-2 py-1 rounded-lg disabled:opacity-50">保存</button>
+                        <button onClick={() => setEditingCompanyName(null)}
+                          className="text-xs text-gray-400 px-1">✕</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-bold text-gray-800 text-sm">{company.name}</p>
+                        <button
+                          onClick={e => { e.stopPropagation(); setEditingCompanyName(company.id); setEditCompanyNameValue(company.name) }}
+                          className="text-xs text-blue-500 border border-blue-200 rounded px-1.5 py-0.5 flex-shrink-0"
+                        >編集</button>
+                      </div>
+                    )}
                     <p className="text-xs text-gray-400 mt-0.5">
                       担当施設 {assignedFacIds.length}件 · 清掃員 {cleaners.length}名
                     </p>
