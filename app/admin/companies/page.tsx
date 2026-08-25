@@ -290,44 +290,40 @@ export default function CompaniesPage() {
             <div key={company.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
               {/* 会社ヘッダー */}
               <div className="px-4 py-4 flex items-center gap-3">
-                <button
-                  onClick={() => setSelectedCompany(isOpen ? null : company.id)}
-                  className="flex items-center gap-3 flex-1 text-left min-w-0"
-                >
-                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg flex-shrink-0">
-                    🏢
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {editingCompanyName === company.id ? (
-                      <div className="flex gap-1.5 items-center" onClick={e => e.stopPropagation()}>
-                        <input
-                          type="text"
-                          value={editCompanyNameValue}
-                          onChange={e => setEditCompanyNameValue(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') saveCompanyName(company.id); if (e.key === 'Escape') setEditingCompanyName(null) }}
-                          autoFocus
-                          className="flex-1 border border-blue-400 rounded-lg px-2 py-1 text-sm font-bold outline-none"
-                        />
-                        <button onClick={() => saveCompanyName(company.id)} disabled={savingCompanyName}
-                          className="text-xs bg-blue-600 text-white px-2 py-1 rounded-lg disabled:opacity-50">保存</button>
-                        <button onClick={() => setEditingCompanyName(null)}
-                          className="text-xs text-gray-400 px-1">✕</button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <p className="font-bold text-gray-800 text-sm">{company.name}</p>
-                        <button
-                          onClick={e => { e.stopPropagation(); setEditingCompanyName(company.id); setEditCompanyNameValue(company.name) }}
-                          className="text-xs text-blue-500 border border-blue-200 rounded px-1.5 py-0.5 flex-shrink-0"
-                        >編集</button>
-                      </div>
-                    )}
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      担当施設 {assignedFacIds.length}件 · 清掃員 {cleaners.length}名
-                    </p>
-                  </div>
-                  <span className="text-gray-400">{isOpen ? '▲' : '▼'}</span>
-                </button>
+                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg flex-shrink-0">
+                  🏢
+                </div>
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => !editingCompanyName && setSelectedCompany(isOpen ? null : company.id)}>
+                  {editingCompanyName === company.id ? (
+                    <div className="flex gap-1.5 items-center">
+                      <input
+                        type="text"
+                        value={editCompanyNameValue}
+                        onChange={e => setEditCompanyNameValue(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveCompanyName(company.id); if (e.key === 'Escape') setEditingCompanyName(null) }}
+                        autoFocus
+                        onClick={e => e.stopPropagation()}
+                        className="flex-1 border border-blue-400 rounded-lg px-2 py-1 text-sm font-bold outline-none"
+                      />
+                      <button onClick={e => { e.stopPropagation(); saveCompanyName(company.id) }} disabled={savingCompanyName}
+                        className="text-xs bg-blue-600 text-white px-2 py-1 rounded-lg disabled:opacity-50">保存</button>
+                      <button onClick={e => { e.stopPropagation(); setEditingCompanyName(null) }}
+                        className="text-xs text-gray-400 px-1">✕</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-bold text-gray-800 text-sm">{company.name}</p>
+                      <button
+                        onClick={e => { e.stopPropagation(); setEditingCompanyName(company.id); setEditCompanyNameValue(company.name) }}
+                        className="text-xs text-blue-500 border border-blue-200 rounded px-1.5 py-0.5 flex-shrink-0"
+                      >編集</button>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    担当施設 {assignedFacIds.length}件 · 清掃員 {cleaners.length}名
+                  </p>
+                </div>
+                <span className="text-gray-400 cursor-pointer" onClick={() => setSelectedCompany(isOpen ? null : company.id)}>{isOpen ? '▲' : '▼'}</span>
                 <button
                   onClick={() => deleteCompany(company.id, company.name)}
                   className="text-red-400 text-xs border border-red-200 rounded-lg px-2 py-1 flex-shrink-0 hover:bg-red-50"
