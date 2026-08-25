@@ -56,6 +56,20 @@ type RoomEvent = {
   facilities: { name: string; area: string } | null
 }
 
+// 施設名から自動承認の基準日数を取得
+function getAutoAcceptThreshold(facilityName: string): number | null {
+  const n = facilityName.toLowerCase()
+  const aziz = ['amu','pal','aest','rug','noa','mia','eme','toas','enu','esu','gran','mani','nuto','tas','tex','tria','atra','lume','harb','lay','sui','sen','vau']
+  const kajual = ['sun','com','rom','surp']
+  const cim = ['jam']
+  const honmoku = ['haku']
+  if (aziz.some(k => n.includes(k))) return 7
+  if (kajual.some(k => n.includes(k))) return 20
+  if (cim.some(k => n.includes(k))) return 14
+  if (honmoku.some(k => n.includes(k))) return 4
+  return null
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const [records, setRecords] = useState<Record_[]>([])
@@ -389,13 +403,59 @@ export default function AdminPage() {
         }),
       })
 
+      // 自動承認チェック
+      let autoAccepted = false
+      const threshold = getAutoAcceptThreshold(facility?.name || '')
+      if (threshold !== null && reqDate) {
+        const today = new Date(); today.setHours(0,0,0,0)
+        const reqDateObj = new Date(reqDate + 'T00:00:00')
+        const daysUntil = Math.floor((reqDateObj.getTime() - today.getTime()) / (1000*60*60*24))
+
+        if (daysUntil >= threshold) {
+          // 同施設・同日に承認済み依頼がないか確認
+          const facilityRoomIds = rooms.filter(r => r.facility_id === reqFacility).map(r => r.id)
+          const { data: existingAccepted } = await supabase
+            .from('early_late_requests')
+            .select('id')
+            .in('room_id', facilityRoomIds)
+            .eq('request_date', reqDate)
+            .eq('status', 'accepted')
+            .neq('id', data.id)
+
+          if (!existingAccepted || existingAccepted.length === 0) {
+            // 自動承認
+            await supabase.from('early_late_requests').update({
+              status: 'accepted',
+              responded_at: new Date().toISOString(),
+              responder_name: '自動承認',
+            }).eq('id', data.id)
+
+            const dateLabel = new Date(reqDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })
+            await supabase.from('chat_messages').insert({
+              facility_id: reqFacility,
+              type: 'system',
+              content: `✅【自動承認】${dateLabel} ${room?.room_number}号室 ${typeLabel}が自動承認されました`,
+              cleaning_record_id: null,
+              early_late_request_id: data.id,
+              sender_id: null,
+              sender_name: null,
+            })
+            autoAccepted = true
+          }
+        }
+      }
+
       // リスト更新
       const newReq = await supabase
         .from('early_late_requests')
-        .select('id, type, status, requested_time, message, created_at, responded_at, rooms(room_number, facilities(name))')
+        .select('id, type, status, requested_time, request_date, message, created_at, responded_at, responder_name, decline_reason, rooms(room_number, facilities(name, area))')
         .eq('id', data.id)
         .single()
       if (newReq.data) setRequests(prev => [newReq.data as unknown as EarlyLateRequest, ...prev])
+
+      if (autoAccepted) {
+        alert(`✅ 自動承認されました\n${facility?.name} ${room?.room_number}号室 ${typeLabel}`)
+      }
     }
 
     setReqSaving(false)
