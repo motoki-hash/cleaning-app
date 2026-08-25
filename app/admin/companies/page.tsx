@@ -490,10 +490,10 @@ export default function CompaniesPage() {
                             {editingEmail === c.id ? (
                               <div className="flex gap-2 mt-1.5">
                                 <input
-                                  type="email"
+                                  type="text"
                                   value={editEmailValue}
                                   onChange={e => setEditEmailValue(e.target.value)}
-                                  placeholder="メールアドレス"
+                                  placeholder="メールアドレス（空白で削除）"
                                   className="flex-1 border rounded-lg px-2 py-1 text-xs outline-none focus:border-blue-400"
                                   autoFocus
                                 />
@@ -502,6 +502,20 @@ export default function CompaniesPage() {
                                   disabled={savingEmail}
                                   className="text-xs bg-blue-600 text-white px-2 py-1 rounded-lg disabled:opacity-50"
                                 >保存</button>
+                                {c.email && (
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm('メールアドレスを削除しますか？')) return
+                                      setSavingEmail(true)
+                                      await supabase.from('cleaners').update({ email: null }).eq('id', c.id)
+                                      setSavingEmail(false)
+                                      setEditingEmail(null)
+                                      await load()
+                                    }}
+                                    disabled={savingEmail}
+                                    className="text-xs bg-red-500 text-white px-2 py-1 rounded-lg disabled:opacity-50"
+                                  >削除</button>
+                                )}
                                 <button
                                   onClick={() => setEditingEmail(null)}
                                   className="text-xs text-gray-400 px-1"
