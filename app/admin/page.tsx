@@ -56,15 +56,15 @@ type RoomEvent = {
   facilities: { name: string; area: string } | null
 }
 
-// 施設名から自動承認の基準日数を取得
+// 施設名から自動承認の基準日数を取得（1件目の場合のみ適用）
 function getAutoAcceptThreshold(facilityName: string): number | null {
   const n = facilityName.toLowerCase()
   const aziz = ['amu','pal','aest','rug','noa','mia','eme','toas','enu','esu','gran','mani','nuto','tas','tex','tria','atra','lume','harb','lay','sui','sen','vau']
-  const kajual = ['sun','com','rom','surp']
+  const kajual = ['sun','com','rom','surp'] // カジュアルClean・下仲敏之共通
   const cim = ['jam']
   const honmoku = ['haku']
-  if (aziz.some(k => n.includes(k))) return 7
-  if (kajual.some(k => n.includes(k))) return 20
+  if (aziz.some(k => n.includes(k))) return 3
+  if (kajual.some(k => n.includes(k))) return 3
   if (cim.some(k => n.includes(k))) return 14
   if (honmoku.some(k => n.includes(k))) return 4
   return null
@@ -407,42 +407,54 @@ export default function AdminPage() {
       let autoAccepted = false
       const threshold = getAutoAcceptThreshold(facility?.name || '')
       if (threshold !== null && reqDate) {
-        const today = new Date(); today.setHours(0,0,0,0)
+        const todayD = new Date(); todayD.setHours(0,0,0,0)
         const reqDateObj = new Date(reqDate + 'T00:00:00')
-        const daysUntil = Math.floor((reqDateObj.getTime() - today.getTime()) / (1000*60*60*24))
+        const daysUntil = Math.floor((reqDateObj.getTime() - todayD.getTime()) / (1000*60*60*24))
+        const dateLabel = new Date(reqDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })
 
-        if (daysUntil >= threshold) {
-          // 同施設・同日に承認済み依頼がないか確認
-          const facilityRoomIds = rooms.filter(r => r.facility_id === reqFacility).map(r => r.id)
-          const { data: existingAccepted } = await supabase
-            .from('early_late_requests')
-            .select('id')
-            .in('room_id', facilityRoomIds)
-            .eq('request_date', reqDate)
-            .eq('status', 'accepted')
-            .neq('id', data.id)
+        // 同施設・同日に承認済み依頼がないか確認
+        const facilityRoomIds = rooms.filter(r => r.facility_id === reqFacility).map(r => r.id)
+        const { data: existingAccepted } = await supabase
+          .from('early_late_requests')
+          .select('id')
+          .in('room_id', facilityRoomIds)
+          .eq('request_date', reqDate)
+          .eq('status', 'accepted')
+          .neq('id', data.id)
 
-          if (!existingAccepted || existingAccepted.length === 0) {
-            // 自動承認
-            await supabase.from('early_late_requests').update({
-              status: 'accepted',
-              responded_at: new Date().toISOString(),
-              responder_name: '自動承認',
-            }).eq('id', data.id)
+        const isSecondOrMore = existingAccepted && existingAccepted.length > 0
 
-            const dateLabel = new Date(reqDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })
-            await supabase.from('chat_messages').insert({
-              facility_id: reqFacility,
-              type: 'system',
-              content: `✅【自動承認】${dateLabel} ${room?.room_number}号室 ${typeLabel}が自動承認されました`,
-              cleaning_record_id: null,
-              early_late_request_id: data.id,
-              sender_id: null,
-              sender_name: null,
-            })
-            autoAccepted = true
-          }
+        if (isSecondOrMore) {
+          // 2件目以降：手動確認が必要。チャットに注意喚起
+          await supabase.from('chat_messages').insert({
+            facility_id: reqFacility,
+            type: 'system',
+            content: `⚠️ ${dateLabel} ${room?.room_number}号室 ${typeLabel}依頼\n※この施設では同日にすでにアーリー/レイトが受け付けられています。清掃会社へ都度ご相談ください。`,
+            cleaning_record_id: null,
+            early_late_request_id: data.id,
+            sender_id: null,
+            sender_name: null,
+          })
+        } else if (daysUntil >= threshold) {
+          // 1件目かつ基準日数以上先 → 自動承認
+          await supabase.from('early_late_requests').update({
+            status: 'accepted',
+            responded_at: new Date().toISOString(),
+            responder_name: '自動承認',
+          }).eq('id', data.id)
+
+          await supabase.from('chat_messages').insert({
+            facility_id: reqFacility,
+            type: 'system',
+            content: `✅【自動承認】${dateLabel} ${room?.room_number}号室 ${typeLabel}が自動承認されました`,
+            cleaning_record_id: null,
+            early_late_request_id: data.id,
+            sender_id: null,
+            sender_name: null,
+          })
+          autoAccepted = true
         }
+        // 1件目だが基準日未満 → pendingのまま（通常フロー）
       }
 
       // リスト更新
