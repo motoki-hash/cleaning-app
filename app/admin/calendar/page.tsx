@@ -8,6 +8,8 @@ type CalendarRecord = {
   id: string
   scheduled_date: string
   status: string
+  next_checkin_date: string | null
+  next_checkin_time: string | null
   rooms: {
     room_number: string
     facility_id: string
@@ -89,7 +91,7 @@ export default function AdminCalendarPage() {
     const [recRes, reqRes] = await Promise.all([
       supabase
         .from('cleaning_records')
-        .select('id, scheduled_date, status, rooms(room_number, facility_id, facilities(id, name, area))')
+        .select('id, scheduled_date, status, next_checkin_date, next_checkin_time, rooms(room_number, facility_id, facilities(id, name, area))')
         .gte('scheduled_date', startDate)
         .lte('scheduled_date', endDate)
         .order('scheduled_date'),
@@ -308,14 +310,38 @@ export default function AdminCalendarPage() {
                               })}
                             </div>
                           )}
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="space-y-1.5">
                             {recs
                               .sort((a, b) => (a.rooms?.room_number || '').localeCompare(b.rooms?.room_number || '', 'ja', { numeric: true }))
-                              .map(r => (
-                                <span key={r.id} className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_STYLE[r.status] || STATUS_STYLE.scheduled}`}>
-                                  {r.rooms?.room_number}号室
-                                </span>
-                              ))}
+                              .map(r => {
+                                const hasCheckinToday = r.next_checkin_date === selectedDate
+                                const nextDate = r.next_checkin_date
+                                const nextTime = r.next_checkin_time ? r.next_checkin_time.slice(0, 5) : null
+                                const nextDateLabel = nextDate
+                                  ? new Date(nextDate + 'T12:00:00').toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
+                                  : null
+                                return (
+                                  <div key={r.id} className="flex items-center gap-2 flex-wrap">
+                                    <span className={`text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${STATUS_STYLE[r.status] || STATUS_STYLE.scheduled}`}>
+                                      {r.rooms?.room_number}号室
+                                    </span>
+                                    {hasCheckinToday ? (
+                                      <span className="text-xs text-blue-600 font-medium">
+                                        🏃 本日 {nextTime ? `${nextTime} チェックイン` : 'チェックイン有'}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-gray-400">
+                                        本日チェックイン無し
+                                        {nextDateLabel && (
+                                          <span className="text-gray-500 ml-1">
+                                            次回 {nextDateLabel}{nextTime ? ` ${nextTime}` : ''}イン
+                                          </span>
+                                        )}
+                                      </span>
+                                    )}
+                                  </div>
+                                )
+                              })}
                           </div>
                         </div>
                       )
