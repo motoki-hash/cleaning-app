@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-type Company = { id: string; name: string; contact_person: string | null; phone: string | null; email: string | null }
+type Company = { id: string; name: string; contact_person: string | null; phone: string | null; email: string | null; auto_accept_days: number | null }
 type Facility = { id: string; name: string; area: string }
 type Cleaner = { id: string; name: string; email: string | null; user_id: string | null; company_id: string | null }
 
@@ -51,6 +51,20 @@ export default function CompaniesPage() {
   // 施設編集モード
   const [editingFacilities, setEditingFacilities] = useState<string | null>(null)
 
+  // 自動承認日数編集
+  const [editingAutoAccept, setEditingAutoAccept] = useState<string | null>(null)
+  const [editAutoAcceptValue, setEditAutoAcceptValue] = useState<string>('')
+  const [savingAutoAccept, setSavingAutoAccept] = useState(false)
+
+  const saveAutoAcceptDays = async (companyId: string) => {
+    setSavingAutoAccept(true)
+    const days = editAutoAcceptValue.trim() === '' ? null : parseInt(editAutoAcceptValue)
+    await supabase.from('cleaning_companies').update({ auto_accept_days: isNaN(days as number) ? null : days }).eq('id', companyId)
+    setEditingAutoAccept(null)
+    setSavingAutoAccept(false)
+    await load()
+  }
+
   useEffect(() => {
     load()
   }, [])
@@ -58,7 +72,7 @@ export default function CompaniesPage() {
   const load = async () => {
     setLoading(true)
     const [compRes, facRes, cfRes, cleanerRes] = await Promise.all([
-      supabase.from('cleaning_companies').select('id, name, contact_person, phone, email').order('name'),
+      supabase.from('cleaning_companies').select('id, name, contact_person, phone, email, auto_accept_days').order('name'),
       supabase.from('facilities').select('id, name, area').order('area').order('name'),
       supabase.from('company_facilities').select('company_id, facility_id'),
       supabase.from('cleaners').select('id, name, email, user_id, company_id').eq('is_active', true),
@@ -361,6 +375,44 @@ export default function CompaniesPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* 自動承認設定 */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-bold text-gray-500">アーリー/レイト 自動承認</p>
+                      {editingAutoAccept === company.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min="0"
+                            value={editAutoAcceptValue}
+                            onChange={e => setEditAutoAcceptValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') saveAutoAcceptDays(company.id); if (e.key === 'Escape') setEditingAutoAccept(null) }}
+                            placeholder="日数"
+                            autoFocus
+                            className="w-16 border border-blue-400 rounded-lg px-2 py-1 text-sm outline-none text-center"
+                          />
+                          <span className="text-xs text-gray-500">日前以上</span>
+                          <button onClick={() => saveAutoAcceptDays(company.id)} disabled={savingAutoAccept}
+                            className="text-xs bg-blue-600 text-white px-2 py-1 rounded-lg disabled:opacity-50">保存</button>
+                          <button onClick={() => setEditingAutoAccept(null)}
+                            className="text-xs text-gray-400 px-1">✕</button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setEditingAutoAccept(company.id); setEditAutoAcceptValue(company.auto_accept_days != null ? String(company.auto_accept_days) : '') }}
+                          className="text-xs text-blue-500 border border-blue-200 rounded px-1.5 py-0.5"
+                        >編集</button>
+                      )}
+                    </div>
+                    <div className="bg-gray-50 rounded-xl px-3 py-2.5 text-sm text-gray-700">
+                      {editingAutoAccept !== company.id && (
+                        company.auto_accept_days != null
+                          ? <span>依頼日 <span className="font-bold text-blue-600">{company.auto_accept_days}日以上</span> 前かつ同施設1件目のみ自動承認</span>
+                          : <span className="text-gray-400">自動承認なし（すべて手動）</span>
+                      )}
+                    </div>
+                  </div>
 
                   {/* 担当施設 */}
                   <div>

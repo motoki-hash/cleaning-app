@@ -41,7 +41,7 @@ type EarlyLateRequest = {
   rooms: { room_number: string; facilities: { name: string; area: string } | null } | null
 }
 
-type Facility = { id: string; name: string; area: string }
+type Facility = { id: string; name: string; area: string; auto_accept_days?: number | null }
 type Room = { id: string; room_number: string; facility_id: string }
 type RoomEvent = {
   id: string
@@ -56,19 +56,6 @@ type RoomEvent = {
   facilities: { name: string; area: string } | null
 }
 
-// 施設名から自動承認の基準日数を取得（1件目の場合のみ適用）
-function getAutoAcceptThreshold(facilityName: string): number | null {
-  const n = facilityName.toLowerCase()
-  const aziz = ['amu','pal','aest','rug','noa','mia','eme','toas','enu','esu','gran','mani','nuto','tas','tex','tria','atra','lume','harb','lay','sui','sen','vau']
-  const kajual = ['sun','com','rom','surp'] // カジュアルClean・下仲敏之共通
-  const cim = ['jam']
-  const honmoku = ['haku']
-  if (aziz.some(k => n.includes(k))) return 3
-  if (kajual.some(k => n.includes(k))) return 3
-  if (cim.some(k => n.includes(k))) return 14
-  if (honmoku.some(k => n.includes(k))) return 4
-  return null
-}
 
 export default function AdminPage() {
   const router = useRouter()
@@ -142,7 +129,7 @@ export default function AdminPage() {
           .select('id, photo_url, photo_type, created_at')
           .order('created_at', { ascending: false })
           .limit(50),
-        supabase.from('facilities').select('id, name, area').order('area').order('name'),
+        supabase.from('facilities').select('id, name, area, company_facilities(cleaning_companies(auto_accept_days))').order('area').order('name'),
         supabase.from('rooms').select('id, room_number, facility_id').order('room_number'),
         supabase
           .from('early_late_requests')
@@ -405,7 +392,10 @@ export default function AdminPage() {
 
       // 自動承認チェック
       let autoAccepted = false
-      const threshold = getAutoAcceptThreshold(facility?.name || '')
+      // 施設に紐付く会社のauto_accept_daysを取得
+      const facilityData = facility as Facility & { company_facilities?: { cleaning_companies: { auto_accept_days: number | null } | null }[] }
+      const cfList = facilityData?.company_facilities || []
+      const threshold: number | null = cfList.length > 0 ? (cfList[0].cleaning_companies?.auto_accept_days ?? null) : null
       if (threshold !== null && reqDate) {
         const todayD = new Date(); todayD.setHours(0,0,0,0)
         const reqDateObj = new Date(reqDate + 'T00:00:00')
