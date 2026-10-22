@@ -137,41 +137,45 @@ export default function PjbHomePage() {
 
   return (
     <div className="min-h-screen bg-slate-100 pb-24">
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
-          <div className="flex items-baseline gap-3 min-w-0">
-            <h1 className="text-[18px] font-semibold text-slate-900 whitespace-nowrap">PJ予算管理</h1>
-            <span className="hidden sm:inline text-[12px] font-mono tracking-wide text-slate-400">BARE NOTE STUDIO</span>
+      {/* 上部：サイドバーと同じ深いグリーンの帯（タイトル＋状況のタイル） */}
+      <div className="bg-[#17382f]">
+        <header>
+          <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+            <div className="flex items-baseline gap-3 min-w-0">
+              <h1 className="text-[18px] font-semibold text-white whitespace-nowrap">PJ予算管理</h1>
+              <span className="hidden sm:inline text-[12px] font-mono tracking-wide text-emerald-100/50">BARE NOTE STUDIO</span>
+            </div>
+            <button
+              onClick={() => setShowNew(true)}
+              className="text-[14px] font-medium bg-[#e2efe8] hover:bg-white text-[#17382f] px-4 py-2 rounded-lg whitespace-nowrap"
+            >
+              ＋ 新規案件
+            </button>
           </div>
-          <button
-            onClick={() => setShowNew(true)}
-            className="text-[14px] font-medium bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg whitespace-nowrap"
-          >
-            ＋ 新規案件
-          </button>
+        </header>
+        <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-7">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <SummaryTile
+              label="進行中の案件" value={`${summary.active}件`} sub={`総予算 ${formatYen(summary.budget)}`}
+              selected={filter === '進行中'} onClick={() => toggleFilter('進行中')}
+            />
+            <SummaryTile
+              label="要対応あり" value={`${summary.alert}件`} tone={summary.alert > 0 ? 'warning' : 'default'}
+              sub="確認が必要な項目がある案件" selected={filter === '要対応あり'} onClick={() => toggleFilter('要対応あり')}
+            />
+            <SummaryTile
+              label="予算超過" value={`${summary.over}件`} tone={summary.over > 0 ? 'danger' : 'default'}
+              sub="着地見込が総予算を超えている案件" selected={filter === '予算超過'} onClick={() => toggleFilter('予算超過')}
+            />
+            <SummaryTile
+              label="完了" value={`${summary.done}件`} sub="完了にした案件"
+              selected={filter === '完了'} onClick={() => toggleFilter('完了')}
+            />
+          </div>
         </div>
-      </header>
+      </div>
 
       <main className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          <SummaryTile
-            label="進行中の案件" value={`${summary.active}件`} sub={`総予算 ${formatYen(summary.budget)}`}
-            selected={filter === '進行中'} onClick={() => toggleFilter('進行中')}
-          />
-          <SummaryTile
-            label="要対応あり" value={`${summary.alert}件`} tone={summary.alert > 0 ? 'warning' : 'default'}
-            sub="確認が必要な項目がある案件" selected={filter === '要対応あり'} onClick={() => toggleFilter('要対応あり')}
-          />
-          <SummaryTile
-            label="予算超過" value={`${summary.over}件`} tone={summary.over > 0 ? 'danger' : 'default'}
-            sub="着地見込が総予算を超えている案件" selected={filter === '予算超過'} onClick={() => toggleFilter('予算超過')}
-          />
-          <SummaryTile
-            label="完了" value={`${summary.done}件`} sub="完了にした案件"
-            selected={filter === '完了'} onClick={() => toggleFilter('完了')}
-          />
-        </div>
-
         {/* 全案件サマリー（開閉できる） */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2 gap-2">
@@ -274,8 +278,8 @@ function SummaryTile({
   return (
     <button
       onClick={onClick}
-      className={`text-left rounded-xl border bg-white px-4 py-3 transition-colors hover:border-blue-300 ${
-        selected ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-200'
+      className={`text-left rounded-xl border bg-white px-4 py-3 transition-colors ${
+        selected ? 'border-emerald-300 ring-2 ring-emerald-300' : 'border-transparent hover:border-emerald-200'
       }`}
     >
       <div className="text-[13px] text-slate-500 mb-1">{label}</div>
