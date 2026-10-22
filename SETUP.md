@@ -143,3 +143,36 @@ sudo chown -R $(whoami) ~/.npm
 4. 写真アップロード機能
 5. トラブル報告機能
 6. ダッシュボード
+
+## PJ予算管理アプリ（/pjb）のセットアップ
+
+清掃管理とは別ドメインの「PJ予算管理アプリ」を同じ Next.js アプリ内に `/pjb` 以下として追加しています。
+同じ Supabase プロジェクトを使い回しつつ、テーブル名は `pjb_` プレフィックスで分離しています。
+
+1. Supabase Dashboard の SQL Editor で `supabase-pj-budget-schema.sql` の内容を実行する
+2. `/pjb` にアクセスし、PIN（6桁）を入力してログインする（メールアドレス・パスワードは不要。下の「PINログインの設定」を先に行う）
+3. 「＋ 新規案件」からプロジェクトを作成すると、Excelを踏襲した予算カテゴリーのひな形が自動生成される
+
+現時点（Phase 1）ではログイン済みユーザーは全操作が可能です。Admin/Manager/PM/Viewerの権限分離は
+`pjb_user_roles` テーブルを土台に Phase 2 で実装します。
+
+### PINログインの設定（全員共通の6桁PIN）
+
+`/pjb` は、メールアドレスやパスワードではなく **6桁のPINだけ** で入ります。PINの照合はサーバー側
+（`app/api/pjb/login/route.ts`）で行い、正しいときだけ共有アカウントでSupabaseにログインします。
+
+1. Supabase の SQL Editor で `supabase-pj-budget-patch-007.sql` を実行する（ログイン失敗の記録テーブル）
+2. 次の環境変数を、**ローカルの `.env.local`** と **Vercel の Environment Variables** の両方に設定する
+   | 名前 | 内容 |
+   |---|---|
+   | `PJB_LOGIN_PIN` | 全員で使う6桁の数字（例：自分で決める） |
+   | `PJB_SESSION_SECRET` | 長いランダムな文字列（`openssl rand -hex 32` で作る）。共有アカウントのパスワードを作るために使う。一度決めたら変えない |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API の `service_role` キー（誰にも見せない） |
+3. 環境変数を変えたら、ローカルは開発サーバーを再起動、Vercel は再デプロイする
+4. 初めて正しいPINが入力されたとき、共有アカウント（`pjb-shared@barenotestudio.com`）が自動で作られる
+
+仕様:
+- 失敗は、同じ場所から15分間に5回まで、全体で60分間に30回までで、いずれも超えると一時的にログインできなくなる
+- 30分間操作がないと、自動でログアウトしてPIN入力に戻る
+- PINを変えるときは `PJB_LOGIN_PIN` を書き換えて再デプロイする（配り直しが必要）
+- 誰が操作したかは記録されない（共通PINのため）。メンバー別にしたい場合は別途対応が必要

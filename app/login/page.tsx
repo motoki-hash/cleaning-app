@@ -1,16 +1,30 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get('redirect')
+  const isPjb = redirectTo?.startsWith('/pjb') ?? false
+
+  useEffect(() => { if (isPjb) document.title = 'BNS PJ管理システム' }, [isPjb])
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [mode, setMode] = useState<'cleaner' | 'admin'>('cleaner')
+  const [mode, setMode] = useState<'cleaner' | 'admin'>(isPjb ? 'admin' : 'cleaner')
 
   const handleCleanerLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,6 +61,11 @@ export default function LoginPage() {
       return
     }
 
+    if (redirectTo) {
+      router.push(redirectTo)
+      return
+    }
+
     const role = data.user?.user_metadata?.role
     if (role === 'admin') {
       router.push('/admin')
@@ -58,27 +77,31 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-center text-gray-800 mb-2">清掃管理システム</h1>
+        <h1 className="text-2xl font-bold text-center text-gray-800 mb-2">
+          {isPjb ? 'PJ予算管理' : '清掃管理システム'}
+        </h1>
         <p className="text-center text-gray-500 text-sm mb-6">ログイン</p>
 
-        <div className="flex rounded-xl border border-gray-200 mb-6 overflow-hidden">
-          <button
-            onClick={() => { setMode('cleaner'); setError('') }}
-            className={`flex-1 py-2 text-sm font-medium transition-colors ${
-              mode === 'cleaner' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            清掃員
-          </button>
-          <button
-            onClick={() => { setMode('admin'); setError('') }}
-            className={`flex-1 py-2 text-sm font-medium transition-colors ${
-              mode === 'admin' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            管理者
-          </button>
-        </div>
+        {!isPjb && (
+          <div className="flex rounded-xl border border-gray-200 mb-6 overflow-hidden">
+            <button
+              onClick={() => { setMode('cleaner'); setError('') }}
+              className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                mode === 'cleaner' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              清掃員
+            </button>
+            <button
+              onClick={() => { setMode('admin'); setError('') }}
+              className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                mode === 'admin' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              管理者
+            </button>
+          </div>
+        )}
 
         {mode === 'cleaner' ? (
           <form onSubmit={handleCleanerLogin} className="space-y-4">

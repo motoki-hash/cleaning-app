@@ -27,4 +27,50 @@ input::placeholder, textarea::placeholder {
   .text-balance {
     text-wrap: balance;
   }
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ============================================================================
+   PJ予算管理（/pjb）専用テーマ：深いグリーンを基調に、角丸を控えめにする。
+   清掃管理アプリ側には影響しないよう、.pjb-theme の中だけに適用する。
+   スケジュールのバーの色（sky/emerald/rose/amber など）は変更しない。
+   ============================================================================ */
+.pjb-theme {
+  --pjb-green: #17382f;
+  --pjb-green-dark: #0f2a22;
+  --pjb-mint: #e2efe8;
+  --pjb-mint-soft: #eef6f1;
+  --pjb-bg: #eef1ef;
+  --pjb-ink: #14302a;
+  color: var(--pjb-ink);
+}
+.pjb-theme .min-h-screen.bg-slate-100 { background-color: var(--pjb-bg); }
+.pjb-theme .text-slate-900 { color: var(--pjb-ink); }
+
+/* アクセントカラー（青 → グリーン） */
+.pjb-theme .bg-blue-600 { background-color: var(--pjb-green); }
+.pjb-theme .hover\:bg-blue-700:hover { background-color: var(--pjb-green-dark); }
+.pjb-theme .bg-blue-500 { background-color: var(--pjb-green); }
+.pjb-theme .text-blue-700, .pjb-theme .text-blue-800 { color: var(--pjb-green); }
+.pjb-theme .border-blue-600, .pjb-theme .border-blue-500 { border-color: var(--pjb-green); }
+.pjb-theme .ring-blue-600, .pjb-theme .ring-blue-500 { --tw-ring-color: var(--pjb-green); }
+.pjb-theme .bg-blue-50, .pjb-theme .hover\:bg-blue-50:hover { background-color: var(--pjb-mint); }
+.pjb-theme .bg-blue-50\/60 { background-color: var(--pjb-mint-soft); }
+.pjb-theme .bg-blue-100\/70 { background-color: var(--pjb-mint); }
+.pjb-theme .border-blue-200, .pjb-theme .hover\:border-blue-300:hover { border-color: #b9d6c8; }
+
+/* 角丸を少し控えめに（丸いピル型 rounded-full はそのまま） */
+.pjb-theme .rounded-2xl { border-radius: 10px; }
+.pjb-theme .rounded-xl { border-radius: 8px; }
+.pjb-theme .rounded-lg { border-radius: 5px; }
+.pjb-theme .rounded-md { border-radius: 4px; }
+.pjb-theme .rounded-t-2xl { border-top-left-radius: 10px; border-top-right-radius: 10px; }
+@media (min-width: 640px) {
+  .pjb-theme .sm\:rounded-2xl { border-radius: 10px; }
 }

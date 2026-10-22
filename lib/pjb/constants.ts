@@ -1,0 +1,27 @@
+import type { BudgetGroup } from './types'
+
+// 新規PJ作成時のひな形カテゴリー（Excelの費目構成を踏襲）
+// counts_as_cost: false の3項目（設計デザイン費用(社内)・BNS利益・PJ予備費）は
+// 「BNS原価」の集計から除外する（旧Excelでも同様に除外されていた＝利益や未使用の予備費であり、
+// 外部への支払いコストではないため）
+export const DEFAULT_CATEGORIES: { group_name: BudgetGroup; name: string; sort_order: number; counts_as_cost: boolean }[] = [
+  { group_name: 'BNS外予算', name: '内装工事', sort_order: 0, counts_as_cost: true },
+  { group_name: 'BNS外予算', name: '解体工事', sort_order: 1, counts_as_cost: true },
+  { group_name: 'BNS外予算', name: '追加工事', sort_order: 2, counts_as_cost: true },
+  { group_name: 'BNS外予算', name: '設計デザイン費用(社外)', sort_order: 3, counts_as_cost: true },
+  { group_name: 'BNS外予算', name: 'PJ予備費', sort_order: 4, counts_as_cost: true },
+  { group_name: 'BNS予算', name: 'FFE・OSE費用', sort_order: 5, counts_as_cost: true },
+  { group_name: 'BNS予算', name: '追加工事', sort_order: 6, counts_as_cost: true },
+  { group_name: 'BNS予算', name: '設計デザイン費用(社外)', sort_order: 7, counts_as_cost: true },
+  { group_name: 'BNS予算', name: '設計デザイン費用(社内)', sort_order: 8, counts_as_cost: false },
+  { group_name: 'BNS予算', name: 'BNS利益', sort_order: 9, counts_as_cost: false },
+  { group_name: 'BNS予算', name: 'PJ予備費', sort_order: 10, counts_as_cost: false },
+  { group_name: 'BNS予算', name: '分離発注', sort_order: 11, counts_as_cost: true },
+  { group_name: 'BNS予算', name: 'その他費用', sort_order: 12, counts_as_cost: true },
+]
+
+export const STATUS_COLORS: Record<string, string> = {
+  normal: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+  warning: 'text-amber-700 bg-amber-50 border-amber-200',
+  danger: 'text-rose-700 bg-rose-50 border-rose-200',
+}
