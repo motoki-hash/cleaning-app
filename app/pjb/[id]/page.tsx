@@ -4,8 +4,7 @@ import { useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Shell from '../components/Shell'
 import DeleteProjectModal from '../components/DeleteProjectModal'
-import { KpiCard, EditableKpiCard, AlertList, StatePill, SectionTitle, InlineNumber } from '../components/ui'
-import { logActivity } from '@/lib/pjb/activity'
+import { KpiCard, AlertList, StatePill, SectionTitle, InlineNumber } from '../components/ui'
 import { supabase } from '@/lib/supabase'
 import { useProjectData } from '@/lib/pjb/useProjectData'
 import { summarizeCategory, summarizeProject, buildAlerts, categorySales } from '@/lib/pjb/calc'
@@ -43,15 +42,7 @@ export default function DashboardPage() {
     <Shell projectId={id} projectName={project.name} projectStatus={project.status} active="dashboard" onQuickAdded={reload}>
       <SectionTitle>予算KPI <span className="text-[12px] font-normal text-slate-400 ml-1">金額はすべて税別</span></SectionTitle>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        <EditableKpiCard
-          label="PJ総予算" value={totals.totalBudget} formulaKey="project:total_budget"
-          onCommit={async v => {
-            const { error } = await supabase.from('pjb_projects').update({ total_budget: Math.max(0, v), updated_at: new Date().toISOString() }).eq('id', id)
-            if (error) { alert(`保存に失敗しました：${error.message}`); return }
-            await logActivity({ projectId: id, action: 'update', entityType: 'project', entityLabel: 'PJ総予算', before: String(totals.totalBudget), after: String(v) })
-            reload()
-          }}
-        />
+        <KpiCard label="PJ総予算" value={formatYen(totals.totalBudget)} sub="BNS外予算の当初予算合計 ＋ BNS予算の売上合計（自動）" />
         <KpiCard label="発注済金額" value={formatYen(totals.orderedAmount)} />
         <KpiCard label="未発注予定" value={formatYen(totals.unorderedPlanned)} />
         <KpiCard

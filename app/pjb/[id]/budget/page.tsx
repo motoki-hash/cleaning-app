@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import Shell from '../../components/Shell'
-import { KpiCard, EditableKpiCard, StatePill, SectionTitle, EmptyState, InlineAmount, InlineText, MoneyInput, isCommitEnter } from '../../components/ui'
+import { KpiCard, StatePill, SectionTitle, EmptyState, InlineAmount, InlineText, MoneyInput, isCommitEnter } from '../../components/ui'
 import { useProjectData, findOrCreateVendor } from '@/lib/pjb/useProjectData'
 import { summarizeCategory, summarizeProject, categorySales } from '@/lib/pjb/calc'
 import { logActivity } from '@/lib/pjb/activity'
@@ -81,13 +81,7 @@ export default function BudgetPage() {
           <>
             <div className="text-[13px] font-semibold text-slate-600 mb-1.5">プロジェクト全体 <span className="font-normal text-slate-400">（金額はすべて税別）</span></div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-              <EditableKpiCard
-                label="PJ総予算" value={totals.totalBudget} formulaKey="project:total_budget"
-                onCommit={async v => {
-                  await updateProject({ total_budget: Math.max(0, v) })
-                  await logActivity({ projectId: id, action: 'update', entityType: 'project', entityLabel: 'PJ総予算', before: String(totals.totalBudget), after: String(v) })
-                }}
-              />
+              <KpiCard label="PJ総予算" value={formatYen(totals.totalBudget)} sub="BNS外予算の当初予算合計 ＋ BNS予算の売上合計（自動）" />
               <KpiCard
                 label="原価（着地見込）"
                 value={formatYen(totals.landingForecast)}

@@ -360,7 +360,6 @@ function Badge({ tone, children }: { tone: 'danger' | 'warning' | 'info' | 'good
 
 function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [name, setName] = useState('')
-  const [totalBudget, setTotalBudget] = useState('')
   const [targetProfit, setTargetProfit] = useState('')
   const [roomCount, setRoomCount] = useState('')
   const [saving, setSaving] = useState(false)
@@ -371,7 +370,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
     setSaving(true)
     const { data, error: err } = await supabase.from('pjb_projects').insert({
       name: name.trim(),
-      total_budget: Number(totalBudget) || 0,
+      total_budget: 0,
       target_profit: Number(targetProfit) || 0,
       room_count: Number(roomCount) || 0,
     }).select('id').single()
@@ -394,10 +393,6 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
           <label className="grid gap-1">
             <span className="text-[13px] text-slate-500">プロジェクト名</span>
             <input value={name} onChange={e => setName(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-[15px]" placeholder="例）赤坂ウエストビル改修工事" />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-[13px] text-slate-500">PJ総予算（円）</span>
-            <MoneyInput value={totalBudget} onChange={setTotalBudget} className="border border-slate-200 rounded-lg px-3 py-2 text-[15px]" placeholder="40,000,000" />
           </label>
           <label className="grid gap-1">
             <span className="text-[13px] text-slate-500">目標利益（円・任意）</span>
