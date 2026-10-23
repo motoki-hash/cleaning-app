@@ -103,9 +103,9 @@ export function summarizeProject(
   // BNS原価には、BNS利益・PJ予備費・設計デザイン費用(社内)は含めない
   // （外部への支払いコストではなく、利益や未使用の予備枠のため）
   const bnsCostSummaries = summaries.filter(s => s.category.group_name === 'BNS予算' && s.category.counts_as_cost)
-  // BNS売上 = BNS予算グループの最新予算の合計（最新予算＝原価をそのまま投資家に請求する前提。
-  // 実際の請求が一括か複数投資家への分割かはInvestor画面側の按分で決まる）
-  const bnsSell = bnsCategories.reduce((s, c) => s + (c.latest_budget || 0), 0)
+  // BNS売上 = BNS予算グループの「売上」（項目ごとに入力した売上の合計）。
+  // 原価は項目の内訳（発注）から積み上がる。実際の請求が一括か複数投資家への分割かはInvestor画面側の按分で決まる
+  const bnsSell = bnsCategories.reduce((s, c) => s + (c.original_budget || 0), 0)
   const bnsCost = bnsCostSummaries.reduce((s, c) => s + c.landingForecast, 0)
   const bnsGrossProfit = bnsSell - bnsCost
   const grossMargin = bnsSell > 0 ? bnsGrossProfit / bnsSell : 0
@@ -137,6 +137,8 @@ export function buildAlerts(
   const alerts: Alert[] = []
 
   for (const s of summaries) {
+    // BNS予算は項目ごとの予算を持たず、売上・原価・利益で見るため、予算超過・消化率のアラートは出さない
+    if (s.category.group_name === 'BNS予算') continue
     if (s.state === 'danger') {
       alerts.push({
         id: `danger-${s.category.id}`,

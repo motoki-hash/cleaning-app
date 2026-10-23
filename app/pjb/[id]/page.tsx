@@ -70,7 +70,7 @@ export default function DashboardPage() {
 
       <SectionTitle>BNS予算</SectionTitle>
       <div className="grid gap-2 sm:grid-cols-2">
-        {bns.map(s => <CategoryMiniCard key={s.category.id} s={s} />)}
+        {bns.map(s => <BnsMiniCard key={s.category.id} s={s} />)}
       </div>
 
       <div className="mt-12 mb-4 text-right">
@@ -80,6 +80,22 @@ export default function DashboardPage() {
       </div>
       {showDelete && <DeleteProjectModal projectId={id} projectName={project.name} onClose={() => setShowDelete(false)} />}
     </Shell>
+  )
+}
+
+function BnsMiniCard({ s }: { s: ReturnType<typeof summarizeCategory> }) {
+  const sales = s.category.original_budget || 0
+  const cost = s.category.counts_as_cost ? s.landingForecast : 0
+  const profit = sales - cost
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <div className="text-[14px] font-medium text-slate-900 mb-2">{s.category.name}</div>
+      <div className="grid grid-cols-3 gap-x-3 text-[12.5px] text-slate-500">
+        <div>売上 <span className="block text-slate-800 font-medium">{formatYen(sales)}</span></div>
+        <div>原価 <span className="block text-slate-800 font-medium">{s.category.counts_as_cost ? formatYen(cost) : '—'}</span></div>
+        <div>利益 <span className={`block font-semibold ${profit < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{formatSignedYen(profit)}</span></div>
+      </div>
+    </div>
   )
 }
 

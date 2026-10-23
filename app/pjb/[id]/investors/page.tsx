@@ -20,7 +20,7 @@ export default function InvestorsPage() {
 
   const totalRooms = project?.room_count || investors.reduce((s, i) => s + i.room_count, 0) || 0
   // BNS売上 = BNS予算グループの最新予算の合計（最新予算がそのまま投資家への請求ベース）
-  const bnsSellTotal = useMemo(() => categories.filter(c => c.group_name === 'BNS予算').reduce((s, c) => s + (c.latest_budget || 0), 0), [categories])
+  const bnsSellTotal = useMemo(() => categories.filter(c => c.group_name === 'BNS予算').reduce((s, c) => s + (c.original_budget || 0), 0), [categories])
   // 1口（部屋）あたりの投資額 = BNS売上合計 ÷ 総部屋数（自動計算・手入力不可）
   const unitPrice = totalRooms > 0 ? Math.round(bnsSellTotal / totalRooms) : 0
 

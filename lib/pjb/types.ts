@@ -22,6 +22,9 @@ export type Project = {
   preopen_start_date?: string | null
   schedule_notes?: string | null
   zero_open_week?: number | null
+  bns_budget_sales?: number | null
+  bns_budget_cost?: number | null
+  bns_budget_profit?: number | null
   schedule_months?: number | null
   zero_notes?: string | null
   created_at: string

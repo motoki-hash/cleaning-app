@@ -10,7 +10,7 @@ import { useProjectData, findOrCreateVendor } from '@/lib/pjb/useProjectData'
 import { summarizeCategory, summarizeProject } from '@/lib/pjb/calc'
 import { formatYen, formatSignedYen, formatPercent, formatDate } from '@/lib/pjb/format'
 import { createOrder, updateOrderAmount, updateOrderStatus, updateOrderTitle, updateOrderVendor, markOrderPlaced, updateOrderPaymentSchedule, markOrderPaid, deleteOrder } from '@/lib/pjb/orders'
-import { ORDER_STATUSES, type BudgetCategory, type CategorySummary, type Order, type Vendor } from '@/lib/pjb/types'
+import { ORDER_STATUSES, type BudgetCategory, type CategorySummary, type Order, type Project, type Vendor } from '@/lib/pjb/types'
 
 const PRE_ORDER_STATUSES = new Set(['見積依頼中', '見積受領', '発注待ち'])
 const STATUS_TONE: Record<string, string> = {
@@ -59,6 +59,13 @@ export default function BudgetPage() {
     reload()
   }
 
+  // PJ全体のBNS予算（売上・原価・利益）の保存
+  const updateProject = async (patch: Partial<Project>) => {
+    const { error } = await supabase.from('pjb_projects').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+    if (error) { alert(`保存に失敗しました：${error.message}（SQLパッチ008を実行していない場合は、先に実行してください）`); return }
+    reload()
+  }
+
   const groups: Array<[BudgetCategory['group_name'], CategorySummary[]]> = [
     ['BNS外予算', summaries.filter(s => s.category.group_name === 'BNS外予算')],
     ['BNS予算', summaries.filter(s => s.category.group_name === 'BNS予算')],
@@ -92,9 +99,15 @@ export default function BudgetPage() {
           </>
         )
       })()}
-      <p className="text-[12.5px] text-slate-500 mb-2">当初予算はセルをタップして編集できます。最新予算はカテゴリー名をタップして開く「内訳」の登録・編集・削除だけで変わります（直接入力はできません）。BNS売上は「BNS予算」グループの最新予算の合計から自動計算されます</p>
+      <p className="text-[12.5px] text-slate-500 mb-2">当初予算はセルをタップして編集できます。BNS外予算の実行費用は、カテゴリー名をタップして開く「内訳」の登録・編集・削除だけで変わります（直接入力はできません）。BNS予算は「売上」を直接入力し、「原価」は内訳から積み上がり、「利益」は売上−原価で自動計算されます</p>
 
-      {groups.map(([group, list]) => (
+      {groups.map(([group, list]) => group === 'BNS予算' ? (
+        <BnsSection
+          key={group} list={list} project={project} expanded={expanded} toggleExpand={toggleExpand}
+          orders={orders} vendors={vendors} projectId={id} onChanged={reload}
+          updateField={updateField} updateProject={updateProject}
+        />
+      ) : (
         <div key={group}>
           <SectionTitle>{group}</SectionTitle>
           {list.length === 0 ? <EmptyState>カテゴリーがありません</EmptyState> : (
@@ -116,7 +129,7 @@ export default function BudgetPage() {
                 <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
                   <div className="text-[13.5px] font-semibold text-slate-700 mb-1.5">{group} 合計</div>
                   <Row label="当初予算合計" value={formatYen(list.reduce((s, c) => s + c.category.original_budget, 0))} />
-                  <Row label="最新予算合計" value={formatYen(list.reduce((s, c) => s + c.category.latest_budget, 0))} />
+                  <Row label="実行費用合計" value={formatYen(list.reduce((s, c) => s + c.category.latest_budget, 0))} />
                   <Row
                     label="当初予算からの増減"
                     value={formatSignedYen(
@@ -134,7 +147,7 @@ export default function BudgetPage() {
                     <tr className="text-left text-slate-600 bg-slate-100 border-b border-slate-300 text-[13px]">
                       <th className="px-3 py-2.5 font-semibold whitespace-nowrap">項目</th>
                       <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">当初予算</th>
-                      <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap bg-blue-100/70 text-blue-800">最新予算</th>
+                      <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap bg-blue-100/70 text-blue-800">実行費用</th>
                       <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">発注済</th>
                       <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">未発注予定</th>
                       <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">着地見込</th>
@@ -210,6 +223,168 @@ export default function BudgetPage() {
   )
 }
 
+// BNS予算：項目ごとに「売上・原価・利益」で見る。予算は項目ごとではなくPJ全体で入力する。
+function BnsSection({
+  list, project, expanded, toggleExpand, orders, vendors, projectId, onChanged, updateField, updateProject,
+}: {
+  list: CategorySummary[]; project: Project; expanded: Set<string>; toggleExpand: (id: string) => void
+  orders: Order[]; vendors: Vendor[]; projectId: string; onChanged: () => void
+  updateField: (c: BudgetCategory, f: EditableField, v: number) => void
+  updateProject: (patch: Partial<Project>) => void
+}) {
+  const rows = list.map(s => {
+    const sales = s.category.original_budget || 0
+    const counted = s.category.counts_as_cost          // BNS利益・PJ予備費・設計デザイン費用(社内)などは原価に含めない
+    const cost = counted ? s.landingForecast : 0
+    return { s, sales, cost, counted, profit: sales - cost }
+  })
+  const totalSales = rows.reduce((t, r) => t + r.sales, 0)
+  const totalCost = rows.reduce((t, r) => t + r.cost, 0)
+  const totalProfit = totalSales - totalCost
+  const margin = totalSales > 0 ? totalProfit / totalSales : 0
+
+  const budgetRows: Array<{ label: string; field: 'bns_budget_sales' | 'bns_budget_cost' | 'bns_budget_profit'; budget: number; actual: number; costLike?: boolean }> = [
+    { label: '売上', field: 'bns_budget_sales', budget: project.bns_budget_sales || 0, actual: totalSales },
+    { label: '原価', field: 'bns_budget_cost', budget: project.bns_budget_cost || 0, actual: totalCost, costLike: true },
+    { label: '利益', field: 'bns_budget_profit', budget: project.bns_budget_profit || 0, actual: totalProfit },
+  ]
+
+  const profitTone = (v: number) => (v < 0 ? 'text-rose-600' : v === 0 ? 'text-slate-300' : 'text-emerald-600')
+
+  return (
+    <div>
+      <SectionTitle>BNS予算</SectionTitle>
+
+      {/* PJ全体の予算 */}
+      <div className="rounded-xl border border-slate-300 bg-white shadow-sm overflow-hidden mb-4">
+        <div className="px-4 py-2.5 bg-slate-100 border-b border-slate-300 flex items-baseline justify-between gap-2 flex-wrap">
+          <span className="text-[13.5px] font-semibold text-slate-800">PJ全体の予算</span>
+          <span className="text-[12px] text-slate-500">項目ごとではなく、PJ全体で売上・原価・利益の予算を入れます（金額をタップして入力）</span>
+        </div>
+        <table className="w-full text-[13.5px]">
+          <thead>
+            <tr className="text-left text-slate-500 text-[12.5px] border-b border-slate-200">
+              <th className="px-4 py-2 font-medium">区分</th>
+              <th className="px-3 py-2 font-medium text-right">予算</th>
+              <th className="px-3 py-2 font-medium text-right">実績（下の表の合計）</th>
+              <th className="px-4 py-2 font-medium text-right">差</th>
+            </tr>
+          </thead>
+          <tbody>
+            {budgetRows.map(r => {
+              const diff = r.costLike ? r.budget - r.actual : r.actual - r.budget   // プラスが「良い方向」
+              return (
+                <tr key={r.field} className="border-b border-slate-100 last:border-0">
+                  <td className="px-4 py-2.5 font-semibold text-slate-900">{r.label}</td>
+                  <td className="px-1 py-1 text-right">
+                    <InlineAmount value={r.budget} onCommit={v => updateProject({ [r.field]: v } as Partial<Project>)} />
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">{formatYen(r.actual)}</td>
+                  <td className={`px-4 py-2.5 text-right tabular-nums font-semibold ${r.budget === 0 ? 'text-slate-300' : diff < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {r.budget === 0 ? '—' : formatSignedYen(diff)}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        <p className="px-4 py-2 text-[12px] text-slate-400 border-t border-slate-100">差：売上・利益は「実績−予算」、原価は「予算−実績」（プラスなら良い方向）</p>
+      </div>
+
+      {/* mobile: cards */}
+      <div className="grid gap-2 sm:hidden">
+        {rows.map(({ s, sales, cost, counted, profit }) => (
+          <div key={s.category.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+            <div className="mb-2">
+              {counted ? (
+                <button onClick={() => toggleExpand(s.category.id)} className="flex items-center gap-1.5 text-[15px] font-semibold text-slate-900">
+                  <span className={`text-slate-400 text-[11.5px] transition-transform ${expanded.has(s.category.id) ? 'rotate-90' : ''}`}>▶</span>
+                  {s.category.name}
+                </button>
+              ) : <span className="text-[15px] font-semibold text-slate-900">{s.category.name}</span>}
+            </div>
+            <EditableRow label="売上" value={sales} onCommit={v => updateField(s.category, 'original_budget', v)} />
+            <Row label="原価" value={counted ? formatYen(cost) : '—'} muted />
+            <div className="h-px bg-slate-100 my-1.5" />
+            <Row label="利益" value={formatSignedYen(profit)} tone={profit < 0 ? 'danger' : 'good'} strong />
+            {counted && expanded.has(s.category.id) && (
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <CategoryBreakdown
+                  orders={orders.filter(o => o.category_id === s.category.id)} vendors={vendors} projectId={projectId}
+                  categoryId={s.category.id} categoryName={s.category.name} onChanged={onChanged}
+                />
+              </div>
+            )}
+          </div>
+        ))}
+        <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
+          <div className="text-[13.5px] font-semibold text-slate-700 mb-1.5">BNS予算 合計</div>
+          <Row label="売上" value={formatYen(totalSales)} />
+          <Row label="原価" value={formatYen(totalCost)} />
+          <Row label={`利益（利益率 ${formatPercent(margin, 1)}）`} value={formatSignedYen(totalProfit)} tone={totalProfit < 0 ? 'danger' : 'good'} strong />
+        </div>
+      </div>
+
+      {/* desktop: table */}
+      <div className="hidden sm:block rounded-xl border border-slate-300 bg-white overflow-x-auto shadow-sm">
+        <table className="w-full text-[13.5px] min-w-[620px]">
+          <thead>
+            <tr className="text-left text-slate-600 bg-slate-100 border-b border-slate-300 text-[13px]">
+              <th className="px-3 py-2.5 font-semibold whitespace-nowrap">項目</th>
+              <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">売上</th>
+              <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap bg-blue-100/70 text-blue-800">原価</th>
+              <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">利益</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ s, sales, cost, counted, profit }) => (
+              <Fragment key={s.category.id}>
+                <tr className="border-b border-slate-200 last:border-0 hover:bg-slate-50">
+                  <td className="px-3 py-3 font-semibold text-slate-900 whitespace-nowrap">
+                    {counted ? (
+                      <button onClick={() => toggleExpand(s.category.id)} className="flex items-center gap-1.5 hover:text-slate-950">
+                        <span className={`text-slate-400 text-[11.5px] transition-transform ${expanded.has(s.category.id) ? 'rotate-90' : ''}`}>▶</span>
+                        {s.category.name}
+                      </button>
+                    ) : <span className="pl-[19px]">{s.category.name}</span>}
+                  </td>
+                  <td className="px-1 py-1.5 text-right">
+                    <InlineAmount value={sales} onCommit={v => updateField(s.category, 'original_budget', v)} />
+                  </td>
+                  <td className={`px-3 py-3 text-right tabular-nums font-bold bg-blue-50/60 ${counted ? zeroMute(cost, 'text-slate-900') : 'text-slate-300'}`} title={counted ? undefined : '原価に含めない項目です'}>
+                    {counted ? formatYen(cost) : '—'}
+                  </td>
+                  <td className={`px-3 py-3 text-right tabular-nums font-semibold ${profitTone(profit)}`}>{formatSignedYen(profit)}</td>
+                </tr>
+                {counted && expanded.has(s.category.id) && (
+                  <tr className="border-b border-slate-100">
+                    <td colSpan={4} className="bg-slate-50/60 px-6 py-4">
+                      <CategoryBreakdown
+                        orders={orders.filter(o => o.category_id === s.category.id)} vendors={vendors} projectId={projectId}
+                        categoryId={s.category.id} categoryName={s.category.name} onChanged={onChanged}
+                      />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-slate-300 bg-slate-100">
+              <td className="px-3 py-3 font-bold text-slate-900 whitespace-nowrap">BNS予算 合計</td>
+              <td className="px-3 py-3 text-right tabular-nums font-bold text-slate-900">{formatYen(totalSales)}</td>
+              <td className="px-3 py-3 text-right tabular-nums font-bold text-slate-900">{formatYen(totalCost)}</td>
+              <td className={`px-3 py-3 text-right tabular-nums font-bold ${totalProfit < 0 ? 'text-rose-600' : 'text-blue-700'}`}>
+                {formatSignedYen(totalProfit)} <span className="text-[12px] font-medium text-slate-500">（利益率 {formatPercent(margin, 1)}）</span>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 function MobileCard({
   s, onCommit, expanded, onToggle, orders, vendors, projectId, categoryName, onChanged,
 }: {
@@ -227,7 +402,7 @@ function MobileCard({
         <StatePill state={s.state} />
       </div>
       <EditableRow label="当初予算" value={s.category.original_budget} onCommit={v => onCommit(s.category, 'original_budget', v)} />
-      <Row label="最新予算" value={formatYen(s.category.latest_budget)} strong />
+      <Row label="実行費用" value={formatYen(s.category.latest_budget)} strong />
       <Row label="発注済" value={formatYen(s.orderedAmount)} />
       <Row label="未発注予定" value={formatYen(s.unorderedPlanned)} muted />
       <div className="h-px bg-slate-100 my-1.5" />
