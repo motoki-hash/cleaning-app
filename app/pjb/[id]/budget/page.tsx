@@ -158,14 +158,14 @@ export default function BudgetPage() {
                   <tbody>
                     {list.map(s => (
                       <Fragment key={s.category.id}>
-                        <tr className="border-b border-slate-200 last:border-0 hover:bg-slate-50">
+                        <tr onClick={() => toggleExpand(s.category.id)} className="border-b border-slate-200 last:border-0 hover:bg-slate-50 cursor-pointer">
                           <td className="px-3 py-3 font-semibold text-slate-900 whitespace-nowrap">
-                            <button onClick={() => toggleExpand(s.category.id)} className="flex items-center gap-1.5 hover:text-slate-950">
+                            <div className="flex items-center gap-1.5">
                               <span className={`text-slate-400 text-[11.5px] transition-transform ${expanded.has(s.category.id) ? 'rotate-90' : ''}`}>▶</span>
                               {s.category.name}
-                            </button>
+                            </div>
                           </td>
-                          <td className="px-1 py-1.5 text-right">
+                          <td className="px-1 py-1.5 text-right cursor-default" onClick={e => e.stopPropagation()}>
                             <InlineAmount value={s.category.original_budget} onCommit={v => updateField(s.category, 'original_budget', v)} />
                           </td>
                           <td className={`px-3 py-3 text-right tabular-nums font-bold bg-blue-50/60 ${zeroMute(s.category.latest_budget, 'text-slate-900')}`}>
@@ -339,16 +339,19 @@ function BnsSection({
           <tbody>
             {rows.map(({ s, sales, cost, counted, profit }) => (
               <Fragment key={s.category.id}>
-                <tr className="border-b border-slate-200 last:border-0 hover:bg-slate-50">
+                <tr
+                  onClick={counted ? () => toggleExpand(s.category.id) : undefined}
+                  className={`border-b border-slate-200 last:border-0 hover:bg-slate-50 ${counted ? 'cursor-pointer' : ''}`}
+                >
                   <td className="px-3 py-3 font-semibold text-slate-900 whitespace-nowrap">
                     {counted ? (
-                      <button onClick={() => toggleExpand(s.category.id)} className="flex items-center gap-1.5 hover:text-slate-950">
+                      <div className="flex items-center gap-1.5">
                         <span className={`text-slate-400 text-[11.5px] transition-transform ${expanded.has(s.category.id) ? 'rotate-90' : ''}`}>▶</span>
                         {s.category.name}
-                      </button>
+                      </div>
                     ) : <span className="pl-[19px]">{s.category.name}</span>}
                   </td>
-                  <td className="px-1 py-1.5 text-right">
+                  <td className="px-1 py-1.5 text-right cursor-default" onClick={e => e.stopPropagation()}>
                     <InlineAmount value={sales} onCommit={v => updateField(s.category, 'original_budget', v)} />
                   </td>
                   <td className={`px-3 py-3 text-right tabular-nums font-bold bg-blue-50/60 ${counted ? zeroMute(cost, 'text-slate-900') : 'text-slate-300'}`} title={counted ? undefined : '原価に含めない項目です'}>
