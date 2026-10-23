@@ -141,16 +141,16 @@ export default function PjbHomePage() {
   return (
     <div className="min-h-screen bg-slate-100 pb-24">
       {/* 上部：サイドバーと同じ深いグリーンの帯（タイトル＋状況のタイル） */}
-      <div className="bg-[#17382f]">
+      <div className="bg-[#1e293b]">
         <header>
           <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
             <div className="flex items-baseline gap-3 min-w-0">
               <h1 className="text-[18px] font-semibold text-white whitespace-nowrap">PJ予算管理</h1>
-              <span className="hidden sm:inline text-[12px] font-mono tracking-wide text-emerald-100/50">BARE NOTE STUDIO</span>
+              <span className="hidden sm:inline text-[12px] font-mono tracking-wide text-slate-400">BARE NOTE STUDIO</span>
             </div>
             <button
               onClick={() => setShowNew(true)}
-              className="text-[14px] font-medium bg-[#e2efe8] hover:bg-white text-[#17382f] px-4 py-2 rounded-lg whitespace-nowrap"
+              className="text-[14px] font-medium bg-white hover:bg-slate-100 text-[#1e293b] px-4 py-2 rounded-lg whitespace-nowrap"
             >
               ＋ 新規案件
             </button>
@@ -282,7 +282,7 @@ function SummaryTile({
     <button
       onClick={onClick}
       className={`text-left rounded-xl border bg-white px-4 py-3 transition-colors ${
-        selected ? 'border-emerald-300 ring-2 ring-emerald-300' : 'border-transparent hover:border-emerald-200'
+        selected ? 'border-sky-300 ring-2 ring-sky-300' : 'border-transparent hover:border-slate-300'
       }`}
     >
       <div className="text-[13px] text-slate-500 mb-1">{label}</div>
