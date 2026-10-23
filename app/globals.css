@@ -46,7 +46,7 @@ input::placeholder, textarea::placeholder {
   --pjb-green-dark: #0f2a22;
   --pjb-mint: #e2efe8;
   --pjb-mint-soft: #eef6f1;
-  --pjb-bg: #eef1ef;
+  --pjb-bg: #e2e8e4;
   --pjb-ink: #14302a;
   color: var(--pjb-ink);
 }
@@ -76,9 +76,9 @@ input::placeholder, textarea::placeholder {
 }
 
 /* 面と線の色を、背景のグレーと同じ「緑がかったグレー」にそろえる（色味が混在して見えないように） */
-.pjb-theme .bg-slate-100 { background-color: #edf1ee; }
+.pjb-theme .bg-slate-100 { background-color: #ecf0ed; }
 .pjb-theme .bg-slate-50, .pjb-theme .bg-slate-50\/60 { background-color: #f6f8f6; }
-.pjb-theme .border-slate-200 { border-color: #dde5df; }
+.pjb-theme .border-slate-200 { border-color: #cbd6ce; }
 .pjb-theme .border-slate-300 { border-color: #c8d2cb; }
 .pjb-theme .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #e6ece8; }
 .pjb-theme .border-slate-100 { border-color: #e6ece8; }
@@ -89,3 +89,9 @@ input::placeholder, textarea::placeholder {
 .pjb-theme .border-l-emerald-500 { border-left-color: #10b981; }
 .pjb-theme .border-l-sky-400 { border-left-color: #38bdf8; }
 .pjb-theme .border-l-transparent { border-left-color: transparent; }
+
+/* カードを背景から浮かせる（白い面＋うすい影）。背景と見分けやすくする */
+.pjb-theme .bg-white.rounded-xl,
+.pjb-theme .bg-white.rounded-lg {
+  box-shadow: 0 1px 3px rgba(23, 56, 47, 0.12), 0 1px 2px rgba(23, 56, 47, 0.06);
+}
