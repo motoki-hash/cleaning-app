@@ -230,11 +230,12 @@ export function InlineText({
 export function KpiCard({
   label, value, sub, tone = 'default',
 }: { label: string; value: string; sub?: string; tone?: 'default' | 'warning' | 'danger' | 'good' }) {
-  const box = {
-    default: 'border-slate-200 bg-white',
-    warning: 'border-amber-300 bg-amber-50',
-    danger: 'border-rose-300 bg-rose-50',
-    good: 'border-emerald-300 bg-emerald-50',
+  // 色は「左のライン」と「数字」だけに使い、カードの背景は白で統一する（色が混在して見にくくならないように）
+  const accent = {
+    default: 'border-l-transparent',
+    warning: 'border-l-amber-400',
+    danger: 'border-l-rose-500',
+    good: 'border-l-emerald-500',
   }[tone]
   const valueColor = {
     default: 'text-slate-900',
@@ -243,7 +244,7 @@ export function KpiCard({
     good: 'text-emerald-700',
   }[tone]
   return (
-    <div className={`rounded-xl border px-4 py-3 ${box}`}>
+    <div className={`rounded-xl border border-slate-200 border-l-4 bg-white px-4 py-3 ${accent}`}>
       <div className="text-[13px] text-slate-500 mb-1">{label}</div>
       <div className={`text-[21px] leading-tight font-bold tabular-nums ${valueColor}`}>{value}</div>
       {sub && <div className="text-[12px] text-slate-500 mt-1">{sub}</div>}
@@ -292,31 +293,32 @@ export function EditableKpiCard({
   )
 }
 
-const SEVERITY_STYLE: Record<Alert['severity'], string> = {
-  danger: 'bg-rose-50 text-rose-700 border-rose-100',
-  warning: 'bg-amber-50 text-amber-700 border-amber-100',
-  info: 'bg-sky-50 text-sky-700 border-sky-100',
+const SEVERITY_STYLE: Record<Alert['severity'], { row: string; tag: string }> = {
+  danger: { row: 'border-l-rose-500', tag: 'text-rose-700' },
+  warning: { row: 'border-l-amber-400', tag: 'text-amber-700' },
+  info: { row: 'border-l-sky-400', tag: 'text-sky-700' },
 }
 
 export function AlertList({ alerts }: { alerts: Alert[] }) {
   if (alerts.length === 0) {
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[14px] text-emerald-700">
+      <div className="rounded-xl border border-slate-200 border-l-4 border-l-emerald-500 bg-white px-4 py-3 text-[14px] text-emerald-700">
         現在、要対応の項目はありません
       </div>
     )
   }
   return (
-    <div className="rounded-xl border border-rose-200 bg-white overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-rose-100 text-[14px] font-semibold text-rose-700">
+    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-slate-100 text-[14px] font-semibold text-slate-900">
         要対応 {alerts.length}件
       </div>
       <div className="divide-y divide-slate-100">
         {alerts.map(a => {
+          const st = SEVERITY_STYLE[a.severity]
           const content = (
-            <div className={`flex items-center gap-2 px-4 py-2.5 text-[13.5px] ${SEVERITY_STYLE[a.severity]}`}>
-              <span className="text-[11.5px] font-mono font-semibold tracking-wide">{a.kind}</span>
-              <span className="flex-1">{a.message}</span>
+            <div className={`flex items-center gap-3 px-4 py-2.5 text-[13.5px] border-l-4 bg-white hover:bg-slate-50 ${st.row}`}>
+              <span className={`text-[11px] font-mono font-semibold tracking-wide w-16 shrink-0 ${st.tag}`}>{a.kind}</span>
+              <span className="flex-1 text-slate-800">{a.message}</span>
               {a.href && <span className="text-slate-300">›</span>}
             </div>
           )
@@ -329,9 +331,9 @@ export function AlertList({ alerts }: { alerts: Alert[] }) {
 
 export function StatePill({ state }: { state: 'normal' | 'warning' | 'danger' }) {
   const map = {
-    normal: { label: '予算内', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    warning: { label: '要注意', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-    danger: { label: '超過', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
+    normal: { label: '予算内', cls: 'bg-white text-emerald-700 border-emerald-300' },
+    warning: { label: '要注意', cls: 'bg-white text-amber-700 border-amber-300' },
+    danger: { label: '超過', cls: 'bg-white text-rose-700 border-rose-300' },
   }[state]
   return <span className={`text-[12px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${map.cls}`}>{map.label}</span>
 }

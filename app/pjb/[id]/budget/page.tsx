@@ -148,7 +148,7 @@ export default function BudgetPage() {
                     <tr className="text-left text-slate-600 bg-slate-100 border-b border-slate-300 text-[13px]">
                       <th className="px-3 py-2.5 font-semibold whitespace-nowrap">項目</th>
                       <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">当初予算</th>
-                      <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap bg-blue-100/70 text-blue-800">実行費用</th>
+                      <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">実行費用</th>
                       <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">発注済</th>
                       <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">未発注予定</th>
                       <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">着地見込</th>
@@ -169,7 +169,7 @@ export default function BudgetPage() {
                           <td className="px-1 py-1.5 text-right cursor-default" onClick={e => e.stopPropagation()}>
                             <InlineAmount value={s.category.original_budget} formulaKey={`cat:${s.category.id}:original`} onCommit={v => updateField(s.category, 'original_budget', v)} />
                           </td>
-                          <td className={`px-3 py-3 text-right tabular-nums font-bold bg-blue-50/60 ${zeroMute(s.effectiveBudget, 'text-slate-900')}`}>
+                          <td className={`px-3 py-3 text-right tabular-nums font-bold ${zeroMute(s.effectiveBudget, 'text-slate-900')}`}>
                             {formatYen(s.effectiveBudget)}
                           </td>
                           <td className={`px-3 py-3 text-right tabular-nums ${zeroMute(s.orderedAmount, 'text-slate-800')}`}>{formatYen(s.orderedAmount)}</td>
@@ -373,7 +373,7 @@ function BnsSection({
             <tr className="text-left text-slate-600 bg-slate-100 border-b border-slate-300 text-[13px]">
               <th className="px-3 py-2.5 font-semibold whitespace-nowrap">項目 <span className="font-normal text-slate-400">（行をクリックして、売上・原価の内訳を入力）</span></th>
               <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">売上</th>
-              <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap bg-blue-100/70 text-blue-800">原価</th>
+              <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">原価</th>
               <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">利益</th>
             </tr>
           </thead>
@@ -388,7 +388,7 @@ function BnsSection({
                     </div>
                   </td>
                   <td className={`px-3 py-3 text-right tabular-nums font-semibold ${zeroMute(r.sales, 'text-slate-900')}`}>{formatYen(r.sales)}</td>
-                  <td className={`px-3 py-3 text-right tabular-nums font-bold bg-blue-50/60 ${r.counted ? zeroMute(r.cost, 'text-slate-900') : 'text-slate-300'}`} title={r.counted ? undefined : '原価に含めない項目です'}>
+                  <td className={`px-3 py-3 text-right tabular-nums font-bold ${r.counted ? zeroMute(r.cost, 'text-slate-900') : 'text-slate-300'}`} title={r.counted ? undefined : '原価に含めない項目です'}>
                     {r.counted ? formatYen(r.cost) : '—'}
                   </td>
                   <td className={`px-3 py-3 text-right tabular-nums font-semibold ${profitTone(r.profit)}`}>{formatSignedYen(r.profit)}</td>

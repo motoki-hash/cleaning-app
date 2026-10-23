@@ -74,3 +74,18 @@ input::placeholder, textarea::placeholder {
 @media (min-width: 640px) {
   .pjb-theme .sm\:rounded-2xl { border-radius: 10px; }
 }
+
+/* 面と線の色を、背景のグレーと同じ「緑がかったグレー」にそろえる（色味が混在して見えないように） */
+.pjb-theme .bg-slate-100 { background-color: #edf1ee; }
+.pjb-theme .bg-slate-50, .pjb-theme .bg-slate-50\/60 { background-color: #f6f8f6; }
+.pjb-theme .border-slate-200 { border-color: #dde5df; }
+.pjb-theme .border-slate-300 { border-color: #c8d2cb; }
+.pjb-theme .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #e6ece8; }
+.pjb-theme .border-slate-100 { border-color: #e6ece8; }
+
+/* 色つきの左ライン（KPIカードなど）は、上の「線の色」の上書きに負けないように指定し直す */
+.pjb-theme .border-l-amber-400 { border-left-color: #fbbf24; }
+.pjb-theme .border-l-rose-500 { border-left-color: #f43f5e; }
+.pjb-theme .border-l-emerald-500 { border-left-color: #10b981; }
+.pjb-theme .border-l-sky-400 { border-left-color: #38bdf8; }
+.pjb-theme .border-l-transparent { border-left-color: transparent; }
