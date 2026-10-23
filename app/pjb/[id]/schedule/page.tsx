@@ -8,6 +8,7 @@ import RoughPrintSheet from './RoughPrintSheet'
 import PreopenPrintSheet from './PreopenPrintSheet'
 import Gantt, { type GanttBar, type GanttCol } from '../../components/Gantt'
 import { isCommitEnter } from '../../components/ui'
+import { setUndoHandlers, clearUndoHandlers } from '@/lib/pjb/undo'
 import { useProjectData } from '@/lib/pjb/useProjectData'
 import {
   BAR_COLORS, CATEGORY_OPTIONS, colorForCategory, DEFAULT_MONTHS, MONTH_OPTIONS, roughCols, zeroCols, ROUGH_TEMPLATE, PREOPEN_TEMPLATE, DEFAULT_OPEN_WEEK,
@@ -40,7 +41,7 @@ type BarEdit =
 
 export default function SchedulePage() {
   const { id } = useParams<{ id: string }>()
-  const { project, loading, notFound, reload } = useProjectData(id)
+  const { project, loading, notFound, reload } = useProjectData(id, { registerUndo: false })
   const [kind, setKindState] = useState<ScheduleKind>('rough')
   useEffect(() => {
     try { const k = localStorage.getItem('pjb_schedule_kind'); if (k === 'zero' || k === 'rough' || k === 'preopen') setKindState(k) } catch {}
@@ -167,22 +168,17 @@ export default function SchedulePage() {
   const dialogOpenRef = useRef(false)
   dialogOpenRef.current = !!barEdit || !!taskEdit
 
+  // ⌘Z・ボタンは、Shell（共通の枠）から呼ばれる。スケジュールのページでは、スケジュールの操作を戻す
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey)) return
-      const k = e.key.toLowerCase()
-      if (k !== 'z' && k !== 'y') return
-      const t = e.target as HTMLElement | null
-      // 入力欄の中では、ブラウザ標準の「文字の取り消し」を優先する
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
-      if (dialogOpenRef.current) return
-      e.preventDefault()
-      if (k === 'y' || e.shiftKey) redoRef.current()
-      else undoRef.current()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+    setUndoHandlers({
+      undo: () => { if (!dialogOpenRef.current) undoRef.current() },
+      redo: () => { if (!dialogOpenRef.current) redoRef.current() },
+      canUndo: undoStack.length > 0 && !busy,
+      canRedo: redoStack.length > 0 && !busy,
+      owner: 'schedule',
+    })
+    return () => clearUndoHandlers('schedule')
+  }, [undoStack.length, redoStack.length, busy])
 
   const kindSchedules = useMemo(() => schedules.filter(sc => sc.kind === kind), [schedules, kind])
   const activeSchedule = kindSchedules.find(sc => sc.id === activeIds[kind]) ?? kindSchedules[0] ?? null
@@ -643,13 +639,7 @@ export default function SchedulePage() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1 ml-auto mr-3">
-          <button onClick={undo} disabled={busy || undoStack.length === 0} title="元に戻す（⌘Z / Ctrl+Z）"
-            className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-[13px] text-slate-700 hover:bg-slate-50 disabled:opacity-35">↶ 元に戻す</button>
-          <button onClick={redo} disabled={busy || redoStack.length === 0} title="やり直す（⌘⇧Z / Ctrl+Y）"
-            className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-[13px] text-slate-700 hover:bg-slate-50 disabled:opacity-35">↷ やり直す</button>
-        </div>
-        <div className="hidden sm:flex items-center gap-1.5 mr-2 text-[13px] text-slate-500">
+        <div className="hidden sm:flex items-center gap-1.5 ml-auto mr-2 text-[13px] text-slate-500">
           表示サイズ
           <div className="flex gap-0.5 rounded-lg bg-slate-200 p-0.5">
             {([['s', '小'], ['m', '標準'], ['l', '大']] as const).map(([k, label]) => (

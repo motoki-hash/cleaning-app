@@ -8,6 +8,7 @@ import type { ProjectStatus } from '@/lib/pjb/types'
 import { logActivity } from '@/lib/pjb/activity'
 import QuickAddSheet from './QuickAddSheet'
 import { InlineText } from './ui'
+import { getUndoHandlers, useUndoHandlers } from '@/lib/pjb/undo'
 
 const TABS = [
   { key: 'dashboard', label: 'ダッシュボード', href: '', group: '全体' },
@@ -70,6 +71,25 @@ export default function Shell({
   const [checked, setChecked] = useState(false)
   const [status, setStatus] = useState<ProjectStatus | undefined>(projectStatus)
   const [name, setName] = useState(projectName)
+  const undoH = useUndoHandlers()
+
+  // ⌘Z（Ctrl+Z）で元に戻す／⌘⇧Z（Ctrl+Y）でやり直す。入力欄の中では、文字の取り消しを優先する
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return
+      const k = e.key.toLowerCase()
+      if (k !== 'z' && k !== 'y') return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      const h = getUndoHandlers()
+      if (!h) return
+      e.preventDefault()
+      if (k === 'y' || e.shiftKey) { if (h.canRedo) h.redo() }
+      else if (h.canUndo) h.undo()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => { setStatus(projectStatus) }, [projectStatus])
   useEffect(() => { setName(projectName) }, [projectName])
@@ -140,7 +160,7 @@ export default function Shell({
         <div className="px-4 pt-4 pb-4 border-b border-white/10">
           <Link href="/pjb" className="text-[13px] text-emerald-100/70 hover:text-white">‹ 案件一覧</Link>
           <div className="mt-3 flex items-start gap-1.5 text-[16px] font-semibold text-white leading-snug break-words">
-            {name ? <InlineText value={name} onCommit={renameProject} className="!whitespace-normal !overflow-visible hover:!bg-white/10" /> : 'プロジェクト'}
+            {name ? <InlineText value={name} onCommit={renameProject} className="!whitespace-normal !overflow-visible hover:!bg-white/10" inputClassName="!bg-white !text-slate-900 !w-full" /> : 'プロジェクト'}
             {name && <span className="text-[12px] font-normal text-emerald-100/50 mt-0.5 whitespace-nowrap">✎ 編集</span>}
           </div>
           <div className="mt-2">{statusSelect}</div>
@@ -166,6 +186,16 @@ export default function Shell({
             </div>
           ))}
         </nav>
+        <div className="px-3 py-3 border-t border-white/10 flex gap-2">
+          <button
+            onClick={() => undoH?.undo()} disabled={!undoH?.canUndo} title="元に戻す（⌘Z / Ctrl+Z）"
+            className="flex-1 text-[13px] py-2 rounded-lg border border-white/20 text-emerald-50 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
+          >↶ 元に戻す</button>
+          <button
+            onClick={() => undoH?.redo()} disabled={!undoH?.canRedo} title="やり直す（⌘⇧Z / Ctrl+Y）"
+            className="flex-1 text-[13px] py-2 rounded-lg border border-white/20 text-emerald-50 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
+          >↷ やり直す</button>
+        </div>
       </aside>
 
       {/* スマホ・タブレット: 上部ヘッダー＋横スクロールのタブ */}
@@ -177,6 +207,8 @@ export default function Shell({
               {name ? <InlineText value={name} onCommit={renameProject} className="max-w-full" /> : 'プロジェクト'}
             </div>
           </div>
+          <button onClick={() => undoH?.undo()} disabled={!undoH?.canUndo} aria-label="元に戻す" className="px-1.5 text-[17px] text-slate-500 disabled:opacity-25">↶</button>
+          <button onClick={() => undoH?.redo()} disabled={!undoH?.canRedo} aria-label="やり直す" className="px-1.5 text-[17px] text-slate-500 disabled:opacity-25">↷</button>
           {statusSelect}
         </div>
         <nav className="flex gap-1.5 px-3 pb-2 overflow-x-auto no-scrollbar">

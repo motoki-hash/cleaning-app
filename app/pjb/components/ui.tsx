@@ -134,8 +134,8 @@ export function InlineNumber({
 
 // タップ/クリックでその場編集できるテキスト表示。onCommitは値が変わり、空でないときだけ呼ばれる。
 export function InlineText({
-  value, onCommit, placeholder, emptyLabel, className,
-}: { value: string; onCommit: (v: string) => void; placeholder?: string; emptyLabel?: string; className?: string }) {
+  value, onCommit, placeholder, emptyLabel, className, inputClassName,
+}: { value: string; onCommit: (v: string) => void; placeholder?: string; emptyLabel?: string; className?: string; inputClassName?: string }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
 
@@ -165,7 +165,7 @@ export function InlineText({
       onBlur={commit}
       onKeyDown={e => { if (isCommitEnter(e)) (e.target as HTMLInputElement).blur() }}
       onFocus={e => e.currentTarget.select()}
-      className={`px-1.5 py-0.5 -mx-1 rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300 ${className || ''}`}
+      className={`px-1.5 py-0.5 -mx-1 rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300 ${className || ''} ${inputClassName || ''}`}
     />
   )
 }

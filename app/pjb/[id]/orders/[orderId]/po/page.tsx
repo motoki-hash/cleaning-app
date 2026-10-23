@@ -12,7 +12,7 @@ const round1 = (n: number) => Math.round(n)
 
 export default function PurchaseOrderPage() {
   const { id, orderId } = useParams<{ id: string; orderId: string }>()
-  const { project, categories, orders, vendors, loading, notFound } = useProjectData(id)
+  const { project, categories, orders, vendors, loading, notFound } = useProjectData(id, { registerUndo: false })
 
   const order = useMemo(() => orders.find(o => o.id === orderId), [orders, orderId])
   const category = useMemo(() => categories.find(c => c.id === order?.category_id), [categories, order])
