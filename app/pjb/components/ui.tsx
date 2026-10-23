@@ -1,14 +1,17 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { Alert } from '@/lib/pjb/types'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
+import { normalizeExpr, isPlainNumber, evaluateExpr } from '@/lib/pjb/calcExpr'
 
 // Enterで確定する入力欄用。日本語の変換を確定するEnterでは、保存されないようにする
 export const isCommitEnter = (e: React.KeyboardEvent) => e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229
 
 // 入力中に3桁カンマを自動で付ける金額入力。valueは数字のみの文字列（マイナス可）で受け渡す。
+// スプレッドシートのように、計算式も入れられる（例：150万+30万 / 1200000*1.1）。
+// 式を打っている間は、そのまま表示して、結果を下にプレビューする。Enterか、枠の外を押すと、結果の金額になる。
 function toCommas(raw: string) {
   if (!raw) return ''
   const neg = raw.startsWith('-')
@@ -16,26 +19,59 @@ function toCommas(raw: string) {
   if (!digits) return neg ? '-' : ''
   return (neg ? '-' : '') + Number(digits).toLocaleString('ja-JP')
 }
-function toRaw(input: string, allowNegative: boolean) {
-  const normalized = input.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/[−ー]/g, '-')
-  const neg = allowNegative && normalized.trim().startsWith('-')
-  const digits = normalized.replace(/\D/g, '')
-  return digits ? (neg ? '-' : '') + digits : (neg ? '-' : '')
-}
 
 export function MoneyInput({
   value, onChange, className, placeholder, autoFocus, allowNegative,
 }: { value: string; onChange: (v: string) => void; className?: string; placeholder?: string; autoFocus?: boolean; allowNegative?: boolean }) {
+  const [expr, setExpr] = useState<string | null>(null)
+  const [hintPos, setHintPos] = useState<{ left: number; top: number } | null>(null)
+  const ref = useRef<HTMLInputElement>(null)
+
+  const place = () => {
+    const r = ref.current?.getBoundingClientRect()
+    if (r) setHintPos({ left: r.left, top: r.bottom + 2 })
+  }
+
+  const handle = (raw: string) => {
+    const t = normalizeExpr(raw)
+    if (isPlainNumber(t, !!allowNegative)) {
+      setExpr(null); setHintPos(null)
+      const neg = !!allowNegative && t.startsWith('-')
+      const digits = t.replace(/\D/g, '')
+      onChange(digits ? (neg ? '-' : '') + digits : (neg ? '-' : ''))
+      return
+    }
+    setExpr(raw)
+    place()
+    const r = evaluateExpr(raw)
+    if (r !== null) onChange(String(Math.round(r)))
+  }
+
+  const result = expr !== null ? evaluateExpr(expr) : null
+
   return (
-    <input
-      type="text"
-      inputMode="numeric"
-      autoFocus={autoFocus}
-      value={toCommas(value)}
-      onChange={e => onChange(toRaw(e.target.value, !!allowNegative))}
-      placeholder={placeholder}
-      className={className}
-    />
+    <>
+      <input
+        ref={ref}
+        type="text"
+        inputMode="text"
+        autoFocus={autoFocus}
+        value={expr ?? toCommas(value)}
+        onChange={e => handle(e.target.value)}
+        onBlur={() => { setExpr(null); setHintPos(null) }}
+        placeholder={placeholder}
+        title="計算式も入力できます（例：150万+30万 / 1200000*1.1）"
+        className={className}
+      />
+      {expr !== null && hintPos && (
+        <span
+          className={`fixed z-50 rounded px-2 py-1 text-[12px] shadow-lg whitespace-nowrap pointer-events-none ${result === null ? 'bg-rose-600 text-white' : 'bg-slate-800 text-white'}`}
+          style={{ left: hintPos.left, top: hintPos.top }}
+        >
+          {result === null ? '式を確認してください' : `= ${formatYen(Math.round(result))}`}
+        </span>
+      )}
+    </>
   )
 }
 
