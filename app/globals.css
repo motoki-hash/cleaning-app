@@ -46,7 +46,7 @@ input::placeholder, textarea::placeholder {
   --pjb-green-dark: #0f172a;
   --pjb-mint: #e2e8f0;
   --pjb-mint-soft: #f1f5f9;
-  --pjb-bg: #e9eef4;
+  --pjb-bg: #ffffff;
   --pjb-ink: #0f172a;
   color: var(--pjb-ink);
 }

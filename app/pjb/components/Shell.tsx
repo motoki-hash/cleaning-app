@@ -156,27 +156,27 @@ export default function Shell({
   return (
     <div className="min-h-screen bg-slate-100 pb-24 print:min-h-0 print:pb-0 print:bg-white">
       {/* PC: 左サイドメニュー（lg以上のみ表示） */}
-      <aside className="hidden lg:flex print:!hidden fixed inset-y-0 left-0 w-60 flex-col bg-[#1e293b] border-r border-[#0f172a] z-20">
+      <aside className="hidden lg:flex print:!hidden fixed inset-y-0 left-0 w-60 flex-col bg-[#17382f] border-r border-[#0f2a22] z-20">
         <div className="px-4 pt-4 pb-4 border-b border-white/10">
-          <Link href="/pjb" className="text-[13px] text-slate-400 hover:text-white">‹ 案件一覧</Link>
+          <Link href="/pjb" className="text-[13px] text-emerald-100/70 hover:text-white">‹ 案件一覧</Link>
           <div className="mt-3 flex items-start gap-1.5 text-[16px] font-semibold text-white leading-snug break-words">
             {name ? <InlineText value={name} onCommit={renameProject} className="!whitespace-normal !overflow-visible hover:!bg-white/10" inputClassName="!bg-white !text-slate-900 !w-full" /> : 'プロジェクト'}
-            {name && <span className="text-[12px] font-normal text-slate-400 mt-0.5 whitespace-nowrap">✎ 編集</span>}
+            {name && <span className="text-[12px] font-normal text-emerald-100/50 mt-0.5 whitespace-nowrap">✎ 編集</span>}
           </div>
           <div className="mt-2">{statusSelect}</div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-3">
           {NAV_GROUPS.map(group => (
             <div key={group} className="mb-4">
-              <div className="px-2 mb-1 text-[12px] font-medium text-slate-400">{group}</div>
+              <div className="px-2 mb-1 text-[12px] font-medium text-emerald-100/50">{group}</div>
               {TABS.filter(t => t.group === group).map(t => (
                 <Link
                   key={t.key}
                   href={`/pjb/${projectId}${t.href}`}
                   className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[14px] transition-colors ${
                     active === t.key
-                      ? 'bg-[#e2e8f0] text-[#1e293b] font-semibold'
-                      : 'text-slate-200 hover:bg-white/10'
+                      ? 'bg-[#e2efe8] text-[#17382f] font-semibold'
+                      : 'text-emerald-50/90 hover:bg-white/10'
                   }`}
                 >
                   <NavIcon name={t.key} />
@@ -189,11 +189,11 @@ export default function Shell({
         <div className="px-3 py-3 border-t border-white/10 flex gap-2">
           <button
             onClick={() => undoH?.undo()} disabled={!undoH?.canUndo} title="元に戻す（⌘Z / Ctrl+Z）"
-            className="flex-1 text-[13px] py-2 rounded-lg border border-white/20 text-slate-100 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
+            className="flex-1 text-[13px] py-2 rounded-lg border border-white/20 text-emerald-50 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
           >↶ 元に戻す</button>
           <button
             onClick={() => undoH?.redo()} disabled={!undoH?.canRedo} title="やり直す（⌘⇧Z / Ctrl+Y）"
-            className="flex-1 text-[13px] py-2 rounded-lg border border-white/20 text-slate-100 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
+            className="flex-1 text-[13px] py-2 rounded-lg border border-white/20 text-emerald-50 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
           >↷ やり直す</button>
         </div>
       </aside>
