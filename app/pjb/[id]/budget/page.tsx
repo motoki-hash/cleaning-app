@@ -315,7 +315,7 @@ function BnsSection({
                   <td className="px-4 py-2.5 font-semibold text-slate-900">{r.label}</td>
                   {r.auto ? (
                     <td className={`px-3 py-2.5 text-right tabular-nums font-semibold ${r.budget === 0 ? 'text-slate-300' : r.budget < 0 ? 'text-rose-600' : 'text-slate-800'}`} title="売上の予算 − 原価の予算で、自動計算されます">
-                      {formatSignedYen(r.budget)} <span className="text-[11px] font-normal text-slate-400 ml-1">自動</span>
+                      <span className="text-[11px] font-normal text-slate-400 mr-2">自動</span>{formatSignedYen(r.budget)}
                     </td>
                   ) : (
                     <td className="px-1 py-1 text-right">
