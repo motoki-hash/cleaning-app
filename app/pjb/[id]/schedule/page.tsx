@@ -13,7 +13,7 @@ import {
   roughWeekRange, roughGroups, roughWeekNumbers, fmtMd, fmtYmdJp, parseYmd, toYmd, addDays, diffDays, kindLabel, zeroWeekLabel, WEEKS_PER_MONTH, barText, stripDuration, WEEKS_PER_MONTH_ZERO, WEEKS_PER_MONTH_CALENDAR, roughBarWeeksExcludingBreaks, daysExcludingBreaks,
 } from '@/lib/pjb/schedule'
 import { breakInRange, weekBreakInfo } from '@/lib/pjb/holidays'
-import type { Project, ScheduleBar, ScheduleKind, ScheduleTask } from '@/lib/pjb/types'
+import type { Project, ScheduleBar, ScheduleKind, ScheduleSet, ScheduleTask } from '@/lib/pjb/types'
 
 const ZOOM = { s: 0.7, m: 1, l: 1.3 } as const
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
@@ -55,6 +55,22 @@ export default function SchedulePage() {
   const [barEdit, setBarEdit] = useState<BarEdit | null>(null)
   const [taskEdit, setTaskEdit] = useState<ScheduleTask | 'new' | null>(null)
   const [busy, setBusy] = useState(false)
+  // 「版」（例：社内用・投資家用）。種類（ゼロ工程表／概算／OPEN前）ごとに複数持てる
+  const [schedules, setSchedules] = useState<ScheduleSet[]>([])
+  const [schedulesReady, setSchedulesReady] = useState(false)   // SQLパッチ010が済んでいるときだけ true
+  const [activeIds, setActiveIds] = useState<Partial<Record<ScheduleKind, string>>>({})
+  const [schedDialog, setSchedDialog] = useState<'add' | 'rename' | 'copyTo' | null>(null)
+  useEffect(() => {
+    try { const raw = localStorage.getItem(`pjb_sched_active_${id}`); if (raw) setActiveIds(JSON.parse(raw)) } catch {}
+  }, [id])
+  const pickSchedule = (k: ScheduleKind, sid: string | null) => {
+    setActiveIds(prev => {
+      const next = { ...prev }
+      if (sid) next[k] = sid; else delete next[k]
+      try { localStorage.setItem(`pjb_sched_active_${id}`, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
   const [templates, setTemplates] = useState<Partial<Record<ScheduleKind, SavedTemplate>>>({})
   const loadTemplates = useCallback(async () => {
     const { data, error } = await supabase.from('pjb_schedule_templates').select('*')
@@ -87,13 +103,17 @@ export default function SchedulePage() {
   }
 
   const loadSchedule = useCallback(async () => {
-    const [t, b] = await Promise.all([
+    const [t, b, sc] = await Promise.all([
       supabase.from('pjb_schedule_tasks').select('*').eq('project_id', id).order('sort_order'),
       supabase.from('pjb_schedule_bars').select('*').eq('project_id', id),
+      supabase.from('pjb_schedules').select('*').eq('project_id', id).order('sort_order').order('created_at'),
     ])
     const err = t.error || b.error
     if (err) { setSetupError(err.message); setReady(true); return }
     setSetupError('')
+    // 版のテーブル（SQLパッチ010）がまだないときは、従来どおり1つだけのスケジュールとして扱う
+    setSchedulesReady(!sc.error)
+    setSchedules(sc.error ? [] : (sc.data || []) as ScheduleSet[])
     setTasks((t.data || []) as ScheduleTask[])
     setBars((b.data || []) as ScheduleBar[])
     setReady(true)
@@ -163,8 +183,28 @@ export default function SchedulePage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const kindTasks = useMemo(() => tasks.filter(t => t.kind === kind).sort((a, b) => a.sort_order - b.sort_order), [tasks, kind])
-  const kindBars = useMemo(() => bars.filter(b => b.kind === kind), [bars, kind])
+  const kindSchedules = useMemo(() => schedules.filter(sc => sc.kind === kind), [schedules, kind])
+  const activeSchedule = kindSchedules.find(sc => sc.id === activeIds[kind]) ?? kindSchedules[0] ?? null
+  const kindTasks = useMemo(
+    () => tasks
+      .filter(t => t.kind === kind && (!schedulesReady || (t.schedule_id ?? kindSchedules[0]?.id) === activeSchedule?.id))
+      .sort((a, b) => a.sort_order - b.sort_order),
+    [tasks, kind, schedulesReady, kindSchedules, activeSchedule?.id],
+  )
+  const kindBars = useMemo(() => {
+    const ids = new Set(kindTasks.map(t => t.id))
+    return bars.filter(b => b.kind === kind && ids.has(b.task_id))
+  }, [bars, kind, kindTasks])
+
+  // 今の版のIDを返す（まだ版がなければ「標準」を作る）。版のテーブルがない場合は null
+  const ensureScheduleId = async (): Promise<string | null> => {
+    if (!schedulesReady) return null
+    if (activeSchedule) return activeSchedule.id
+    const { data, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind, name: '標準', sort_order: 0 }).select('id').single()
+    if (error || !data) throw new Error(error?.message || '版を作成できませんでした')
+    pickSchedule(kind, data.id)
+    return data.id
+  }
 
   const updateProject = async (patch: Partial<Project>) => {
     const { error } = await supabase.from('pjb_projects').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
@@ -189,13 +229,15 @@ export default function SchedulePage() {
         ? (saved?.anchor === 'open' ? (openDate ?? addDays(previewStart, 48)) : previewStart)
         : previewStart
 
+      const sid = await ensureScheduleId()
+      const sidPatch = sid ? { schedule_id: sid } : {}
       const { data, error } = await supabase.from('pjb_schedule_tasks').insert(
-        source.map((t, i) => ({ project_id: id, kind, sort_order: i + 1, category: t.category, name: t.name, assignee: t.assignee || '' }))
+        source.map((t, i) => ({ project_id: id, kind, ...sidPatch, sort_order: i + 1, category: t.category, name: t.name, assignee: t.assignee || '' }))
       ).select('id, sort_order')
       if (error || !data) throw new Error(error?.message || '作成に失敗しました')
       const byOrder = new Map(data.map((r: { id: string; sort_order: number }) => [r.sort_order, r.id]))
       const rows = source.flatMap((t, i) => t.bars.map(b => ({
-        task_id: byOrder.get(i + 1), project_id: id, kind, label: b.label, color: b.color,
+        task_id: byOrder.get(i + 1), project_id: id, kind, ...sidPatch, label: b.label, color: b.color,
         ...(kind !== 'preopen'
           ? { start_week: b.start_week, length_weeks: b.length_weeks }
           : { start_date: toYmd(addDays(anchorDate, b.start_offset ?? 0)), end_date: toYmd(addDays(anchorDate, b.end_offset ?? b.start_offset ?? 0)) }),
@@ -221,7 +263,7 @@ export default function SchedulePage() {
     const anchorDate = kind === 'preopen' ? (openDate ?? previewStart) : null
     const tasksData: TemplateTask[] = kindTasks.map(t => ({
       category: t.category, name: t.name, assignee: t.assignee,
-      bars: bars.filter(b => b.task_id === t.id).map(b => kind !== 'preopen'
+      bars: kindBars.filter(b => b.task_id === t.id).map(b => kind !== 'preopen'
         ? { start_week: b.start_week, length_weeks: b.length_weeks, label: b.label, color: b.color }
         : { start_offset: diffDays(anchorDate!, parseYmd(b.start_date!)), end_offset: diffDays(anchorDate!, parseYmd(b.end_date!)), label: b.label, color: b.color }),
     }))
@@ -237,6 +279,89 @@ export default function SchedulePage() {
     if (error) { alert(`雛形を保存できませんでした：${error.message}（SQLパッチ009を実行していない場合は、先に実行してください）`); return }
     await loadTemplates()
     alert('雛形として保存しました。新しい案件で「雛形を読み込む」を押すと、この内容が出ます。')
+  }
+
+  // ---- 版（社内用・投資家用など）の管理 ----
+  const copyContent = async (
+    srcTasks: ScheduleTask[], srcBars: ScheduleBar[],
+    target: { projectId: string; scheduleId: string; dayShift: number },
+  ) => {
+    if (srcTasks.length === 0) return
+    const { data, error } = await supabase.from('pjb_schedule_tasks').insert(
+      srcTasks.map((t, i) => ({
+        project_id: target.projectId, kind, schedule_id: target.scheduleId, sort_order: i + 1,
+        category: t.category, name: t.name, assignee: t.assignee,
+      }))
+    ).select('id, sort_order')
+    if (error || !data) throw new Error(error?.message || 'コピーに失敗しました')
+    const byOrder = new Map(data.map((r: { id: string; sort_order: number }) => [r.sort_order, r.id]))
+    const shift = (d: string | null) => (d ? toYmd(addDays(parseYmd(d), target.dayShift)) : null)
+    const rows = srcTasks.flatMap((t, i) => srcBars.filter(b => b.task_id === t.id).map(b => ({
+      task_id: byOrder.get(i + 1), project_id: target.projectId, kind, schedule_id: target.scheduleId,
+      start_week: b.start_week, length_weeks: b.length_weeks, start_date: shift(b.start_date), end_date: shift(b.end_date),
+      label: b.label, color: b.color,
+    })))
+    if (rows.length) {
+      const { error: e2 } = await supabase.from('pjb_schedule_bars').insert(rows)
+      if (e2) throw new Error(e2.message)
+    }
+  }
+
+  const createSchedule = async (name: string, copy: boolean) => {
+    if (!schedulesReady) return
+    setBusy(true)
+    try {
+      const nextOrder = (kindSchedules.reduce((m, sc) => Math.max(m, sc.sort_order), -1)) + 1
+      const { data, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind, name, sort_order: nextOrder }).select('id').single()
+      if (error || !data) throw new Error(error?.message || '作成できませんでした')
+      if (copy) await copyContent(kindTasks, kindBars, { projectId: id, scheduleId: data.id, dayShift: 0 })
+      pickSchedule(kind, data.id)
+      await loadSchedule()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '作成できませんでした')
+    }
+    setBusy(false)
+  }
+
+  const renameSchedule = async (name: string) => {
+    if (!activeSchedule) return
+    setBusy(true)
+    const { error } = await supabase.from('pjb_schedules').update({ name }).eq('id', activeSchedule.id)
+    setBusy(false)
+    if (error) { alert(`名前を変更できませんでした：${error.message}`); return }
+    await loadSchedule()
+  }
+
+  const deleteSchedule = async () => {
+    if (!activeSchedule) return
+    if (!confirm(`「${activeSchedule.name}」の${kindLabel[kind]}を削除します。中の工程とバーもすべて消えます（元に戻せません）。よろしいですか？`)) return
+    setBusy(true)
+    const { error } = await supabase.from('pjb_schedules').delete().eq('id', activeSchedule.id)
+    setBusy(false)
+    if (error) { alert(`削除できませんでした：${error.message}`); return }
+    pickSchedule(kind, null)
+    await loadSchedule()
+  }
+
+  // 別の案件に、今の版をコピーする（OPEN前スケジュールは、OPEN日のずれに合わせて日付をずらす）
+  const copyToProject = async (targetId: string, name: string) => {
+    if (!project) return
+    setBusy(true)
+    try {
+      const { data: target, error: te } = await supabase.from('pjb_projects').select('id, name, open_date').eq('id', targetId).single()
+      if (te || !target) throw new Error(te?.message || 'コピー先の案件が見つかりません')
+      const { data: existing } = await supabase.from('pjb_schedules').select('sort_order').eq('project_id', targetId).eq('kind', kind)
+      const nextOrder = ((existing || []).reduce((m: number, r: { sort_order: number }) => Math.max(m, r.sort_order), -1)) + 1
+      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: targetId, kind, name, sort_order: nextOrder }).select('id').single()
+      if (error || !created) throw new Error(error?.message || 'コピーに失敗しました')
+      const dayShift = kind === 'preopen' && project.open_date && target.open_date
+        ? diffDays(parseYmd(project.open_date), parseYmd(target.open_date)) : 0
+      await copyContent(kindTasks, kindBars, { projectId: targetId, scheduleId: created.id, dayShift })
+      alert(`「${target.name}」に、「${name}」としてコピーしました。`)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'コピーに失敗しました')
+    }
+    setBusy(false)
   }
 
   // ---- バー操作 ----
@@ -262,7 +387,10 @@ export default function SchedulePage() {
     setBusy(true)
     const { error } = edit.mode === 'edit'
       ? await supabase.from('pjb_schedule_bars').update({ ...patch, label: v.label, color: v.color }).eq('id', edit.bar.id)
-      : await supabase.from('pjb_schedule_bars').insert({ ...patch, label: v.label, color: v.color, task_id: edit.taskId, project_id: id, kind })
+      : await supabase.from('pjb_schedule_bars').insert({
+          ...patch, label: v.label, color: v.color, task_id: edit.taskId, project_id: id, kind,
+          ...(schedulesReady ? { schedule_id: tasks.find(t => t.id === edit.taskId)?.schedule_id ?? activeSchedule?.id ?? null } : {}),
+        })
     setBusy(false)
     if (error) { alert(`保存に失敗しました：${error.message}`); return }
     setBarEdit(null)
@@ -282,9 +410,11 @@ export default function SchedulePage() {
   const saveTask = async (existing: ScheduleTask | 'new', v: { category: string; name: string; assignee: string }) => {
     pushHistory()
     setBusy(true)
+    let sid: string | null = null
+    try { if (existing === 'new') sid = await ensureScheduleId() } catch (e) { setBusy(false); alert(e instanceof Error ? e.message : '保存に失敗しました'); return }
     const { error } = existing === 'new'
       ? await supabase.from('pjb_schedule_tasks').insert({
-          project_id: id, kind, sort_order: (kindTasks[kindTasks.length - 1]?.sort_order || 0) + 1, ...v,
+          project_id: id, kind, ...(sid ? { schedule_id: sid } : {}), sort_order: (kindTasks[kindTasks.length - 1]?.sort_order || 0) + 1, ...v,
         })
       : await supabase.from('pjb_schedule_tasks').update(v).eq('id', existing.id)
     setBusy(false)
@@ -322,6 +452,7 @@ export default function SchedulePage() {
     setBusy(true)
     const { error } = await supabase.from('pjb_schedule_bars').insert({
       task_id: bar.task_id, project_id: id, kind, label: bar.label, color: bar.color, ...patch,
+      ...(schedulesReady ? { schedule_id: bar.schedule_id ?? activeSchedule?.id ?? null } : {}),
     })
     setBusy(false)
     if (error) { alert(`複製に失敗しました：${error.message}`); return }
@@ -333,10 +464,11 @@ export default function SchedulePage() {
     setBusy(true)
     const { data: created, error } = await supabase.from('pjb_schedule_tasks').insert({
       project_id: id, kind, sort_order: 9999, category: task.category, name: `${task.name}（コピー）`, assignee: task.assignee,
+      ...(schedulesReady ? { schedule_id: task.schedule_id ?? activeSchedule?.id ?? null } : {}),
     }).select('id').single()
     if (error || !created) { setBusy(false); alert(`複製に失敗しました：${error?.message}`); return }
     const copies = bars.filter(b => b.task_id === task.id).map(b => ({
-      task_id: created.id, project_id: id, kind, start_week: b.start_week, length_weeks: b.length_weeks,
+      task_id: created.id, project_id: id, kind, ...(schedulesReady ? { schedule_id: task.schedule_id ?? activeSchedule?.id ?? null } : {}), start_week: b.start_week, length_weeks: b.length_weeks,
       start_date: b.start_date, end_date: b.end_date, label: b.label, color: b.color,
     }))
     if (copies.length) await supabase.from('pjb_schedule_bars').insert(copies)
@@ -402,10 +534,10 @@ export default function SchedulePage() {
 
   const preopenCols = useMemo(() => {
     let end = openDate ? openDate : addDays(previewStart, 48)
-    for (const b of bars) if (b.kind === 'preopen' && b.end_date) { const e = parseYmd(b.end_date); if (e > end) end = e }
+    for (const b of kindBars) if (b.kind === 'preopen' && b.end_date) { const e = parseYmd(b.end_date); if (e > end) end = e }
     return Math.max(14, diffDays(previewStart, end) + 1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bars, previewStart, project?.open_date])
+  }, [kindBars, previewStart, project?.open_date])
 
   const gantt = useMemo(() => {
     if (kind === 'zero') {
@@ -479,6 +611,9 @@ export default function SchedulePage() {
     return <Shell projectId={id} active="schedule"><p className="text-center text-[14px] text-slate-400 py-10">読み込み中…</p></Shell>
   }
 
+  // 版が複数あるとき（または名前を付けたとき）だけ、PDFのタイトルに版の名前を入れる
+  const printName = activeSchedule && (kindSchedules.length > 1 || activeSchedule.name !== '標準') ? activeSchedule.name : undefined
+
   const rawNeedsPatch = setupError && /pjb_schedule|schema cache|does not exist/i.test(setupError)
 
   const leftCols = kind !== 'preopen'
@@ -525,9 +660,36 @@ export default function SchedulePage() {
         <button onClick={() => window.print()} className="hidden sm:block text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">印刷／PDF</button>
       </div>
 
+      {/* 版（社内用・投資家用など） */}
+      {schedulesReady && (
+        <div className="flex items-center gap-2 flex-wrap mb-4 print:hidden">
+          <span className="text-[12.5px] text-slate-500 mr-1">版</span>
+          {kindSchedules.map(sc => (
+            <button
+              key={sc.id} onClick={() => pickSchedule(kind, sc.id)}
+              className={`text-[13.5px] px-3 py-1.5 rounded-full border whitespace-nowrap ${
+                activeSchedule?.id === sc.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              {sc.name}
+            </button>
+          ))}
+          <button onClick={() => setSchedDialog('add')} disabled={busy}
+            className="text-[13px] px-3 py-1.5 rounded-full border border-dashed border-slate-300 bg-white text-slate-500 hover:text-slate-800">＋ 版を追加</button>
+          {activeSchedule && (
+            <span className="flex items-center gap-3 ml-2 text-[12.5px] text-slate-400">
+              <button onClick={() => setSchedDialog('rename')} className="hover:text-slate-700">名前を変更</button>
+              <button onClick={() => createSchedule(`${activeSchedule.name}（コピー）`, true)} disabled={busy} className="hover:text-slate-700">複製</button>
+              <button onClick={() => setSchedDialog('copyTo')} className="hover:text-slate-700">別の案件にコピー</button>
+              <button onClick={deleteSchedule} className="hover:text-rose-600">削除</button>
+            </span>
+          )}
+        </div>
+      )}
+
       {kind !== 'preopen'
-        ? <RoughPrintSheet mode={kind} project={project} tasks={kindTasks} bars={bars} />
-        : <PreopenPrintSheet project={project} tasks={kindTasks} bars={bars} start={previewStart} cols={preopenCols} />}
+        ? <RoughPrintSheet mode={kind} project={project} tasks={kindTasks} bars={kindBars} scheduleName={printName} />
+        : <PreopenPrintSheet project={project} tasks={kindTasks} bars={kindBars} start={previewStart} cols={preopenCols} scheduleName={printName} />}
       <div className="print:hidden">
 
       {rawNeedsPatch && (
@@ -678,6 +840,22 @@ export default function SchedulePage() {
 
       </div>
 
+      {schedDialog && (
+        <ScheduleDialog
+          mode={schedDialog}
+          activeName={activeSchedule?.name ?? ''}
+          hasActive={!!activeSchedule}
+          currentProjectId={id}
+          busy={busy}
+          onClose={() => setSchedDialog(null)}
+          onSubmit={async v => {
+            setSchedDialog(null)
+            if (schedDialog === 'add') await createSchedule(v.name, v.copy)
+            else if (schedDialog === 'rename') await renameSchedule(v.name)
+            else await copyToProject(v.targetId, v.name)
+          }}
+        />
+      )}
       {barEdit && (
         <BarDialog
           key={barEdit.mode === 'edit' ? barEdit.bar.id : `new-${barEdit.taskId}-${barEdit.start}`}
@@ -714,6 +892,64 @@ export default function SchedulePage() {
         />
       )}
     </Shell>
+  )
+}
+
+function ScheduleDialog({
+  mode, activeName, hasActive, currentProjectId, busy, onClose, onSubmit,
+}: {
+  mode: 'add' | 'rename' | 'copyTo'; activeName: string; hasActive: boolean; currentProjectId: string; busy: boolean
+  onClose: () => void
+  onSubmit: (v: { name: string; copy: boolean; targetId: string }) => void
+}) {
+  const [name, setName] = useState(mode === 'rename' ? activeName : mode === 'copyTo' ? activeName : '')
+  const [copy, setCopy] = useState(hasActive)
+  const [targetId, setTargetId] = useState('')
+  const [projectOptions, setProjectOptions] = useState<Array<{ id: string; name: string }>>([])
+
+  useEffect(() => {
+    if (mode !== 'copyTo') return
+    supabase.from('pjb_projects').select('id, name').order('created_at', { ascending: false }).then(({ data }) => {
+      setProjectOptions((data || []) as Array<{ id: string; name: string }>)
+    })
+  }, [mode])
+
+  const title = mode === 'add' ? '版を追加' : mode === 'rename' ? '版の名前を変更' : '別の案件にコピー'
+  const canSubmit = name.trim() !== '' && (mode !== 'copyTo' || targetId !== '')
+
+  return (
+    <Modal title={title} onClose={onClose}>
+      <div className="grid gap-3">
+        <label className="grid gap-1">
+          <span className="text-[13px] text-slate-500">{mode === 'copyTo' ? 'コピー先での版の名前' : '版の名前'}</span>
+          <input value={name} onChange={e => setName(e.target.value)} autoFocus placeholder="例）社内用 / 投資家用"
+            className="border border-slate-200 rounded-lg px-3 py-2 text-[15px]" />
+        </label>
+        {mode === 'add' && hasActive && (
+          <div className="grid gap-1.5 text-[14px]">
+            <label className="flex items-center gap-2"><input type="radio" checked={copy} onChange={() => setCopy(true)} />今の版（{activeName}）をコピーして作る</label>
+            <label className="flex items-center gap-2"><input type="radio" checked={!copy} onChange={() => setCopy(false)} />空の版として作る</label>
+          </div>
+        )}
+        {mode === 'copyTo' && (
+          <label className="grid gap-1">
+            <span className="text-[13px] text-slate-500">コピー先の案件</span>
+            <select value={targetId} onChange={e => setTargetId(e.target.value)} className="border border-slate-200 rounded-lg px-2 py-2 text-[15px] bg-white">
+              <option value="">選択してください</option>
+              {projectOptions.map(p => <option key={p.id} value={p.id}>{p.name}{p.id === currentProjectId ? '（この案件）' : ''}</option>)}
+            </select>
+            <span className="text-[12px] text-slate-400">コピー先の案件に、新しい版として追加されます（元の版は、そのまま残ります）。</span>
+          </label>
+        )}
+      </div>
+      <div className="flex gap-2 mt-5">
+        <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-[14px] text-slate-600">キャンセル</button>
+        <button onClick={() => canSubmit && onSubmit({ name: name.trim(), copy: mode === 'add' ? copy : false, targetId })} disabled={busy || !canSubmit}
+          className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-[14px] font-medium disabled:opacity-50">
+          {mode === 'copyTo' ? 'コピーする' : mode === 'rename' ? '変更する' : '追加する'}
+        </button>
+      </div>
+    </Modal>
   )
 }
 

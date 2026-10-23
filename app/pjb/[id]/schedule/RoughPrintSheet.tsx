@@ -20,8 +20,8 @@ const fmtDate = (d?: string | null) => {
 //  ゼロ工程表: 1ヶ月＝4週×12ヶ月の固定グリッド（日付・祝日なし）
 //  概算スケジュール: 日曜始まりの暦の週×52週（週の開始日・大型連休つき）
 export default function RoughPrintSheet({
-  mode, project, tasks, bars,
-}: { mode: Exclude<ScheduleKind, 'preopen'>; project: Project; tasks: ScheduleTask[]; bars: ScheduleBar[] }) {
+  mode, project, tasks, bars, scheduleName,
+}: { mode: Exclude<ScheduleKind, 'preopen'>; project: Project; tasks: ScheduleTask[]; bars: ScheduleBar[]; scheduleName?: string }) {
   const isZero = mode === 'zero'
   const months = project.schedule_months ?? DEFAULT_MONTHS
   const roughBars = bars.filter(b => b.kind === mode && b.start_week != null && b.length_weeks != null)
@@ -69,7 +69,7 @@ export default function RoughPrintSheet({
         PROJECT MASTER SCHEDULE |
       </div>
       <div style={{ background: '#e3e9f1', padding: '7px 12px', fontSize: 13, fontWeight: 700 }}>
-        {isZero ? 'ゼロ工程表' : '概算スケジュール'}｜設計・見積・工事・OPEN準備（全{months}ヶ月）
+        {isZero ? 'ゼロ工程表' : '概算スケジュール'}{scheduleName ? `（${scheduleName}）` : ''}｜設計・見積・工事・OPEN準備（全{months}ヶ月）
       </div>
 
       <div style={{ background: '#e3e9f1', padding: '8px 0 8px 0' }}>

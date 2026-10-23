@@ -33,9 +33,18 @@ export type Project = {
 
 export type ScheduleKind = 'zero' | 'rough' | 'preopen'
 
+export type ScheduleSet = {
+  id: string
+  project_id: string
+  kind: ScheduleKind
+  name: string
+  sort_order: number
+}
+
 export type ScheduleTask = {
   id: string
   project_id: string
+  schedule_id?: string | null
   kind: ScheduleKind
   sort_order: number
   category: string
@@ -47,6 +56,7 @@ export type ScheduleBar = {
   id: string
   task_id: string
   project_id: string
+  schedule_id?: string | null
   kind: ScheduleKind
   start_week: number | null
   length_weeks: number | null

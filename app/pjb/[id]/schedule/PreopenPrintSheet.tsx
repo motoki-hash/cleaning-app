@@ -15,8 +15,8 @@ const fmtYmd = (d: Date) => `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate(
 
 // OPEN前スケジュールのPDF出力用レイアウト（A3横・1ページ）。日付ごとの列、土日・大型連休・OPEN日を色分け。
 export default function PreopenPrintSheet({
-  project, tasks, bars, start, cols,
-}: { project: Project; tasks: ScheduleTask[]; bars: ScheduleBar[]; start: Date; cols: number }) {
+  project, tasks, bars, start, cols, scheduleName,
+}: { project: Project; tasks: ScheduleTask[]; bars: ScheduleBar[]; start: Date; cols: number; scheduleName?: string }) {
   const openDate = project.open_date ? parseYmd(project.open_date) : null
   const pageCols = cols > MAX_COLS_PER_PAGE ? Math.ceil(cols / 2) : cols
   const chunks: number[] = []
@@ -28,7 +28,7 @@ export default function PreopenPrintSheet({
     <FitToPage>
 
       <div style={{ background: NAVY, color: '#fff', padding: '14px 12px', fontSize: 22, fontWeight: 800 }}>
-        OPEN前スケジュール｜{project.name}
+        OPEN前スケジュール{scheduleName ? `（${scheduleName}）` : ''}｜{project.name}
       </div>
       <div style={{ background: '#e3e9f1', padding: '8px 12px', fontSize: 13, fontWeight: 700 }}>
         OPENまでの準備工程を一元管理{openDate ? `｜基準OPEN日：${fmtYmd(openDate)}` : ''}
