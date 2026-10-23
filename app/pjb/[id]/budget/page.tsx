@@ -256,8 +256,8 @@ function BnsSection({
 
   // 開いたときの中身：左に「売上の内訳」、右に「原価の内訳」を並べる
   const detail = (r: typeof rows[number]) => (
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="rounded-lg border border-slate-200 bg-white p-3">
+    <div className="grid gap-4 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-3">
         <div className="text-[13px] font-semibold text-slate-700 mb-2">売上の内訳 <span className="font-normal text-slate-400">（税別）</span></div>
         {salesItems === null ? (
           <div className="grid gap-2">
@@ -271,7 +271,7 @@ function BnsSection({
           />
         )}
       </div>
-      <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-3">
         <div className="text-[13px] font-semibold text-slate-700 mb-2">原価の内訳 <span className="font-normal text-slate-400">（税別・発注）</span></div>
         {r.counted ? (
           <CategoryBreakdown
@@ -446,12 +446,12 @@ function SalesBreakdown({
           </div>
         </div>
       ))}
-      <div className="rounded-lg border border-dashed border-slate-250 bg-slate-50/60 px-3 py-2.5 grid gap-1.5 sm:flex sm:items-end sm:gap-2">
-        <label className="grid gap-0.5 flex-1 min-w-0">
+      <div className="rounded-lg border border-dashed border-slate-250 bg-slate-50/60 px-3 py-2.5 flex flex-wrap items-end gap-2">
+        <label className="grid gap-0.5 flex-1 min-w-[150px]">
           <span className="text-[12px] text-slate-400">項目名</span>
           <input value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => { if (isCommitEnter(e)) add() }} placeholder="例）家具一式" className="border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px]" />
         </label>
-        <label className="grid gap-0.5 sm:w-36">
+        <label className="grid gap-0.5 w-36">
           <span className="text-[12px] text-slate-400">売上（税別）</span>
           <MoneyInput value={amount} onChange={setAmount} placeholder="0" className="w-full min-w-0 border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px]" />
         </label>
@@ -604,16 +604,16 @@ function CategoryBreakdown({
         ))
       )}
 
-      <div className="rounded-lg border border-dashed border-slate-250 bg-slate-50/60 px-3 py-2.5 grid gap-1.5 sm:flex sm:items-end sm:gap-2">
-        <label className="grid gap-0.5 flex-1 min-w-0">
+      <div className="rounded-lg border border-dashed border-slate-250 bg-slate-50/60 px-3 py-2.5 flex flex-wrap items-end gap-2">
+        <label className="grid gap-0.5 flex-1 min-w-[150px]">
           <span className="text-[12px] text-slate-400">工事項目</span>
           <input value={title} onChange={e => setTitle(e.target.value)} placeholder="例）電気配線追加" className="border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px]" />
         </label>
-        <label className="grid gap-0.5 flex-1 min-w-0">
+        <label className="grid gap-0.5 flex-1 min-w-[150px]">
           <span className="text-[12px] text-slate-400">業者（任意）</span>
           <input value={vendorName} onChange={e => setVendorName(e.target.value)} placeholder="例）〇〇工務店" className="border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px]" />
         </label>
-        <label className="grid gap-0.5 sm:w-40">
+        <label className="grid gap-0.5 w-40">
           <span className="text-[12px] text-slate-400">金額（税別）</span>
           <MoneyInput value={amount} onChange={setAmount} placeholder="0" className="w-full min-w-0 border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px]" />
         </label>
