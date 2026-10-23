@@ -109,7 +109,7 @@ export function MoneyBlurInput({
 }
 
 // タップ/クリックでその場编集できる金額表示。onCommitは値が変わったときだけ呼ばれる。
-export function InlineAmount({ value, onCommit, emphasize, formulaKey }: { value: number; onCommit: (v: number) => void; emphasize?: boolean; formulaKey?: string }) {
+export function InlineAmount({ value, onCommit, emphasize, formulaKey, boxed }: { value: number; onCommit: (v: number) => void; emphasize?: boolean; formulaKey?: string; boxed?: boolean }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(String(value))
   useFormulaVersion()   // 式が読み込まれた／保存されたときに、表示を更新する
@@ -119,9 +119,11 @@ export function InlineAmount({ value, onCommit, emphasize, formulaKey }: { value
     return (
       <button
         onClick={() => { setDraft(String(value)); setEditing(true) }}
-        className={`tabular-nums text-right w-full px-2 py-1 rounded-md hover:bg-slate-50 ${emphasize ? 'font-semibold text-slate-900' : value === 0 ? 'text-slate-300' : 'text-slate-800'}`}
+        className={`tabular-nums text-right w-full px-2 py-1 rounded-md ${
+          boxed ? 'border border-slate-200 bg-white hover:border-slate-400' : 'hover:bg-slate-50'
+        } ${emphasize ? 'font-semibold text-slate-900' : value === 0 ? 'text-slate-300' : 'text-slate-800'}`}
       >
-        <span className="border-b border-dashed border-slate-300" title={formula ? `計算式：${formula}` : undefined}>
+        <span className={boxed ? '' : 'border-b border-dashed border-slate-300'} title={formula ? `計算式：${formula}` : undefined}>
           {formula && <span className="text-[10px] text-slate-400 mr-1 no-underline">ƒ</span>}{formatYen(value)}
         </span>
       </button>
@@ -145,7 +147,7 @@ export function InlineAmount({ value, onCommit, emphasize, formulaKey }: { value
         autoFocus
         allowNegative
         formulaKey={formulaKey}
-        className="w-28 sm:w-36 text-right tabular-nums px-2 py-1 rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300"
+        className={`${boxed ? 'w-full' : 'w-28 sm:w-36'} text-right tabular-nums px-2 py-1 rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300`}
       />
     </span>
   )
@@ -191,8 +193,8 @@ export function InlineNumber({
 
 // タップ/クリックでその場編集できるテキスト表示。onCommitは値が変わり、空でないときだけ呼ばれる。
 export function InlineText({
-  value, onCommit, placeholder, emptyLabel, className, inputClassName,
-}: { value: string; onCommit: (v: string) => void; placeholder?: string; emptyLabel?: string; className?: string; inputClassName?: string }) {
+  value, onCommit, placeholder, emptyLabel, className, inputClassName, boxed,
+}: { value: string; onCommit: (v: string) => void; placeholder?: string; emptyLabel?: string; className?: string; inputClassName?: string; boxed?: boolean }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
 
@@ -200,9 +202,11 @@ export function InlineText({
     return (
       <button
         onClick={() => { setDraft(value); setEditing(true) }}
-        className={`text-left truncate rounded-md hover:bg-slate-50 px-1 -mx-1 ${!value ? 'text-slate-400' : ''} ${className || ''}`}
+        className={`text-left truncate rounded-md ${
+          boxed ? 'block w-full border border-slate-200 bg-white hover:border-slate-400 px-2 py-1' : 'hover:bg-slate-50 px-1 -mx-1'
+        } ${!value ? 'text-slate-400' : ''} ${className || ''}`}
       >
-        <span className="border-b border-dashed border-slate-300">{value || emptyLabel || '未設定'}</span>
+        <span className={boxed ? '' : 'border-b border-dashed border-slate-300'}>{value || emptyLabel || '未設定'}</span>
       </button>
     )
   }
@@ -222,7 +226,7 @@ export function InlineText({
       onBlur={commit}
       onKeyDown={e => { if (isCommitEnter(e)) (e.target as HTMLInputElement).blur() }}
       onFocus={e => e.currentTarget.select()}
-      className={`px-1.5 py-0.5 -mx-1 rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300 ${className || ''} ${inputClassName || ''}`}
+      className={`${boxed ? 'w-full px-2 py-1' : 'px-1.5 py-0.5 -mx-1'} rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300 ${className || ''} ${inputClassName || ''}`}
     />
   )
 }

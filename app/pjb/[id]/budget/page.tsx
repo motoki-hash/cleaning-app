@@ -456,13 +456,16 @@ function SalesBreakdown({
   return (
     <div className="grid gap-2">
       {items.length === 0 && <p className="text-[13px] text-slate-400">まだ売上がありません。下から追加してください。</p>}
+      {items.length > 0 && (
+        <div className="grid grid-cols-[minmax(0,1fr)_8.5rem_1.5rem] gap-2 px-3 text-[12px] text-slate-400 -mb-1">
+          <span>項目名</span><span className="text-right pr-2">売上（税別）</span><span />
+        </div>
+      )}
       {items.map(it => (
-        <div key={it.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-150 bg-slate-50/50 px-3 py-2">
-          <InlineText value={it.title} onCommit={v => update(it, { title: v }, '項目名', it.title, v)} className="text-[13.5px] font-medium text-slate-900" />
-          <div className="flex items-center gap-1 shrink-0">
-            <InlineAmount value={it.amount} formulaKey={`sales:${it.id}`} onCommit={v => update(it, { amount: v }, '金額', it.amount, v)} />
-            <button onClick={() => remove(it)} className="text-slate-300 hover:text-rose-500 text-[12px]" aria-label="削除">✕</button>
-          </div>
+        <div key={it.id} className="grid grid-cols-[minmax(0,1fr)_8.5rem_1.5rem] gap-2 items-center rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <InlineText boxed value={it.title} onCommit={v => update(it, { title: v }, '項目名', it.title, v)} className="text-[13.5px] font-medium text-slate-900" />
+          <InlineAmount boxed emphasize value={it.amount} formulaKey={`sales:${it.id}`} onCommit={v => update(it, { amount: v }, '金額', it.amount, v)} />
+          <button onClick={() => remove(it)} className="text-slate-300 hover:text-rose-500 text-[13px]" aria-label="削除">✕</button>
         </div>
       ))}
       <div className="rounded-lg border border-dashed border-slate-250 bg-slate-50/60 px-3 py-2.5 flex flex-wrap items-end gap-2">
@@ -545,34 +548,41 @@ function CategoryBreakdown({
       {orders.length === 0 ? (
         <p className="text-[13px] text-slate-400">まだ内訳がありません。下から追加してください。</p>
       ) : (
-        orders.map(o => (
-          <div key={o.id} className="rounded-lg border border-slate-150 bg-white px-3 py-2.5">
-            <div className="flex items-start justify-between gap-2 mb-1">
-              <div className="min-w-0 grid gap-0.5">
+        <>
+          <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_minmax(0,0.75fr)_8.5rem_1.5rem] gap-2 px-3 text-[12px] text-slate-400 -mb-1">
+            <span>工事項目</span><span>業者</span><span className="text-right pr-2">金額（税別）</span><span />
+          </div>
+          {orders.map(o => (
+          <div key={o.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+            {/* 1行目：工事項目・業者・金額（枠付きで、タップして直せることが分かる） */}
+            <div className="grid grid-cols-[minmax(0,1fr)_8.5rem_1.5rem] sm:grid-cols-[minmax(0,1fr)_minmax(0,0.75fr)_8.5rem_1.5rem] gap-2 items-center mb-2">
+              <div className="order-1 min-w-0">
                 <InlineText
-                  value={o.title}
+                  boxed value={o.title}
                   onCommit={v => updateOrderTitle(o, v, projectId).then(onChanged)}
                   className="text-[13.5px] font-medium text-slate-900"
                 />
+              </div>
+              <div className="order-4 col-span-3 sm:col-span-1 sm:order-2 min-w-0">
                 <InlineText
-                  value={vendorLabel(o.vendor_id)}
-                  emptyLabel="業者未設定"
+                  boxed value={vendorLabel(o.vendor_id)}
+                  emptyLabel="業者を入力"
                   placeholder="業者名"
                   onCommit={async v => {
                     const vendorId = await findOrCreateVendor(v)
                     await updateOrderVendor(o, vendorId, v, projectId)
                     onChanged()
                   }}
-                  className="text-[12px] text-slate-400"
+                  className="text-[13px] text-slate-600"
                 />
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <InlineAmount value={o.order_amount || o.estimate_amount} formulaKey={`order:${o.id}`} onCommit={v => updateOrderAmount(o, v, projectId, categoryName).then(onChanged)} />
-                <button
-                  onClick={() => { if (confirm(`「${o.title}」を削除しますか？`)) deleteOrder(o, projectId, categoryName).then(onChanged) }}
-                  className="text-slate-300 hover:text-rose-500 text-[12px]" aria-label="削除"
-                >✕</button>
+              <div className="order-2 sm:order-3">
+                <InlineAmount boxed emphasize value={o.order_amount || o.estimate_amount} formulaKey={`order:${o.id}`} onCommit={v => updateOrderAmount(o, v, projectId, categoryName).then(onChanged)} />
               </div>
+              <button
+                onClick={() => { if (confirm(`「${o.title}」を削除しますか？`)) deleteOrder(o, projectId, categoryName).then(onChanged) }}
+                className="order-3 sm:order-4 text-slate-300 hover:text-rose-500 text-[13px]" aria-label="削除"
+              >✕</button>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <select
@@ -620,7 +630,8 @@ function CategoryBreakdown({
               </label>
             </div>
           </div>
-        ))
+          ))}
+        </>
       )}
 
       <div className="rounded-lg border border-dashed border-slate-250 bg-slate-50/60 px-3 py-2.5 flex flex-wrap items-end gap-2">
