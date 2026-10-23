@@ -18,6 +18,21 @@ import type { Project, ScheduleBar, ScheduleKind, ScheduleTask } from '@/lib/pjb
 const ZOOM = { s: 0.7, m: 1, l: 1.3 } as const
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
 
+// 保存した雛形（種類ごとに1つ）。概算・ゼロ工程表は週の位置、OPEN前は日付の基準からの日数で持つ
+type TemplateBar = {
+  start_week?: number | null; length_weeks?: number | null
+  start_offset?: number | null; end_offset?: number | null
+  label: string; color: string
+}
+type TemplateTask = { category: string; name: string; assignee: string; bars: TemplateBar[] }
+type SavedTemplate = {
+  kind: ScheduleKind
+  data: { tasks: TemplateTask[]; open_week?: number | null }
+  anchor: string | null
+  source_project_name: string | null
+  updated_at: string
+}
+
 type BarEdit =
   | { mode: 'edit'; bar: ScheduleBar }
   | { mode: 'new'; taskId: string; start: number; len: number }
@@ -40,6 +55,15 @@ export default function SchedulePage() {
   const [barEdit, setBarEdit] = useState<BarEdit | null>(null)
   const [taskEdit, setTaskEdit] = useState<ScheduleTask | 'new' | null>(null)
   const [busy, setBusy] = useState(false)
+  const [templates, setTemplates] = useState<Partial<Record<ScheduleKind, SavedTemplate>>>({})
+  const loadTemplates = useCallback(async () => {
+    const { data, error } = await supabase.from('pjb_schedule_templates').select('*')
+    if (error || !data) return   // テーブルがまだない場合は、標準の雛形を使う
+    const map: Partial<Record<ScheduleKind, SavedTemplate>> = {}
+    for (const t of data as SavedTemplate[]) map[t.kind] = t
+    setTemplates(map)
+  }, [])
+  useEffect(() => { loadTemplates() }, [loadTemplates])
 
   // ---- 元に戻す／やり直す（⌘Z / ⌘⇧Z）----
   // 変更の直前のスケジュール全体（行とバー）を保存しておき、戻すときは差分をデータベースに反映する
@@ -153,30 +177,66 @@ export default function SchedulePage() {
     pushHistory()
     setBusy(true)
     try {
-      if (kind !== 'preopen') {
-        const { data, error } = await supabase.from('pjb_schedule_tasks').insert(
-          ROUGH_TEMPLATE.map((t, i) => ({ project_id: id, kind, sort_order: i + 1, category: t.category, name: t.name, assignee: '' }))
-        ).select('id, sort_order')
-        if (error || !data) throw new Error(error?.message || '作成に失敗しました')
-        const byOrder = new Map(data.map((r: { id: string; sort_order: number }) => [r.sort_order, r.id]))
-        const rows = ROUGH_TEMPLATE.flatMap((t, i) => t.bars.map(b => ({
-          task_id: byOrder.get(i + 1), project_id: id, kind, start_week: b.start, length_weeks: b.len, label: b.label, color: b.color,
-        })))
+      const saved = templates[kind]
+      const savedTasks = saved?.data?.tasks?.length ? saved.data.tasks : null
+      // 保存した雛形があればそれを、なければ標準の雛形を使う
+      const source: TemplateTask[] = savedTasks ?? (kind !== 'preopen'
+        ? ROUGH_TEMPLATE.map(t => ({ category: t.category, name: t.name, assignee: '', bars: t.bars.map(b => ({ start_week: b.start, length_weeks: b.len, label: b.label, color: b.color })) }))
+        : PREOPEN_TEMPLATE.map(t => ({ ...t, bars: [] })))
+
+      // OPEN前スケジュールの日付は、基準（OPEN日／表示開始日）からの日数で保存してあるので、この案件の基準に合わせて置く
+      const anchorDate = kind === 'preopen'
+        ? (saved?.anchor === 'open' ? (openDate ?? addDays(previewStart, 48)) : previewStart)
+        : previewStart
+
+      const { data, error } = await supabase.from('pjb_schedule_tasks').insert(
+        source.map((t, i) => ({ project_id: id, kind, sort_order: i + 1, category: t.category, name: t.name, assignee: t.assignee || '' }))
+      ).select('id, sort_order')
+      if (error || !data) throw new Error(error?.message || '作成に失敗しました')
+      const byOrder = new Map(data.map((r: { id: string; sort_order: number }) => [r.sort_order, r.id]))
+      const rows = source.flatMap((t, i) => t.bars.map(b => ({
+        task_id: byOrder.get(i + 1), project_id: id, kind, label: b.label, color: b.color,
+        ...(kind !== 'preopen'
+          ? { start_week: b.start_week, length_weeks: b.length_weeks }
+          : { start_date: toYmd(addDays(anchorDate, b.start_offset ?? 0)), end_date: toYmd(addDays(anchorDate, b.end_offset ?? b.start_offset ?? 0)) }),
+      })))
+      if (rows.length) {
         const { error: e2 } = await supabase.from('pjb_schedule_bars').insert(rows)
         if (e2) throw new Error(e2.message)
-        if (project && kind === 'rough' && project.schedule_open_week == null) await updateProject({ schedule_open_week: DEFAULT_OPEN_WEEK })
-        if (project && kind === 'zero' && project.zero_open_week == null) await updateProject({ zero_open_week: DEFAULT_OPEN_WEEK })
-      } else {
-        const { error } = await supabase.from('pjb_schedule_tasks').insert(
-          PREOPEN_TEMPLATE.map((t, i) => ({ project_id: id, kind: 'preopen', sort_order: i + 1, category: t.category, name: t.name, assignee: t.assignee }))
-        )
-        if (error) throw new Error(error.message)
       }
+      const openWeek = savedTasks && saved?.data?.open_week != null ? saved.data.open_week : DEFAULT_OPEN_WEEK
+      if (project && kind === 'rough' && project.schedule_open_week == null) await updateProject({ schedule_open_week: openWeek })
+      if (project && kind === 'zero' && project.zero_open_week == null) await updateProject({ zero_open_week: openWeek })
       await loadSchedule()
     } catch (e) {
       alert(e instanceof Error ? e.message : '雛形の読み込みに失敗しました')
     }
     setBusy(false)
+  }
+
+  // 今の案件のスケジュールを、新しい案件の雛形として保存する（種類ごとに1つ。上書き）
+  const saveAsTemplate = async () => {
+    if (!project) return
+    if (!confirm(`この案件の「${kindLabel[kind]}」を、新しい案件の雛形として保存します。\n今ある雛形は、これで置き換わります。よろしいですか？`)) return
+    const anchorDate = kind === 'preopen' ? (openDate ?? previewStart) : null
+    const tasksData: TemplateTask[] = kindTasks.map(t => ({
+      category: t.category, name: t.name, assignee: t.assignee,
+      bars: bars.filter(b => b.task_id === t.id).map(b => kind !== 'preopen'
+        ? { start_week: b.start_week, length_weeks: b.length_weeks, label: b.label, color: b.color }
+        : { start_offset: diffDays(anchorDate!, parseYmd(b.start_date!)), end_offset: diffDays(anchorDate!, parseYmd(b.end_date!)), label: b.label, color: b.color }),
+    }))
+    setBusy(true)
+    const { error } = await supabase.from('pjb_schedule_templates').upsert({
+      kind,
+      data: { tasks: tasksData, open_week: kind === 'zero' ? project.zero_open_week ?? null : kind === 'rough' ? project.schedule_open_week ?? null : null },
+      anchor: kind === 'preopen' ? (openDate ? 'open' : 'start') : null,
+      source_project_name: project.name,
+      updated_at: new Date().toISOString(),
+    })
+    setBusy(false)
+    if (error) { alert(`雛形を保存できませんでした：${error.message}（SQLパッチ009を実行していない場合は、先に実行してください）`); return }
+    await loadTemplates()
+    alert('雛形として保存しました。新しい案件で「雛形を読み込む」を押すと、この内容が出ます。')
   }
 
   // ---- バー操作 ----
@@ -554,7 +614,11 @@ export default function SchedulePage() {
       {kindTasks.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-12 text-center">
           <p className="text-[14px] text-slate-500 mb-4">
-            {kind === 'preopen' ? 'OPEN前スケジュールがまだありません。準備タスクの雛形（14項目）から始められます。' : `${kindLabel[kind]}がまだありません。ゼロ工程表の雛形（14工程）から始められます。`}
+            {templates[kind]
+              ? `${kindLabel[kind]}がまだありません。保存してある雛形${templates[kind]!.source_project_name ? `（「${templates[kind]!.source_project_name}」の内容）` : ''}から始められます。`
+              : kind === 'preopen'
+                ? 'OPEN前スケジュールがまだありません。準備タスクの雛形（14項目）から始められます。'
+                : `${kindLabel[kind]}がまだありません。標準の雛形（14工程）から始められます。`}
           </p>
           <div className="flex justify-center gap-2">
             <button onClick={seedTemplate} disabled={busy || !!setupError} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-[14px] font-medium disabled:opacity-50">雛形を読み込む</button>
@@ -582,7 +646,16 @@ export default function SchedulePage() {
             }}
           />
           <div className="mt-3 flex items-center justify-between print:hidden">
-            <button onClick={() => setTaskEdit('new')} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">＋ 工程を追加</button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setTaskEdit('new')} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">＋ 工程を追加</button>
+              <button
+                onClick={saveAsTemplate} disabled={busy}
+                title={templates[kind] ? `今の雛形：「${templates[kind]!.source_project_name ?? '不明'}」の内容` : '標準の雛形を使っています'}
+                className="text-[13px] px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+              >
+                雛形として保存
+              </button>
+            </div>
             <div className="hidden sm:flex items-center gap-3 text-[12px] text-slate-500">
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-200" />大型連休</span>
               {Object.entries(BAR_COLORS).map(([k, c]) => (
