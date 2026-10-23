@@ -129,11 +129,11 @@ export default function BudgetPage() {
                 <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
                   <div className="text-[13.5px] font-semibold text-slate-700 mb-1.5">{group} 合計</div>
                   <Row label="当初予算合計" value={formatYen(list.reduce((s, c) => s + c.category.original_budget, 0))} />
-                  <Row label="実行費用合計" value={formatYen(list.reduce((s, c) => s + c.category.latest_budget, 0))} />
+                  <Row label="実行費用合計" value={formatYen(list.reduce((s, c) => s + c.effectiveBudget, 0))} />
                   <Row
                     label="当初予算からの増減"
                     value={formatSignedYen(
-                      list.reduce((s, c) => s + c.category.latest_budget, 0)
+                      list.reduce((s, c) => s + c.effectiveBudget, 0)
                       - list.reduce((s, c) => s + c.category.original_budget, 0)
                     )}
                     strong
@@ -168,8 +168,8 @@ export default function BudgetPage() {
                           <td className="px-1 py-1.5 text-right cursor-default" onClick={e => e.stopPropagation()}>
                             <InlineAmount value={s.category.original_budget} onCommit={v => updateField(s.category, 'original_budget', v)} />
                           </td>
-                          <td className={`px-3 py-3 text-right tabular-nums font-bold bg-blue-50/60 ${zeroMute(s.category.latest_budget, 'text-slate-900')}`}>
-                            {formatYen(s.category.latest_budget)}
+                          <td className={`px-3 py-3 text-right tabular-nums font-bold bg-blue-50/60 ${zeroMute(s.effectiveBudget, 'text-slate-900')}`}>
+                            {formatYen(s.effectiveBudget)}
                           </td>
                           <td className={`px-3 py-3 text-right tabular-nums ${zeroMute(s.orderedAmount, 'text-slate-800')}`}>{formatYen(s.orderedAmount)}</td>
                           <td className={`px-3 py-3 text-right tabular-nums ${zeroMute(s.unorderedPlanned, 'text-slate-600')}`}>{formatYen(s.unorderedPlanned)}</td>
@@ -201,12 +201,12 @@ export default function BudgetPage() {
                         {formatYen(list.reduce((s, c) => s + c.category.original_budget, 0))}
                       </td>
                       <td className="px-3 py-3 text-right tabular-nums font-bold text-slate-900">
-                        {formatYen(list.reduce((s, c) => s + c.category.latest_budget, 0))}
+                        {formatYen(list.reduce((s, c) => s + c.effectiveBudget, 0))}
                       </td>
                       <td colSpan={3}></td>
                       <td className="px-3 py-3 text-right tabular-nums font-bold text-blue-700 whitespace-nowrap" colSpan={2}>
                         当初予算からの増減 {formatSignedYen(
-                          list.reduce((s, c) => s + c.category.latest_budget, 0)
+                          list.reduce((s, c) => s + c.effectiveBudget, 0)
                           - list.reduce((s, c) => s + c.category.original_budget, 0)
                         )}
                       </td>
@@ -405,7 +405,7 @@ function MobileCard({
         <StatePill state={s.state} />
       </div>
       <EditableRow label="当初予算" value={s.category.original_budget} onCommit={v => onCommit(s.category, 'original_budget', v)} />
-      <Row label="実行費用" value={formatYen(s.category.latest_budget)} strong />
+      <Row label="実行費用" value={formatYen(s.effectiveBudget)} strong />
       <Row label="発注済" value={formatYen(s.orderedAmount)} />
       <Row label="未発注予定" value={formatYen(s.unorderedPlanned)} muted />
       <div className="h-px bg-slate-100 my-1.5" />

@@ -144,7 +144,7 @@ function CategoryMiniCard({ s }: { s: ReturnType<typeof summarizeCategory> }) {
         <StatePill state={s.state} />
       </div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[12.5px] text-slate-500">
-        <div>予算 <span className="text-slate-800 font-medium">{formatYen(s.category.latest_budget)}</span></div>
+        <div>予算 <span className="text-slate-800 font-medium">{formatYen(s.effectiveBudget)}</span></div>
         <div>発注済 <span className="text-slate-800 font-medium">{formatYen(s.orderedAmount)}</span></div>
         <div>追加予定 <span className="text-slate-800 font-medium">{formatYen(s.unorderedPlanned + s.additionalCost)}</span></div>
         <div>着地見込 <span className="text-slate-800 font-medium">{formatYen(s.landingForecast)}</span></div>

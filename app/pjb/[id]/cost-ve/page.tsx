@@ -60,17 +60,9 @@ export default function CostVePage() {
       return
     }
 
+    // 採用したVEは、予算の画面で差し引いて表示・計算される（最新予算そのものは書き換えない）
     const { error } = await supabase.from('pjb_ve_items').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', v.id)
     if (error) { alert(`保存に失敗しました：${error.message}`); return }
-
-    if (budgetDelta !== 0 && v.category_id) {
-      const cat = categories.find(c => c.id === v.category_id)
-      const r = await applyBudgetDelta({
-        categoryId: v.category_id, projectId: id, delta: budgetDelta, reason: `VE確定：${v.content}`,
-        entityLabel: `${cat?.name || ''} 最新予算`,
-      })
-      if (r.error) alert(`予算への反映に失敗しました：${r.error}`)
-    }
     if (patch.status) {
       await logActivity({ projectId: id, action: 'update', entityType: 've_item', entityLabel: `${v.content} ステータス`, before: v.status, after: patch.status })
     }
@@ -80,15 +72,8 @@ export default function CostVePage() {
   // 対象カテゴリーを選び直す（採用済みなら、減額も新しいカテゴリーに付け替える）
   const changeVeCategory = async (v: VeItem, newCategoryId: string) => {
     if (!newCategoryId || newCategoryId === v.category_id) return
-    const applied = appliedAmount(v)
     const { error } = await supabase.from('pjb_ve_items').update({ category_id: newCategoryId, updated_at: new Date().toISOString() }).eq('id', v.id)
     if (error) { alert(`保存に失敗しました：${error.message}`); return }
-    if (applied > 0) {
-      if (v.category_id) {
-        await applyBudgetDelta({ categoryId: v.category_id, projectId: id, delta: applied, reason: `VE対象変更：${v.content}`, entityLabel: `${catName(v.category_id)} 最新予算` })
-      }
-      await applyBudgetDelta({ categoryId: newCategoryId, projectId: id, delta: -applied, reason: `VE対象変更：${v.content}`, entityLabel: `${catName(newCategoryId)} 最新予算` })
-    }
     reload()
   }
 
@@ -102,21 +87,11 @@ export default function CostVePage() {
   const deleteVe = async (v: VeItem) => {
     const applied = appliedAmount(v)
     const msg = applied > 0
-      ? `「${v.content}」を削除しますか？\n採用済みのため、減額していた最新予算は元に戻ります。`
+      ? `「${v.content}」を削除しますか？\n採用済みのため、予算から差し引いていた金額が元に戻ります。`
       : `「${v.content}」を削除しますか？`
     if (!confirm(msg)) return
-    // 先に削除して、成功したときだけ予算を元に戻す（削除に失敗したのに予算だけ動くのを防ぐ）
     const { error } = await supabase.from('pjb_ve_items').delete().eq('id', v.id)
     if (error) { alert(`削除に失敗しました：${error.message}`); return }
-
-    if (applied > 0 && v.category_id) {
-      const cat = categories.find(c => c.id === v.category_id)
-      const r = await applyBudgetDelta({
-        categoryId: v.category_id, projectId: id, delta: applied, reason: `VE削除：${v.content}`,
-        entityLabel: `${cat?.name || ''} 最新予算`,
-      })
-      if (r.error) alert(`予算を元に戻せませんでした：${r.error}`)
-    }
     await logActivity({ projectId: id, action: 'delete', entityType: 've_item', entityLabel: v.content, before: v.planned_reduction })
     reload()
   }

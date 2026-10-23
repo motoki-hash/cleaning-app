@@ -5,7 +5,6 @@ import { supabase } from '@/lib/supabase'
 import { findOrCreateVendor } from '@/lib/pjb/useProjectData'
 import { logActivity } from '@/lib/pjb/activity'
 import { createOrder } from '@/lib/pjb/orders'
-import { applyBudgetDelta } from '@/lib/pjb/budget'
 import { MoneyInput } from './ui'
 import type { BudgetCategory, Order } from '@/lib/pjb/types'
 
@@ -83,12 +82,6 @@ export default function QuickAddSheet({
       planned_reduction: reduction, status: veAdopt ? '採用' : '検討中', confirmed_reduction: veAdopt ? reduction : 0,
     })
     if (err) { setError(`登録に失敗しました：${err.message}`); setSaving(false); return }
-    if (veAdopt) {
-      // 追加と同時に採用する場合は、すぐに対象カテゴリーの予算から減額する
-      const cat = categories.find(c => c.id === categoryId)
-      const r = await applyBudgetDelta({ categoryId, projectId, delta: -reduction, reason: `VE確定：${title}`, entityLabel: `${cat?.name || ''} 最新予算` })
-      if (r.error) { setError(`予算への反映に失敗しました：${r.error}`); setSaving(false); return }
-    }
     await logActivity({ projectId, action: 'create', entityType: 've_item', entityLabel: title, after: amount })
     setSaving(false)
     onSaved()

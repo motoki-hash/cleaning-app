@@ -38,9 +38,8 @@ export function summarizeCategory(
     .filter(w => APPROVED_ADDITIONAL_STATUSES.has(w.status) && w.budget_impact !== '影響なし')
     .reduce((s, w) => s + (w.budget_impact === '減額' ? -w.amount : w.amount), 0)
 
-  // 採用済VEは、確定した時点でカテゴリーの最新予算そのものを直接減額する運用にしたため
-  // （内訳・追加工事と同じ「最新予算を直接動かす」方式）、着地見込の計算には二重計上を避けるため含めない。
-  // confirmedVe/plannedVeはCost・VE画面での表示・アラート判定用に算出だけしておく。
+  // 採用済VEは、最新予算（内訳の合計）を書き換えずに、表示・計算のときに差し引く。
+  // 採用・取り消し・削除を何度しても金額がずれず、最新予算が0円でも減額が切り捨てられない。
   const confirmedVe = catVe
     .filter(v => v.status === '採用')
     .reduce((s, v) => s + (v.confirmed_reduction || v.planned_reduction || 0), 0)
@@ -49,12 +48,13 @@ export function summarizeCategory(
     .filter(v => v.status === '検討中' || v.status === '提案中')
     .reduce((s, v) => s + (v.planned_reduction || 0), 0)
 
-  const landingForecast = orderedAmount + unorderedPlanned + additionalCost
-  const variance = category.latest_budget - landingForecast
-  const consumptionRate = category.latest_budget > 0 ? landingForecast / category.latest_budget : 0
+  const effectiveBudget = category.latest_budget - confirmedVe
+  const landingForecast = orderedAmount + unorderedPlanned + additionalCost - confirmedVe
+  const variance = effectiveBudget - landingForecast
+  const consumptionRate = effectiveBudget > 0 ? landingForecast / effectiveBudget : 0
 
   let state: CategorySummary['state'] = 'normal'
-  if (category.latest_budget > 0 && landingForecast > category.latest_budget) state = 'danger'
+  if (effectiveBudget > 0 && landingForecast > effectiveBudget) state = 'danger'
   else if (consumptionRate >= 0.9) state = 'warning'
 
   return {
@@ -64,6 +64,7 @@ export function summarizeCategory(
     additionalCost,
     confirmedVe,
     plannedVe,
+    effectiveBudget,
     landingForecast,
     variance,
     consumptionRate,

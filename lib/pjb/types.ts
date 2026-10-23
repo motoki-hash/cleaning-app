@@ -270,6 +270,7 @@ export type CategorySummary = {
   additionalCost: number
   confirmedVe: number
   plannedVe: number
+  effectiveBudget: number   // 最新予算（内訳の合計）− 採用したVE
   landingForecast: number
   variance: number
   consumptionRate: number
