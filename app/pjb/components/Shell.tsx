@@ -12,7 +12,7 @@ import { getUndoHandlers, useUndoHandlers } from '@/lib/pjb/undo'
 
 const TABS = [
   { key: 'dashboard', label: 'ダッシュボード', href: '', group: '全体' },
-  { key: 'budget', label: '予算', href: '/budget', group: '予算' },
+  { key: 'budget', label: '予実管理', href: '/budget', group: '予算' },
   { key: 'cost-ve', label: '追加工事・VE', href: '/cost-ve', group: '予算' },
   { key: 'schedule', label: 'スケジュール', href: '/schedule', group: '工程' },
   { key: 'orders', label: '発注管理', href: '/orders', group: '発注・支払' },
