@@ -1,10 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Alert } from '@/lib/pjb/types'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
 import { normalizeExpr, isPlainNumber, evaluateExpr } from '@/lib/pjb/calcExpr'
+import { formulaFor, saveFormula, useFormulaVersion } from '@/lib/pjb/formulaStore'
 
 // Enterで確定する入力欄用。日本語の変換を確定するEnterでは、保存されないようにする
 export const isCommitEnter = (e: React.KeyboardEvent) => e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229
@@ -21,9 +22,10 @@ function toCommas(raw: string) {
 }
 
 export function MoneyInput({
-  value, onChange, className, placeholder, autoFocus, allowNegative,
-}: { value: string; onChange: (v: string) => void; className?: string; placeholder?: string; autoFocus?: boolean; allowNegative?: boolean }) {
-  const [expr, setExpr] = useState<string | null>(null)
+  value, onChange, className, placeholder, autoFocus, allowNegative, formulaKey,
+}: { value: string; onChange: (v: string) => void; className?: string; placeholder?: string; autoFocus?: boolean; allowNegative?: boolean; formulaKey?: string }) {
+  // 計算式で入れた金額は、開いたときに式のまま出す（金額が式の結果と同じときだけ）
+  const [expr, setExpr] = useState<string | null>(() => formulaFor(formulaKey, Number(value) || 0))
   const [hintPos, setHintPos] = useState<{ left: number; top: number } | null>(null)
   const ref = useRef<HTMLInputElement>(null)
 
@@ -31,6 +33,7 @@ export function MoneyInput({
     const r = ref.current?.getBoundingClientRect()
     if (r) setHintPos({ left: r.left, top: r.bottom + 2 })
   }
+  useEffect(() => { if (expr !== null) place() }, [expr])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const handle = (raw: string) => {
     const t = normalizeExpr(raw)
@@ -58,7 +61,20 @@ export function MoneyInput({
         autoFocus={autoFocus}
         value={expr ?? toCommas(value)}
         onChange={e => handle(e.target.value)}
-        onBlur={() => { setExpr(null); setHintPos(null) }}
+        onFocus={() => {
+          if (expr === null) {
+            const f = formulaFor(formulaKey, Number(value) || 0)
+            if (f) setExpr(f)
+          }
+        }}
+        onBlur={() => {
+          // 式で入れた金額は、式も一緒に保存する
+          if (expr !== null && formulaKey) {
+            const r = evaluateExpr(expr)
+            if (r !== null) saveFormula(formulaKey, expr.trim(), Math.round(r))
+          }
+          setExpr(null); setHintPos(null)
+        }}
         placeholder={placeholder}
         title="計算式も入力できます（例：150万+30万 / 1200000*1.1）"
         className={className}
@@ -93,9 +109,11 @@ export function MoneyBlurInput({
 }
 
 // タップ/クリックでその場编集できる金額表示。onCommitは値が変わったときだけ呼ばれる。
-export function InlineAmount({ value, onCommit, emphasize }: { value: number; onCommit: (v: number) => void; emphasize?: boolean }) {
+export function InlineAmount({ value, onCommit, emphasize, formulaKey }: { value: number; onCommit: (v: number) => void; emphasize?: boolean; formulaKey?: string }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(String(value))
+  useFormulaVersion()   // 式が読み込まれた／保存されたときに、表示を更新する
+  const formula = formulaFor(formulaKey, value)
 
   if (!editing) {
     return (
@@ -103,7 +121,9 @@ export function InlineAmount({ value, onCommit, emphasize }: { value: number; on
         onClick={() => { setDraft(String(value)); setEditing(true) }}
         className={`tabular-nums text-right w-full px-2 py-1 rounded-md hover:bg-slate-50 ${emphasize ? 'font-semibold text-slate-900' : value === 0 ? 'text-slate-300' : 'text-slate-800'}`}
       >
-        <span className="border-b border-dashed border-slate-300">{formatYen(value)}</span>
+        <span className="border-b border-dashed border-slate-300" title={formula ? `計算式：${formula}` : undefined}>
+          {formula && <span className="text-[10px] text-slate-400 mr-1 no-underline">ƒ</span>}{formatYen(value)}
+        </span>
       </button>
     )
   }
@@ -124,6 +144,7 @@ export function InlineAmount({ value, onCommit, emphasize }: { value: number; on
         onChange={setDraft}
         autoFocus
         allowNegative
+        formulaKey={formulaKey}
         className="w-28 sm:w-36 text-right tabular-nums px-2 py-1 rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300"
       />
     </span>

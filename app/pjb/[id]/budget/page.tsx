@@ -167,7 +167,7 @@ export default function BudgetPage() {
                             </div>
                           </td>
                           <td className="px-1 py-1.5 text-right cursor-default" onClick={e => e.stopPropagation()}>
-                            <InlineAmount value={s.category.original_budget} onCommit={v => updateField(s.category, 'original_budget', v)} />
+                            <InlineAmount value={s.category.original_budget} formulaKey={`cat:${s.category.id}:original`} onCommit={v => updateField(s.category, 'original_budget', v)} />
                           </td>
                           <td className={`px-3 py-3 text-right tabular-nums font-bold bg-blue-50/60 ${zeroMute(s.effectiveBudget, 'text-slate-900')}`}>
                             {formatYen(s.effectiveBudget)}
@@ -246,10 +246,13 @@ function BnsSection({
   const totalProfit = totalSales - totalCost
   const margin = totalSales > 0 ? totalProfit / totalSales : 0
 
-  const budgetRows: Array<{ label: string; field: 'bns_budget_sales' | 'bns_budget_cost' | 'bns_budget_profit'; budget: number; actual: number; costLike?: boolean }> = [
-    { label: '売上', field: 'bns_budget_sales', budget: project.bns_budget_sales || 0, actual: totalSales },
-    { label: '原価', field: 'bns_budget_cost', budget: project.bns_budget_cost || 0, actual: totalCost, costLike: true },
-    { label: '利益', field: 'bns_budget_profit', budget: project.bns_budget_profit || 0, actual: totalProfit },
+  // 利益の予算は、売上の予算 − 原価の予算で自動計算する（入力しない）
+  const budgetSales = project.bns_budget_sales || 0
+  const budgetCost = project.bns_budget_cost || 0
+  const budgetRows: Array<{ label: string; field: 'bns_budget_sales' | 'bns_budget_cost' | 'bns_budget_profit'; budget: number; actual: number; costLike?: boolean; auto?: boolean }> = [
+    { label: '売上', field: 'bns_budget_sales', budget: budgetSales, actual: totalSales },
+    { label: '原価', field: 'bns_budget_cost', budget: budgetCost, actual: totalCost, costLike: true },
+    { label: '利益', field: 'bns_budget_profit', budget: budgetSales - budgetCost, actual: totalProfit, auto: true },
   ]
 
   const profitTone = (v: number) => (v < 0 ? 'text-rose-600' : v === 0 ? 'text-slate-300' : 'text-emerald-600')
@@ -293,7 +296,7 @@ function BnsSection({
       <div className="rounded-xl border border-slate-300 bg-white shadow-sm overflow-hidden mb-4">
         <div className="px-4 py-2.5 bg-slate-100 border-b border-slate-300 flex items-baseline justify-between gap-2 flex-wrap">
           <span className="text-[13.5px] font-semibold text-slate-800">PJ全体の予算</span>
-          <span className="text-[12px] text-slate-500">項目ごとではなく、PJ全体で売上・原価・利益の予算を入れます（金額をタップして入力）</span>
+          <span className="text-[12px] text-slate-500">項目ごとではなく、PJ全体で売上と原価の予算を入れます（金額をタップして入力。利益は自動計算）</span>
         </div>
         <table className="w-full text-[13.5px]">
           <thead>
@@ -310,9 +313,15 @@ function BnsSection({
               return (
                 <tr key={r.field} className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-2.5 font-semibold text-slate-900">{r.label}</td>
-                  <td className="px-1 py-1 text-right">
-                    <InlineAmount value={r.budget} onCommit={v => updateProject({ [r.field]: v } as Partial<Project>)} />
-                  </td>
+                  {r.auto ? (
+                    <td className={`px-3 py-2.5 text-right tabular-nums font-semibold ${r.budget === 0 ? 'text-slate-300' : r.budget < 0 ? 'text-rose-600' : 'text-slate-800'}`} title="売上の予算 − 原価の予算で、自動計算されます">
+                      {formatSignedYen(r.budget)} <span className="text-[11px] font-normal text-slate-400 ml-1">自動</span>
+                    </td>
+                  ) : (
+                    <td className="px-1 py-1 text-right">
+                      <InlineAmount value={r.budget} formulaKey={`project:${r.field}`} onCommit={v => updateProject({ [r.field]: v } as Partial<Project>)} />
+                    </td>
+                  )}
                   <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">{formatYen(r.actual)}</td>
                   <td className={`px-4 py-2.5 text-right tabular-nums font-semibold ${r.budget === 0 ? 'text-slate-300' : diff < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                     {r.budget === 0 ? '—' : formatSignedYen(diff)}
@@ -448,7 +457,7 @@ function SalesBreakdown({
         <div key={it.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-150 bg-slate-50/50 px-3 py-2">
           <InlineText value={it.title} onCommit={v => update(it, { title: v }, '項目名', it.title, v)} className="text-[13.5px] font-medium text-slate-900" />
           <div className="flex items-center gap-1 shrink-0">
-            <InlineAmount value={it.amount} onCommit={v => update(it, { amount: v }, '金額', it.amount, v)} />
+            <InlineAmount value={it.amount} formulaKey={`sales:${it.id}`} onCommit={v => update(it, { amount: v }, '金額', it.amount, v)} />
             <button onClick={() => remove(it)} className="text-slate-300 hover:text-rose-500 text-[12px]" aria-label="削除">✕</button>
           </div>
         </div>
@@ -555,7 +564,7 @@ function CategoryBreakdown({
                 />
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                <InlineAmount value={o.order_amount || o.estimate_amount} onCommit={v => updateOrderAmount(o, v, projectId, categoryName).then(onChanged)} />
+                <InlineAmount value={o.order_amount || o.estimate_amount} formulaKey={`order:${o.id}`} onCommit={v => updateOrderAmount(o, v, projectId, categoryName).then(onChanged)} />
                 <button
                   onClick={() => { if (confirm(`「${o.title}」を削除しますか？`)) deleteOrder(o, projectId, categoryName).then(onChanged) }}
                   className="text-slate-300 hover:text-rose-500 text-[12px]" aria-label="削除"

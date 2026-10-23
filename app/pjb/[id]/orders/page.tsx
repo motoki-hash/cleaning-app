@@ -96,7 +96,7 @@ export default function OrdersPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <InlineAmount value={o.order_amount || o.estimate_amount} onCommit={v => handleAmount(o, v)} emphasize />
+                  <InlineAmount value={o.order_amount || o.estimate_amount} formulaKey={`order:${o.id}`} onCommit={v => handleAmount(o, v)} emphasize />
                   <button onClick={() => handleDelete(o)} className="text-slate-300 hover:text-rose-500 text-[13px]" aria-label="削除">✕</button>
                 </div>
               </div>

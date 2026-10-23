@@ -122,7 +122,7 @@ export default function InvestorsPage() {
                   <InlineText value={inv.name} onCommit={v => updateInvestor(inv, 'name', v)} className="text-[15px] font-semibold text-slate-900" />
                   <div className="text-[12.5px] text-slate-400 flex items-center gap-1">
                     <InlineNumber value={inv.room_count} onCommit={v => updateInvestor(inv, 'room_count', v)} width="w-10" />部屋 ・ 投資額
-                    <InlineAmount value={inv.investment_amount} onCommit={v => updateInvestor(inv, 'investment_amount', v)} />
+                    <InlineAmount value={inv.investment_amount} formulaKey={`investor:${inv.id}:investment`} onCommit={v => updateInvestor(inv, 'investment_amount', v)} />
                     <button onClick={() => deleteInvestor(inv)} className="text-slate-300 hover:text-rose-500 text-[13px] ml-1" aria-label="削除">✕</button>
                   </div>
                 </div>

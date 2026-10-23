@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { setUndoHandlers, clearUndoHandlers } from './undo'
+import { loadFormulas } from './formulaStore'
 import type {
   Project, BudgetCategory, Order, AdditionalWork, VeItem, Investor, InvestorBilling, Vendor, SalesItem,
 } from './types'
@@ -154,6 +155,8 @@ export function useProjectData(projectId: string, options: { registerUndo?: bool
   }, [projectId])
 
   useEffect(() => { load() }, [load])
+  // 計算式で入れた金額の「式」を読み込む（パッチ015の前は、何も読み込まれない）
+  useEffect(() => { loadFormulas(projectId) }, [projectId])
 
   const step = useCallback(async (dir: 'undo' | 'redo') => {
     const h = getHistory(projectId)
