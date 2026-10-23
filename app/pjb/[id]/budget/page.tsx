@@ -78,7 +78,7 @@ export default function BudgetPage() {
         const remainTone = remainingRate < 0 ? 'danger' : remainingRate <= 0.01 ? 'warning' : 'good'
         return (
           <>
-            <div className="text-[13px] font-semibold text-slate-600 mb-1.5">プロジェクト全体</div>
+            <div className="text-[13px] font-semibold text-slate-600 mb-1.5">プロジェクト全体 <span className="font-normal text-slate-400">（金額はすべて税別）</span></div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
               <KpiCard label="PJ総予算" value={formatYen(totals.totalBudget)} />
               <KpiCard
@@ -99,7 +99,7 @@ export default function BudgetPage() {
           </>
         )
       })()}
-      <p className="text-[12.5px] text-slate-500 mb-2">当初予算はセルをタップして編集できます。BNS外予算の実行費用は、カテゴリー名をタップして開く「内訳」の登録・編集・削除だけで変わります（直接入力はできません）。BNS予算は「売上」を直接入力し、「原価」は内訳から積み上がり、「利益」は売上−原価で自動計算されます</p>
+      <p className="text-[12.5px] text-slate-500 mb-2"><b className="text-slate-700">金額はすべて税別で入力・表示します。</b>当初予算はセルをタップして編集できます。BNS外予算の実行費用は、カテゴリー名をタップして開く「内訳」の登録・編集・削除だけで変わります（直接入力はできません）。BNS予算は「売上」を直接入力し、「原価」は内訳から積み上がり、「利益」は売上−原価で自動計算されます</p>
 
       {groups.map(([group, list]) => group === 'BNS予算' ? (
         <BnsSection
@@ -540,7 +540,7 @@ function CategoryBreakdown({
           <input value={vendorName} onChange={e => setVendorName(e.target.value)} placeholder="例）〇〇工務店" className="border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px]" />
         </label>
         <label className="grid gap-0.5 sm:w-40">
-          <span className="text-[12px] text-slate-400">金額</span>
+          <span className="text-[12px] text-slate-400">金額（税別）</span>
           <MoneyInput value={amount} onChange={setAmount} placeholder="0" className="w-full min-w-0 border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px]" />
         </label>
         <button onClick={addItem} disabled={saving} className="px-3 py-1.5 rounded-md bg-blue-600 text-white text-[13.5px] font-medium disabled:opacity-50 whitespace-nowrap">

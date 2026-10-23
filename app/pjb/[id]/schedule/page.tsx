@@ -7,6 +7,7 @@ import Shell from '../../components/Shell'
 import RoughPrintSheet from './RoughPrintSheet'
 import PreopenPrintSheet from './PreopenPrintSheet'
 import Gantt, { type GanttBar, type GanttCol } from '../../components/Gantt'
+import { isCommitEnter } from '../../components/ui'
 import { useProjectData } from '@/lib/pjb/useProjectData'
 import {
   BAR_COLORS, CATEGORY_OPTIONS, colorForCategory, DEFAULT_MONTHS, MONTH_OPTIONS, roughCols, zeroCols, ROUGH_TEMPLATE, PREOPEN_TEMPLATE, DEFAULT_OPEN_WEEK,
@@ -967,7 +968,7 @@ function Field({
           value={draft}
           onChange={e => setDraft(e.target.value)}
           onBlur={() => { if (draft !== value) onSave(draft) }}
-          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+          onKeyDown={e => { if (isCommitEnter(e)) (e.target as HTMLInputElement).blur() }}
           placeholder="未設定"
           className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px] bg-white"
         />

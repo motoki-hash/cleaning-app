@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type {
   Project, BudgetCategory, Order, AdditionalWork, VeItem, Investor, InvestorBilling, Vendor,
@@ -18,8 +18,11 @@ export function useProjectData(projectId: string) {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
+  const loadedOnce = useRef(false)
+
   const load = useCallback(async () => {
-    setLoading(true)
+    // 最初の読み込みのときだけ「読み込み中」にする（再読み込みで画面が消えて入力中の内容が飛ぶのを防ぐ）
+    if (!loadedOnce.current) setLoading(true)
     const [
       projectRes, catRes, orderRes, workRes, veRes, investorRes, vendorRes,
     ] = await Promise.all([
@@ -34,6 +37,7 @@ export function useProjectData(projectId: string) {
 
     if (!projectRes.data) {
       setNotFound(true)
+      loadedOnce.current = true
       setLoading(false)
       return
     }
@@ -57,6 +61,7 @@ export function useProjectData(projectId: string) {
       setBillings([])
     }
 
+    loadedOnce.current = true
     setLoading(false)
   }, [projectId])
 

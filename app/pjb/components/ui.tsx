@@ -5,6 +5,9 @@ import { useState } from 'react'
 import type { Alert } from '@/lib/pjb/types'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
 
+// Enterで確定する入力欄用。日本語の変換を確定するEnterでは、保存されないようにする
+export const isCommitEnter = (e: React.KeyboardEvent) => e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229
+
 // 入力中に3桁カンマを自動で付ける金額入力。valueは数字のみの文字列（マイナス可）で受け渡す。
 function toCommas(raw: string) {
   if (!raw) return ''
@@ -78,7 +81,7 @@ export function InlineAmount({ value, onCommit, emphasize }: { value: number; on
   return (
     <span
       onBlur={commit}
-      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+      onKeyDown={e => { if (isCommitEnter(e)) (e.target as HTMLInputElement).blur() }}
     >
       <MoneyInput
         value={draft}
@@ -122,7 +125,7 @@ export function InlineNumber({
       defaultValue={value}
       onChange={e => setDraft(e.target.value)}
       onBlur={commit}
-      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+      onKeyDown={e => { if (isCommitEnter(e)) (e.target as HTMLInputElement).blur() }}
       onFocus={e => e.currentTarget.select()}
       className={`${width} text-right tabular-nums px-1.5 py-0.5 rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300`}
     />
@@ -160,7 +163,7 @@ export function InlineText({
       placeholder={placeholder}
       onChange={e => setDraft(e.target.value)}
       onBlur={commit}
-      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+      onKeyDown={e => { if (isCommitEnter(e)) (e.target as HTMLInputElement).blur() }}
       onFocus={e => e.currentTarget.select()}
       className={`px-1.5 py-0.5 -mx-1 rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300 ${className || ''}`}
     />

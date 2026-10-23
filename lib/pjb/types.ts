@@ -23,12 +23,26 @@ export type Project = {
   schedule_notes?: string | null
   zero_open_week?: number | null
   bns_budget_sales?: number | null
+  floor_area_tsubo?: number | null
   bns_budget_cost?: number | null
   bns_budget_profit?: number | null
   schedule_months?: number | null
   zero_notes?: string | null
   created_at: string
   updated_at: string
+}
+
+export type PjbDocument = {
+  id: string
+  project_id: string
+  order_id: string | null
+  doc_type: string
+  file_path: string
+  file_name: string
+  content_type: string | null
+  size_bytes: number | null
+  note: string | null
+  uploaded_at: string
 }
 
 export type ScheduleKind = 'zero' | 'rough' | 'preopen'

@@ -55,17 +55,39 @@ export default function CostVePage() {
     const after = appliedAmount({ ...v, ...patch })
     const budgetDelta = before - after // 減額が増えるほどマイナスになる
 
-    await supabase.from('pjb_ve_items').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', v.id)
+    if (budgetDelta !== 0 && !v.category_id) {
+      alert('対象カテゴリーが未設定のため、予算に反映できません。先に「対象カテゴリー」を選んでください。')
+      return
+    }
+
+    const { error } = await supabase.from('pjb_ve_items').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', v.id)
+    if (error) { alert(`保存に失敗しました：${error.message}`); return }
 
     if (budgetDelta !== 0 && v.category_id) {
       const cat = categories.find(c => c.id === v.category_id)
-      await applyBudgetDelta({
+      const r = await applyBudgetDelta({
         categoryId: v.category_id, projectId: id, delta: budgetDelta, reason: `VE確定：${v.content}`,
         entityLabel: `${cat?.name || ''} 最新予算`,
       })
+      if (r.error) alert(`予算への反映に失敗しました：${r.error}`)
     }
     if (patch.status) {
       await logActivity({ projectId: id, action: 'update', entityType: 've_item', entityLabel: `${v.content} ステータス`, before: v.status, after: patch.status })
+    }
+    reload()
+  }
+
+  // 対象カテゴリーを選び直す（採用済みなら、減額も新しいカテゴリーに付け替える）
+  const changeVeCategory = async (v: VeItem, newCategoryId: string) => {
+    if (!newCategoryId || newCategoryId === v.category_id) return
+    const applied = appliedAmount(v)
+    const { error } = await supabase.from('pjb_ve_items').update({ category_id: newCategoryId, updated_at: new Date().toISOString() }).eq('id', v.id)
+    if (error) { alert(`保存に失敗しました：${error.message}`); return }
+    if (applied > 0) {
+      if (v.category_id) {
+        await applyBudgetDelta({ categoryId: v.category_id, projectId: id, delta: applied, reason: `VE対象変更：${v.content}`, entityLabel: `${catName(v.category_id)} 最新予算` })
+      }
+      await applyBudgetDelta({ categoryId: newCategoryId, projectId: id, delta: -applied, reason: `VE対象変更：${v.content}`, entityLabel: `${catName(newCategoryId)} 最新予算` })
     }
     reload()
   }
@@ -83,14 +105,17 @@ export default function CostVePage() {
       ? `「${v.content}」を削除しますか？\n採用済みのため、減額していた最新予算は元に戻ります。`
       : `「${v.content}」を削除しますか？`
     if (!confirm(msg)) return
-    await supabase.from('pjb_ve_items').delete().eq('id', v.id)
+    // 先に削除して、成功したときだけ予算を元に戻す（削除に失敗したのに予算だけ動くのを防ぐ）
+    const { error } = await supabase.from('pjb_ve_items').delete().eq('id', v.id)
+    if (error) { alert(`削除に失敗しました：${error.message}`); return }
 
     if (applied > 0 && v.category_id) {
       const cat = categories.find(c => c.id === v.category_id)
-      await applyBudgetDelta({
+      const r = await applyBudgetDelta({
         categoryId: v.category_id, projectId: id, delta: applied, reason: `VE削除：${v.content}`,
         entityLabel: `${cat?.name || ''} 最新予算`,
       })
+      if (r.error) alert(`予算を元に戻せませんでした：${r.error}`)
     }
     await logActivity({ projectId: id, action: 'delete', entityType: 've_item', entityLabel: v.content, before: v.planned_reduction })
     reload()
@@ -194,7 +219,26 @@ export default function CostVePage() {
                 </div>
                 <button onClick={() => deleteVe(v)} className="text-slate-300 hover:text-rose-500 text-[13px] shrink-0" aria-label="削除">✕</button>
               </div>
+              {/* 予算に反映されているかを、はっきり表示する */}
+              <div className={`text-[12.5px] mb-2 ${v.status === '採用' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                {v.status === '採用'
+                  ? `✓ 予算に反映済み（${catName(v.category_id)} −${formatYen(v.confirmed_reduction || v.planned_reduction)}）`
+                  : `まだ予算に反映されていません（「採用」にすると、${catName(v.category_id)} が −${formatYen(v.planned_reduction)} されます）`}
+              </div>
               <div className="flex items-center gap-2 flex-wrap">
+                {!v.category_id && (
+                  <select
+                    value="" onChange={e => changeVeCategory(v, e.target.value)}
+                    className="text-[12.5px] px-2 py-1 rounded-md border border-amber-300 bg-amber-50 text-amber-800"
+                  >
+                    <option value="">対象カテゴリーを選ぶ</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                )}
+                {v.status !== '採用' && v.status !== '不採用' && (
+                  <button onClick={() => updateVe(v, { status: '採用' })}
+                    className="text-[12.5px] px-2.5 py-1 rounded-md bg-blue-600 text-white font-medium">採用して予算に反映</button>
+                )}
                 <select
                   value={v.status}
                   onChange={e => updateVe(v, { status: e.target.value as VeItem['status'] })}

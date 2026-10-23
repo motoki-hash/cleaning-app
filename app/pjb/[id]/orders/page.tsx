@@ -70,7 +70,7 @@ export default function OrdersPage() {
         <KpiCard label="支払完了" value={`${paidCount}/${orders.length}件`} tone={paidCount === orders.length && orders.length > 0 ? 'good' : 'default'} />
       </div>
 
-      <SectionTitle>発注一覧 ({orders.length})</SectionTitle>
+      <SectionTitle>発注一覧 ({orders.length}) <span className="text-[12px] font-normal text-slate-400 ml-1">金額は税別</span></SectionTitle>
       <div className="flex gap-1.5 overflow-x-auto no-scrollbar mb-3">
         {(['全て', ...ORDER_STATUSES] as StatusFilter[]).map(f => (
           <button

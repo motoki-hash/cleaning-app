@@ -17,6 +17,7 @@ const TABS = [
   { key: 'orders', label: '発注管理', href: '/orders', group: '発注・支払' },
   { key: 'payments', label: '支払', href: '/payments', group: '発注・支払' },
   { key: 'investors', label: '投資家請求', href: '/investors', group: '請求' },
+  { key: 'documents', label: '書類（見積書など）', href: '/documents', group: 'その他' },
   { key: 'history', label: '操作履歴', href: '/history', group: 'その他' },
 ] as const
 
@@ -39,6 +40,7 @@ function NavIcon({ name }: { name: string }) {
     payments: <><rect x="3" y="6" width="18" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /></>,
     investors: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M17 5.5a3 3 0 0 1 0 5.8M21.5 20c0-2.6-1.4-4.5-3.5-5.5" /></>,
     history: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    documents: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></>,
   }[name] ?? null
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">{p}</svg>

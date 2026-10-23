@@ -4,10 +4,13 @@ import { useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Shell from '../components/Shell'
 import DeleteProjectModal from '../components/DeleteProjectModal'
-import { KpiCard, AlertList, StatePill, SectionTitle } from '../components/ui'
+import { KpiCard, AlertList, StatePill, SectionTitle, InlineNumber } from '../components/ui'
+import { supabase } from '@/lib/supabase'
 import { useProjectData } from '@/lib/pjb/useProjectData'
 import { summarizeCategory, summarizeProject, buildAlerts } from '@/lib/pjb/calc'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
+
+const PURE_CONSTRUCTION = ['解体工事', '内装工事', '追加工事', '分離発注']
 
 export default function DashboardPage() {
   const { id } = useParams<{ id: string }>()
@@ -29,12 +32,15 @@ export default function DashboardPage() {
     return <Shell projectId={id} active="dashboard"><p className="text-center text-[14px] text-slate-400 py-10">読み込み中…</p></Shell>
   }
 
+  const tsubo = project.floor_area_tsubo || 0
+  // 純粋な工事費：解体工事・内装工事・追加工事・分離発注（BNS外・BNS両方の同名カテゴリーを合算）
+  const pureCost = summaries.filter(s => PURE_CONSTRUCTION.includes(s.category.name)).reduce((t, s) => t + s.landingForecast, 0)
   const bnsExternal = summaries.filter(s => s.category.group_name === 'BNS外予算')
   const bns = summaries.filter(s => s.category.group_name === 'BNS予算')
 
   return (
     <Shell projectId={id} projectName={project.name} projectStatus={project.status} active="dashboard" onQuickAdded={reload}>
-      <SectionTitle>予算KPI</SectionTitle>
+      <SectionTitle>予算KPI <span className="text-[12px] font-normal text-slate-400 ml-1">金額はすべて税別</span></SectionTitle>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <KpiCard label="PJ総予算" value={formatYen(totals.totalBudget)} />
         <KpiCard label="発注済金額" value={formatYen(totals.orderedAmount)} />
@@ -46,6 +52,37 @@ export default function DashboardPage() {
         />
         <KpiCard label="残予算" value={formatSignedYen(totals.remaining)} tone={totals.remaining < 0 ? 'danger' : 'good'} />
         <KpiCard label="予算消化率" value={formatPercent(totals.consumptionRate)} tone={totals.consumptionRate >= 1 ? 'danger' : totals.consumptionRate >= 0.9 ? 'warning' : 'default'} />
+      </div>
+
+      <SectionTitle>
+        工事費の坪単価 <span className="text-[12px] font-normal text-slate-400 ml-1">金額はすべて税別（着地見込ベース）</span>
+      </SectionTitle>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+          <div className="text-[13px] text-slate-500 mb-1">延床面積（坪）</div>
+          <div className="text-[21px] leading-tight font-bold tabular-nums text-slate-900">
+            <InlineNumber
+              value={tsubo} width="w-28" emphasize
+              display={v => (v > 0 ? `${v.toLocaleString('ja-JP')}坪` : '坪数を入力')}
+              onCommit={async v => {
+                const { error } = await supabase.from('pjb_projects').update({ floor_area_tsubo: Math.max(0, v), updated_at: new Date().toISOString() }).eq('id', id)
+                if (error) { alert(`保存に失敗しました：${error.message}（SQLパッチ011を実行していない場合は、先に実行してください）`); return }
+                reload()
+              }}
+            />
+          </div>
+          <div className="text-[12px] text-slate-500 mt-1">タップして入力します</div>
+        </div>
+        <KpiCard
+          label="坪単価（全コンバージョン費）"
+          value={tsubo > 0 ? `${formatYen(Math.round(totals.landingForecast / tsubo))} /坪` : '—'}
+          sub={tsubo > 0 ? `着地見込 ${formatYen(totals.landingForecast)} ÷ ${tsubo.toLocaleString('ja-JP')}坪` : '坪数を入れると表示されます'}
+        />
+        <KpiCard
+          label="坪単価（純粋な工事費）"
+          value={tsubo > 0 ? `${formatYen(Math.round(pureCost / tsubo))} /坪` : '—'}
+          sub={tsubo > 0 ? `${PURE_CONSTRUCTION.join('・')} ${formatYen(pureCost)} ÷ ${tsubo.toLocaleString('ja-JP')}坪` : '解体・内装・追加工事・分離発注の合計'}
+        />
       </div>
 
       <SectionTitle>BNS収益KPI</SectionTitle>

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { findOrCreateVendor } from '@/lib/pjb/useProjectData'
 import { logActivity } from '@/lib/pjb/activity'
 import { createOrder } from '@/lib/pjb/orders'
+import { applyBudgetDelta } from '@/lib/pjb/budget'
 import { MoneyInput } from './ui'
 import type { BudgetCategory, Order } from '@/lib/pjb/types'
 
@@ -45,6 +46,7 @@ export default function QuickAddSheet({
   const [content, setContent] = useState('')
   const [vendorName, setVendorName] = useState('')
   const [amount, setAmount] = useState('')
+  const [veAdopt, setVeAdopt] = useState(false)
   const [dateVal, setDateVal] = useState(today())
   const [reason, setReason] = useState('')
   const [selectedOrderId, setSelectedOrderId] = useState('')
@@ -75,10 +77,18 @@ export default function QuickAddSheet({
     setSaving(true)
     // この時点では「検討中」なので予算にはまだ反映しない。採用に確定した時点で
     // 対象カテゴリーの最新予算を直接減額する（Cost・VE画面のステータス変更時）。
-    await supabase.from('pjb_ve_items').insert({
+    const reduction = Number(amount)
+    const { error: err } = await supabase.from('pjb_ve_items').insert({
       project_id: projectId, category_id: categoryId, content: title, target_item: content || null,
-      planned_reduction: Number(amount), status: '検討中',
+      planned_reduction: reduction, status: veAdopt ? '採用' : '検討中', confirmed_reduction: veAdopt ? reduction : 0,
     })
+    if (err) { setError(`登録に失敗しました：${err.message}`); setSaving(false); return }
+    if (veAdopt) {
+      // 追加と同時に採用する場合は、すぐに対象カテゴリーの予算から減額する
+      const cat = categories.find(c => c.id === categoryId)
+      const r = await applyBudgetDelta({ categoryId, projectId, delta: -reduction, reason: `VE確定：${title}`, entityLabel: `${cat?.name || ''} 最新予算` })
+      if (r.error) { setError(`予算への反映に失敗しました：${r.error}`); setSaving(false); return }
+    }
     await logActivity({ projectId, action: 'create', entityType: 've_item', entityLabel: title, after: amount })
     setSaving(false)
     onSaved()
@@ -181,7 +191,7 @@ export default function QuickAddSheet({
                 <Field label="対象項目の詳細（任意）"><input value={content} onChange={e => setContent(e.target.value)} className="input" placeholder="例）床材" /></Field>
               )}
 
-              <Field label={mode === 've' ? '削減予定額' : '金額'}>
+              <Field label={mode === 've' ? '削減予定額（税別）' : '金額（税別）'}>
                 <MoneyInput value={amount} onChange={setAmount} className="input" placeholder="0" />
               </Field>
               {mode === 'order' && (
@@ -190,9 +200,17 @@ export default function QuickAddSheet({
                 </p>
               )}
               {mode === 've' && (
-                <p className="text-[12.5px] text-slate-400 -mt-1">
-                  今は「検討中」として登録され、まだ予算には反映されません。「Cost・VE」画面でステータスを「採用」にした時点で、対象カテゴリーの最新予算が減額されます。
-                </p>
+                <div className="grid gap-1.5">
+                  <label className="flex items-start gap-2 text-[13.5px] text-slate-700">
+                    <input type="checkbox" checked={veAdopt} onChange={e => setVeAdopt(e.target.checked)} className="mt-1" />
+                    <span>追加と同時に「採用」にして、すぐ予算に反映する</span>
+                  </label>
+                  <p className="text-[12.5px] text-slate-400">
+                    {veAdopt
+                      ? '登録すると同時に、対象カテゴリーの予算から、削減額が引かれます。'
+                      : 'チェックしないと「検討中」として登録され、予算にはまだ反映されません。あとで「Cost・VE」画面の「採用して予算に反映」を押すと、反映されます。'}
+                  </p>
+                </div>
               )}
 
               {(mode === 'work' || mode === 'order') && (
