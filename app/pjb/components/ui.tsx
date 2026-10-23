@@ -251,6 +251,47 @@ export function KpiCard({
   )
 }
 
+// タップして金額を編集できるKPIカード（例：PJ総予算）。計算式も入力できる
+export function EditableKpiCard({
+  label, value, onCommit, sub, formulaKey,
+}: { label: string; value: number; onCommit: (v: number) => void; sub?: string; formulaKey?: string }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(String(value))
+  useFormulaVersion()
+  const formula = formulaFor(formulaKey, value)
+
+  const commit = () => {
+    setEditing(false)
+    const num = Number(draft)
+    if (!isNaN(num) && num !== value) onCommit(num)
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <div className="text-[13px] text-slate-500 mb-1">{label}</div>
+      {editing ? (
+        <span onBlur={commit} onKeyDown={e => { if (isCommitEnter(e)) (e.target as HTMLInputElement).blur() }}>
+          <MoneyInput
+            value={draft} onChange={setDraft} autoFocus formulaKey={formulaKey}
+            className="w-full text-[19px] font-bold tabular-nums px-2 py-1 -mx-2 rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300"
+          />
+        </span>
+      ) : (
+        <button
+          onClick={() => { setDraft(String(value)); setEditing(true) }}
+          className="text-left text-[21px] leading-tight font-bold tabular-nums text-slate-900"
+          title={formula ? `計算式：${formula}` : 'タップして編集'}
+        >
+          <span className="border-b border-dashed border-slate-300">
+            {formula && <span className="text-[11px] font-normal text-slate-400 mr-1">ƒ</span>}{formatYen(value)}
+          </span>
+        </button>
+      )}
+      <div className="text-[12px] text-slate-500 mt-1">{sub ?? 'タップして編集できます'}</div>
+    </div>
+  )
+}
+
 const SEVERITY_STYLE: Record<Alert['severity'], string> = {
   danger: 'bg-rose-50 text-rose-700 border-rose-100',
   warning: 'bg-amber-50 text-amber-700 border-amber-100',
