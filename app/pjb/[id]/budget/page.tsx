@@ -230,6 +230,9 @@ export default function BudgetPage() {
   )
 }
 
+// PJ全体の「原価の予算」から除く項目（利益と、社内の設計費）
+const BUDGET_COST_EXCLUDED = ['BNS利益', '設計デザイン費用(社内)']
+
 // BNS予算：項目ごとに「売上・原価・利益」で見る。売上も原価も、項目ごとに複数の行（内訳）で入れる。
 // 予算は項目ごとではなく、PJ全体で入力する。
 function BnsSection({
@@ -252,13 +255,16 @@ function BnsSection({
   const totalProfit = totalSales - totalCost
   const margin = totalSales > 0 ? totalProfit / totalSales : 0
 
-  // 利益の予算は、売上の予算 − 原価の予算で自動計算する（入力しない）
-  const budgetSales = project.bns_budget_sales || 0
-  const budgetCost = project.bns_budget_cost || 0
-  const budgetRows: Array<{ label: string; field: 'bns_budget_sales' | 'bns_budget_cost' | 'bns_budget_profit'; budget: number; actual: number; costLike?: boolean; auto?: boolean }> = [
-    { label: '売上', field: 'bns_budget_sales', budget: budgetSales, actual: totalSales },
-    { label: '原価', field: 'bns_budget_cost', budget: budgetCost, actual: totalCost, costLike: true },
-    { label: '利益', field: 'bns_budget_profit', budget: budgetSales - budgetCost, actual: totalProfit, auto: true },
+  // PJ全体の予算は、すべて下の項目の売上の積み上げから自動で計算する（入力しない）
+  //   売上の予算 = すべての項目の売上の合計
+  //   原価の予算 = 「BNS利益」と「設計デザイン費用(社内)」を除いた項目の売上の合計
+  //   利益の予算 = 売上の予算 − 原価の予算
+  const budgetSales = totalSales
+  const budgetCost = rows.filter(r => !BUDGET_COST_EXCLUDED.includes(r.s.category.name)).reduce((t, r) => t + r.sales, 0)
+  const budgetRows: Array<{ label: string; field: string; budget: number; actual: number; costLike?: boolean }> = [
+    { label: '売上', field: 'sales', budget: budgetSales, actual: totalSales },
+    { label: '原価', field: 'cost', budget: budgetCost, actual: totalCost, costLike: true },
+    { label: '利益', field: 'profit', budget: budgetSales - budgetCost, actual: totalProfit },
   ]
 
   const profitTone = (v: number) => (v < 0 ? 'text-rose-600' : v === 0 ? 'text-slate-300' : 'text-emerald-600')
@@ -302,7 +308,7 @@ function BnsSection({
       <div className="rounded-xl border border-slate-300 bg-white shadow-sm overflow-hidden mb-4">
         <div className="px-4 py-2.5 bg-slate-100 border-b border-slate-300 flex items-baseline justify-between gap-2 flex-wrap">
           <span className="text-[13.5px] font-semibold text-slate-800">PJ全体の予算</span>
-          <span className="text-[12px] text-slate-500">項目ごとではなく、PJ全体で売上と原価の予算を入れます（金額をタップして入力。利益は自動計算）</span>
+          <span className="text-[12px] text-slate-500">下の項目の売上の積み上げで、自動計算されます（原価の予算は、BNS利益・設計デザイン費用(社内)を除く）</span>
         </div>
         <table className="w-full text-[13.5px]">
           <thead>
@@ -319,15 +325,12 @@ function BnsSection({
               return (
                 <tr key={r.field} className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-2.5 font-semibold text-slate-900">{r.label}</td>
-                  {r.auto ? (
-                    <td className={`px-3 py-2.5 text-right tabular-nums font-semibold ${r.budget === 0 ? 'text-slate-300' : r.budget < 0 ? 'text-rose-600' : 'text-slate-800'}`} title="売上の予算 − 原価の予算で、自動計算されます">
-                      <span className="text-[11px] font-normal text-slate-400 mr-2">自動</span>{formatSignedYen(r.budget)}
-                    </td>
-                  ) : (
-                    <td className="px-1 py-1 text-right">
-                      <InlineAmount value={r.budget} formulaKey={`project:${r.field}`} onCommit={v => updateProject({ [r.field]: v } as Partial<Project>)} />
-                    </td>
-                  )}
+                  <td
+                    className={`px-3 py-2.5 text-right tabular-nums font-semibold ${r.budget === 0 ? 'text-slate-300' : r.budget < 0 ? 'text-rose-600' : 'text-slate-800'}`}
+                    title={r.field === 'sales' ? 'すべての項目の売上の合計' : r.field === 'cost' ? '「BNS利益」と「設計デザイン費用(社内)」を除いた項目の売上の合計' : '売上の予算 − 原価の予算'}
+                  >
+                    <span className="text-[11px] font-normal text-slate-400 mr-2">自動</span>{r.field === 'profit' ? formatSignedYen(r.budget) : formatYen(r.budget)}
+                  </td>
                   <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">{formatYen(r.actual)}</td>
                   <td className={`px-4 py-2.5 text-right tabular-nums font-semibold ${r.budget === 0 ? 'text-slate-300' : diff < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                     {r.budget === 0 ? '—' : formatSignedYen(diff)}
