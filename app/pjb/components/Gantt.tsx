@@ -59,12 +59,27 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
     e.stopPropagation()
     e.preventDefault()
     const x0 = e.clientX
+    const y0 = e.clientY
     const copy = e.altKey && mode === 'move'
+    const rect = rowsRef.current?.getBoundingClientRect()
+    const fromRow = rows.findIndex(r => r.id === bar.rowId)
     let moved = false
+    // バーの移動は、最初に動いた方向で「横（日付の移動）」か「縦（行の入れ替え）」かが決まる
+    let axis: 'h' | 'v' | null = mode === 'move' ? null : 'h'
+    let toRow = fromRow
     let cur = { start: bar.start, len: bar.len }
     const onMove = (ev: PointerEvent) => {
-      if (Math.abs(ev.clientX - x0) > 3) moved = true
-      const dx = Math.round((ev.clientX - x0) / cw)
+      const rawDx = ev.clientX - x0
+      const rawDy = ev.clientY - y0
+      if (!axis && (Math.abs(rawDx) > 5 || Math.abs(rawDy) > 5)) axis = !copy && Math.abs(rawDy) > Math.abs(rawDx) && rect ? 'v' : 'h'
+      if (axis === 'v' && rect) {
+        moved = true
+        toRow = clamp(Math.floor((ev.clientY - rect.top) / ROW_H), 0, rows.length - 1)
+        setRowDrag({ id: bar.rowId, from: fromRow, to: toRow })
+        return
+      }
+      if (Math.abs(rawDx) > 3) moved = true
+      const dx = Math.round(rawDx / cw)
       let s = bar.start, l = bar.len
       if (mode === 'move') s = clamp(bar.start + dx, 0, cols.length - bar.len)
       else if (mode === 'r') l = clamp(bar.len + dx, 1, cols.length - bar.start)
@@ -76,6 +91,8 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       setDrag(null)
+      setRowDrag(null)
+      if (axis === 'v') { if (toRow !== fromRow) onReorder(bar.rowId, toRow); return }
       if (!moved) onBarClick(bar.id)
       else if (cur.start !== bar.start || cur.len !== bar.len) (copy ? onBarCopy : onBarChange)(bar.id, cur.start, cur.len)
     }
