@@ -37,17 +37,17 @@ input::placeholder, textarea::placeholder {
 }
 
 /* ============================================================================
-   PJ予算管理（/pjb）専用テーマ：濃紺（ネイビー）を基調に、角丸を控えめにする。
+   PJ予算管理（/pjb）専用テーマ：深いグリーンを基調に（落ち着いたグレーの背景に、白いカード）、角丸を控えめにする。
    清掃管理アプリ側には影響しないよう、.pjb-theme の中だけに適用する。
    スケジュールのバーの色（sky/emerald/rose/amber など）は変更しない。
    ============================================================================ */
 .pjb-theme {
-  --pjb-green: #1e293b;
-  --pjb-green-dark: #0f172a;
-  --pjb-mint: #e2e8f0;
-  --pjb-mint-soft: #f1f5f9;
-  --pjb-bg: #ffffff;
-  --pjb-ink: #0f172a;
+  --pjb-green: #17382f;
+  --pjb-green-dark: #0f2a22;
+  --pjb-mint: #e2efe8;
+  --pjb-mint-soft: #eef6f1;
+  --pjb-bg: #f3f5f3;
+  --pjb-ink: #14201c;
   color: var(--pjb-ink);
 }
 .pjb-theme .min-h-screen.bg-slate-100 { background-color: var(--pjb-bg); }
@@ -63,7 +63,7 @@ input::placeholder, textarea::placeholder {
 .pjb-theme .bg-blue-50, .pjb-theme .hover\:bg-blue-50:hover { background-color: var(--pjb-mint); }
 .pjb-theme .bg-blue-50\/60 { background-color: var(--pjb-mint-soft); }
 .pjb-theme .bg-blue-100\/70 { background-color: var(--pjb-mint); }
-.pjb-theme .border-blue-200, .pjb-theme .hover\:border-blue-300:hover { border-color: #c3cfdd; }
+.pjb-theme .border-blue-200, .pjb-theme .hover\:border-blue-300:hover { border-color: #b9d6c8; }
 
 /* 角丸を少し控えめに（丸いピル型 rounded-full はそのまま） */
 .pjb-theme .rounded-2xl { border-radius: 10px; }
@@ -75,13 +75,13 @@ input::placeholder, textarea::placeholder {
   .pjb-theme .sm\:rounded-2xl { border-radius: 10px; }
 }
 
-/* 面と線の色を、背景のグレーと同じ「青みがかったグレー」にそろえる（色味が混在して見えないように） */
-.pjb-theme .bg-slate-100 { background-color: #eef2f7; }
-.pjb-theme .bg-slate-50, .pjb-theme .bg-slate-50\/60 { background-color: #f6f8fb; }
-.pjb-theme .border-slate-200 { border-color: #d3dbe5; }
-.pjb-theme .border-slate-300 { border-color: #c3ccd8; }
-.pjb-theme .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #e5eaf0; }
-.pjb-theme .border-slate-100 { border-color: #e5eaf0; }
+/* 面と線の色を、背景のグレーと同じ「わずかに緑がかったグレー」にそろえる（色味が混在して見えないように） */
+.pjb-theme .bg-slate-100 { background-color: #f1f4f2; }
+.pjb-theme .bg-slate-50, .pjb-theme .bg-slate-50\/60 { background-color: #f8faf8; }
+.pjb-theme .border-slate-200 { border-color: #e1e6e2; }
+.pjb-theme .border-slate-300 { border-color: #cfd6d1; }
+.pjb-theme .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #e9edea; }
+.pjb-theme .border-slate-100 { border-color: #e9edea; }
 
 /* 色つきの左ライン（KPIカードなど）は、上の「線の色」の上書きに負けないように指定し直す */
 .pjb-theme .border-l-amber-400 { border-left-color: #fbbf24; }
@@ -93,13 +93,5 @@ input::placeholder, textarea::placeholder {
 /* カードを背景から浮かせる（白い面＋うすい影）。背景と見分けやすくする */
 .pjb-theme .bg-white.rounded-xl,
 .pjb-theme .bg-white.rounded-lg {
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 1px 2px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 1px 3px rgba(20, 32, 28, 0.08), 0 1px 2px rgba(20, 32, 28, 0.04);
 }
-
-/* 背景が白なので、カード（大きな枠）は、うすい青グレーの面にして、はっきり見分けられるようにする */
-.pjb-theme :is(div, a).bg-white.rounded-xl {
-  background-color: #eef2f7;
-  border-color: #c4cfdd;
-}
-/* 表の見出しは、カードの面より一段濃くする */
-.pjb-theme :is(div, a).bg-white.rounded-xl .bg-slate-100 { background-color: #e2e9f1; }
