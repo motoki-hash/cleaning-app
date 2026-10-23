@@ -350,7 +350,13 @@ function BnsSection({
 
       {/* desktop: table */}
       <div className="hidden sm:block rounded-xl border border-slate-300 bg-white overflow-x-auto shadow-sm">
-        <table className="w-full text-[13.5px] min-w-[620px]">
+        <table className="w-full text-[13.5px] min-w-[620px] table-fixed">
+          <colgroup>
+            <col style={{ width: '37%' }} />
+            <col style={{ width: '21%' }} />
+            <col style={{ width: '21%' }} />
+            <col style={{ width: '21%' }} />
+          </colgroup>
           <thead>
             <tr className="text-left text-slate-600 bg-slate-100 border-b border-slate-300 text-[13px]">
               <th className="px-3 py-2.5 font-semibold whitespace-nowrap">項目 <span className="font-normal text-slate-400">（行をクリックして、売上・原価の内訳を入力）</span></th>
@@ -389,7 +395,8 @@ function BnsSection({
               <td className="px-3 py-3 text-right tabular-nums font-bold text-slate-900">{formatYen(totalSales)}</td>
               <td className="px-3 py-3 text-right tabular-nums font-bold text-slate-900">{formatYen(totalCost)}</td>
               <td className={`px-3 py-3 text-right tabular-nums font-bold ${totalProfit < 0 ? 'text-rose-600' : 'text-blue-700'}`}>
-                {formatSignedYen(totalProfit)} <span className="text-[12px] font-medium text-slate-500">（利益率 {formatPercent(margin, 1)}）</span>
+                <div>{formatSignedYen(totalProfit)}</div>
+                <div className="text-[11.5px] font-medium text-slate-500">利益率 {formatPercent(margin, 1)}</div>
               </td>
             </tr>
           </tfoot>
