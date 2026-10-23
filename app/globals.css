@@ -95,3 +95,11 @@ input::placeholder, textarea::placeholder {
 .pjb-theme .bg-white.rounded-lg {
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 1px 2px rgba(15, 23, 42, 0.06);
 }
+
+/* 背景が白なので、カード（大きな枠）は、うすい青グレーの面にして、はっきり見分けられるようにする */
+.pjb-theme :is(div, a).bg-white.rounded-xl {
+  background-color: #eef2f7;
+  border-color: #c4cfdd;
+}
+/* 表の見出しは、カードの面より一段濃くする */
+.pjb-theme :is(div, a).bg-white.rounded-xl .bg-slate-100 { background-color: #e2e9f1; }
