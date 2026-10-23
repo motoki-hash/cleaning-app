@@ -1,5 +1,5 @@
 import type {
-  BudgetCategory, Order, AdditionalWork, VeItem, CategorySummary, Alert, Project,
+  BudgetCategory, Order, AdditionalWork, VeItem, CategorySummary, Alert, Project, SalesItem,
 } from './types'
 import { daysUntil, formatYen } from './format'
 
@@ -74,6 +74,13 @@ export function summarizeCategory(
   }
 }
 
+// BNS予算の項目の「売上」。売上の内訳（pjb_sales_items）の合計。
+// 内訳のテーブルがまだない（パッチ014の前）ときは、従来どおり項目に直接入れた金額を使う
+export function categorySales(category: BudgetCategory, salesItems: SalesItem[] | null): number {
+  if (salesItems === null) return category.original_budget || 0
+  return salesItems.filter(s => s.category_id === category.id).reduce((t, s) => t + (s.amount || 0), 0)
+}
+
 export type ProjectTotals = {
   totalBudget: number
   orderedAmount: number
@@ -93,6 +100,7 @@ export function summarizeProject(
   project: Project,
   categories: BudgetCategory[],
   summaries: CategorySummary[],
+  salesItems: SalesItem[] | null = null,
 ): ProjectTotals {
   const orderedAmount = summaries.reduce((s, c) => s + c.orderedAmount, 0)
   const unorderedPlanned = summaries.reduce((s, c) => s + c.unorderedPlanned, 0)
@@ -106,7 +114,7 @@ export function summarizeProject(
   const bnsCostSummaries = summaries.filter(s => s.category.group_name === 'BNS予算' && s.category.counts_as_cost)
   // BNS売上 = BNS予算グループの「売上」（項目ごとに入力した売上の合計）。
   // 原価は項目の内訳（発注）から積み上がる。実際の請求が一括か複数投資家への分割かはInvestor画面側の按分で決まる
-  const bnsSell = bnsCategories.reduce((s, c) => s + (c.original_budget || 0), 0)
+  const bnsSell = bnsCategories.reduce((s, c) => s + categorySales(c, salesItems), 0)
   const bnsCost = bnsCostSummaries.reduce((s, c) => s + c.landingForecast, 0)
   const bnsGrossProfit = bnsSell - bnsCost
   const grossMargin = bnsSell > 0 ? bnsGrossProfit / bnsSell : 0

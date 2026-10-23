@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { setUndoHandlers, clearUndoHandlers } from './undo'
 import type {
-  Project, BudgetCategory, Order, AdditionalWork, VeItem, Investor, InvestorBilling, Vendor,
+  Project, BudgetCategory, Order, AdditionalWork, VeItem, Investor, InvestorBilling, Vendor, SalesItem,
 } from './types'
 
 // 「元に戻す」用に、案件のデータ全体（予算・発注・追加工事・VE・投資家・請求）の写しを持つ。
@@ -17,6 +17,7 @@ type Snapshot = {
   ves: VeItem[]
   investors: Investor[]
   billings: InvestorBilling[]
+  sales: SalesItem[] | null
 }
 type History = { undo: Snapshot[]; redo: Snapshot[]; current: Snapshot | null; skipPush: boolean }
 const histories = new Map<string, History>()
@@ -39,6 +40,7 @@ async function restoreSnapshot(cur: Snapshot, target: Snapshot): Promise<string 
   }
   const tables: Array<[string, { upsert: { id: string }[]; remove: string[] }]> = [
     ['pjb_budget_categories', diffRows(cur.categories, target.categories)],
+    ...(cur.sales && target.sales ? [['pjb_sales_items', diffRows(cur.sales, target.sales)] as [string, { upsert: { id: string }[]; remove: string[] }]] : []),
     ['pjb_orders', diffRows(cur.orders, target.orders)],
     ['pjb_additional_works', diffRows(cur.works, target.works)],
     ['pjb_ve_items', diffRows(cur.ves, target.ves)],
@@ -70,6 +72,7 @@ export function useProjectData(projectId: string, options: { registerUndo?: bool
   const [investors, setInvestors] = useState<Investor[]>([])
   const [billings, setBillings] = useState<InvestorBilling[]>([])
   const [vendors, setVendors] = useState<Vendor[]>([])
+  const [salesItems, setSalesItems] = useState<SalesItem[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
@@ -81,7 +84,7 @@ export function useProjectData(projectId: string, options: { registerUndo?: bool
     // 最初の読み込みのときだけ「読み込み中」にする（再読み込みで画面が消えて入力中の内容が飛ぶのを防ぐ）
     if (!loadedOnce.current) setLoading(true)
     const [
-      projectRes, catRes, orderRes, workRes, veRes, investorRes, vendorRes,
+      projectRes, catRes, orderRes, workRes, veRes, investorRes, vendorRes, salesRes,
     ] = await Promise.all([
       supabase.from('pjb_projects').select('*').eq('id', projectId).maybeSingle(),
       supabase.from('pjb_budget_categories').select('*').eq('project_id', projectId).order('sort_order'),
@@ -90,7 +93,11 @@ export function useProjectData(projectId: string, options: { registerUndo?: bool
       supabase.from('pjb_ve_items').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
       supabase.from('pjb_investors').select('*').eq('project_id', projectId).order('created_at'),
       supabase.from('pjb_vendors').select('*').order('name'),
+      supabase.from('pjb_sales_items').select('*').eq('project_id', projectId).order('created_at'),
     ])
+    // 売上の内訳のテーブルがまだないときは null（従来どおり、項目に直接入れた売上を使う）
+    const salesRows: SalesItem[] | null = salesRes.error ? null : ((salesRes.data || []) as SalesItem[])
+    setSalesItems(salesRows)
 
     if (!projectRes.data) {
       setNotFound(true)
@@ -127,6 +134,7 @@ export function useProjectData(projectId: string, options: { registerUndo?: bool
       ves: (veRes.data || []) as VeItem[],
       investors: investorRows,
       billings: billingRows,
+      sales: salesRows,
     }
     const h = getHistory(projectId)
     if (!loadedOnce.current) {
@@ -180,7 +188,7 @@ export function useProjectData(projectId: string, options: { registerUndo?: bool
   }, [registerUndo, projectId, step, canUndo, canRedo, historyTick])
 
   return {
-    project, categories, orders, additionalWorks, veItems, investors, billings, vendors,
+    project, categories, orders, additionalWorks, veItems, investors, billings, vendors, salesItems,
     loading, notFound, reload: load,
     undo: () => step('undo'), redo: () => step('redo'), canUndo, canRedo,
   }

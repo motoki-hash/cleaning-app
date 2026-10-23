@@ -7,21 +7,21 @@ import DeleteProjectModal from '../components/DeleteProjectModal'
 import { KpiCard, AlertList, StatePill, SectionTitle, InlineNumber } from '../components/ui'
 import { supabase } from '@/lib/supabase'
 import { useProjectData } from '@/lib/pjb/useProjectData'
-import { summarizeCategory, summarizeProject, buildAlerts } from '@/lib/pjb/calc'
+import { summarizeCategory, summarizeProject, buildAlerts, categorySales } from '@/lib/pjb/calc'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
 
 const PURE_CONSTRUCTION = ['解体工事', '内装工事', '追加工事', '分離発注']
 
 export default function DashboardPage() {
   const { id } = useParams<{ id: string }>()
-  const { project, categories, orders, additionalWorks, veItems, loading, notFound, reload } = useProjectData(id)
+  const { project, categories, orders, additionalWorks, veItems, salesItems, loading, notFound, reload } = useProjectData(id)
   const [showDelete, setShowDelete] = useState(false)
 
   const summaries = useMemo(
     () => categories.map(c => summarizeCategory(c, orders, additionalWorks, veItems)),
     [categories, orders, additionalWorks, veItems]
   )
-  const totals = useMemo(() => project ? summarizeProject(project, categories, summaries) : null, [project, categories, summaries])
+  const totals = useMemo(() => project ? summarizeProject(project, categories, summaries, salesItems) : null, [project, categories, summaries, salesItems])
   const alerts = useMemo(
     () => buildAlerts(categories, summaries, orders, additionalWorks, veItems, `/pjb/${id}`),
     [categories, summaries, orders, additionalWorks, veItems, id]
@@ -107,7 +107,7 @@ export default function DashboardPage() {
 
       <SectionTitle>BNS予算</SectionTitle>
       <div className="grid gap-2 sm:grid-cols-2">
-        {bns.map(s => <BnsMiniCard key={s.category.id} s={s} />)}
+        {bns.map(s => <BnsMiniCard key={s.category.id} s={s} sales={categorySales(s.category, salesItems)} />)}
       </div>
 
       <div className="mt-12 mb-4 text-right">
@@ -120,8 +120,7 @@ export default function DashboardPage() {
   )
 }
 
-function BnsMiniCard({ s }: { s: ReturnType<typeof summarizeCategory> }) {
-  const sales = s.category.original_budget || 0
+function BnsMiniCard({ s, sales }: { s: ReturnType<typeof summarizeCategory>; sales: number }) {
   const cost = s.category.counts_as_cost ? s.landingForecast : 0
   const profit = sales - cost
   return (

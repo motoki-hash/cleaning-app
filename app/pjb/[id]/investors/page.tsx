@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Shell from '../../components/Shell'
 import { SectionTitle, EmptyState, InlineAmount, InlineNumber, InlineText, KpiCard, MoneyInput } from '../../components/ui'
+import { categorySales } from '@/lib/pjb/calc'
 import { useProjectData } from '@/lib/pjb/useProjectData'
 import { formatYen, formatPercent } from '@/lib/pjb/format'
 import { logActivity } from '@/lib/pjb/activity'
@@ -14,13 +15,13 @@ const PHASES: InvestorPhase[] = ['着工', '中間', '完了']
 
 export default function InvestorsPage() {
   const { id } = useParams<{ id: string }>()
-  const { project, categories, investors, billings, loading, notFound, reload } = useProjectData(id)
+  const { project, categories, investors, billings, salesItems, loading, notFound, reload } = useProjectData(id)
   const [showNew, setShowNew] = useState(false)
   const [recalculating, setRecalculating] = useState(false)
 
   const totalRooms = project?.room_count || investors.reduce((s, i) => s + i.room_count, 0) || 0
   // BNS売上 = BNS予算グループの最新予算の合計（最新予算がそのまま投資家への請求ベース）
-  const bnsSellTotal = useMemo(() => categories.filter(c => c.group_name === 'BNS予算').reduce((s, c) => s + (c.original_budget || 0), 0), [categories])
+  const bnsSellTotal = useMemo(() => categories.filter(c => c.group_name === 'BNS予算').reduce((s, c) => s + categorySales(c, salesItems), 0), [categories, salesItems])
   // 1口（部屋）あたりの投資額 = BNS売上合計 ÷ 総部屋数（自動計算・手入力不可）
   const unitPrice = totalRooms > 0 ? Math.round(bnsSellTotal / totalRooms) : 0
 

@@ -32,6 +32,16 @@ export type Project = {
   updated_at: string
 }
 
+export type SalesItem = {
+  id: string
+  project_id: string
+  category_id: string
+  title: string
+  amount: number
+  created_at: string
+  updated_at: string
+}
+
 export type PjbDocument = {
   id: string
   project_id: string

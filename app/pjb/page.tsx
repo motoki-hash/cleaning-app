@@ -8,7 +8,7 @@ import { DEFAULT_CATEGORIES } from '@/lib/pjb/constants'
 import { summarizeCategory, summarizeProject, buildAlerts } from '@/lib/pjb/calc'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
 import { MoneyInput, KpiCard } from './components/ui'
-import type { Project, BudgetCategory, Order, AdditionalWork, VeItem } from '@/lib/pjb/types'
+import type { Project, BudgetCategory, Order, AdditionalWork, VeItem, SalesItem } from '@/lib/pjb/types'
 
 type ProjectCardData = {
   project: Project
@@ -62,12 +62,15 @@ export default function PjbHomePage() {
     if (list.length === 0) { setCards([]); setLoading(false); return }
 
     const ids = list.map(p => p.id)
-    const [catRes, orderRes, workRes, veRes] = await Promise.all([
+    const [catRes, orderRes, workRes, veRes, salesRes] = await Promise.all([
       supabase.from('pjb_budget_categories').select('*').in('project_id', ids),
       supabase.from('pjb_orders').select('*').in('project_id', ids),
       supabase.from('pjb_additional_works').select('*').in('project_id', ids),
       supabase.from('pjb_ve_items').select('*').in('project_id', ids),
+      supabase.from('pjb_sales_items').select('*').in('project_id', ids),
     ])
+    // 売上の内訳のテーブルがまだないときは null（従来どおり、項目に直接入れた売上を使う）
+    const salesAll: SalesItem[] | null = salesRes.error ? null : ((salesRes.data || []) as SalesItem[])
     const categories = (catRes.data || []) as BudgetCategory[]
     const orders = (orderRes.data || []) as Order[]
     const works = (workRes.data || []) as AdditionalWork[]
@@ -76,7 +79,7 @@ export default function PjbHomePage() {
     const result: ProjectCardData[] = list.map(project => {
       const cats = categories.filter(c => c.project_id === project.id)
       const summaries = cats.map(c => summarizeCategory(c, orders, works, ves))
-      const totals = summarizeProject(project, cats, summaries)
+      const totals = summarizeProject(project, cats, summaries, salesAll === null ? null : salesAll.filter(x => x.project_id === project.id))
       const alerts = buildAlerts(cats, summaries, orders.filter(o => o.project_id === project.id), works.filter(w => w.project_id === project.id), ves.filter(v => v.project_id === project.id), `/pjb/${project.id}`)
       return {
         project,

@@ -5,12 +5,13 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import Shell from '../../components/Shell'
-import { KpiCard, StatePill, SectionTitle, EmptyState, InlineAmount, InlineText, MoneyInput } from '../../components/ui'
+import { KpiCard, StatePill, SectionTitle, EmptyState, InlineAmount, InlineText, MoneyInput, isCommitEnter } from '../../components/ui'
 import { useProjectData, findOrCreateVendor } from '@/lib/pjb/useProjectData'
-import { summarizeCategory, summarizeProject } from '@/lib/pjb/calc'
+import { summarizeCategory, summarizeProject, categorySales } from '@/lib/pjb/calc'
+import { logActivity } from '@/lib/pjb/activity'
 import { formatYen, formatSignedYen, formatPercent, formatDate } from '@/lib/pjb/format'
 import { createOrder, updateOrderAmount, updateOrderStatus, updateOrderTitle, updateOrderVendor, markOrderPlaced, updateOrderPaymentSchedule, markOrderPaid, deleteOrder } from '@/lib/pjb/orders'
-import { ORDER_STATUSES, type BudgetCategory, type CategorySummary, type Order, type Project, type Vendor } from '@/lib/pjb/types'
+import { ORDER_STATUSES, type BudgetCategory, type CategorySummary, type Order, type Project, type SalesItem, type Vendor } from '@/lib/pjb/types'
 
 const PRE_ORDER_STATUSES = new Set(['見積依頼中', '見積受領', '発注待ち'])
 const STATUS_TONE: Record<string, string> = {
@@ -31,7 +32,7 @@ const zeroMute = (v: number, tone: string) => (v === 0 ? 'text-slate-300' : tone
 
 export default function BudgetPage() {
   const { id } = useParams<{ id: string }>()
-  const { project, categories, orders, additionalWorks, veItems, vendors, loading, notFound, reload } = useProjectData(id)
+  const { project, categories, orders, additionalWorks, veItems, vendors, salesItems, loading, notFound, reload } = useProjectData(id)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const toggleExpand = (categoryId: string) => {
@@ -46,7 +47,7 @@ export default function BudgetPage() {
     () => categories.map(c => summarizeCategory(c, orders, additionalWorks, veItems)),
     [categories, orders, additionalWorks, veItems]
   )
-  const totals = useMemo(() => project ? summarizeProject(project, categories, summaries) : null, [project, categories, summaries])
+  const totals = useMemo(() => project ? summarizeProject(project, categories, summaries, salesItems) : null, [project, categories, summaries, salesItems])
 
   if (notFound) return <div className="p-8 text-center text-slate-400 text-[14px]">プロジェクトが見つかりません</div>
   if (loading || !project || !totals) {
@@ -99,11 +100,11 @@ export default function BudgetPage() {
           </>
         )
       })()}
-      <p className="text-[12.5px] text-slate-500 mb-2"><b className="text-slate-700">金額はすべて税別で入力・表示します。</b>当初予算はセルをタップして編集できます。BNS外予算の実行費用は、カテゴリー名をタップして開く「内訳」の登録・編集・削除だけで変わります（直接入力はできません）。BNS予算は「売上」を直接入力し、「原価」は内訳から積み上がり、「利益」は売上−原価で自動計算されます</p>
+      <p className="text-[12.5px] text-slate-500 mb-2"><b className="text-slate-700">金額はすべて税別で入力・表示します。</b>当初予算はセルをタップして編集できます。BNS外予算の実行費用は、カテゴリー名をタップして開く「内訳」の登録・編集・削除だけで変わります（直接入力はできません）。BNS予算は、項目の行をクリックして、「売上の内訳」と「原価の内訳」をそれぞれ複数行で入力します（利益は売上−原価で自動計算）</p>
 
       {groups.map(([group, list]) => group === 'BNS予算' ? (
         <BnsSection
-          key={group} list={list} project={project} expanded={expanded} toggleExpand={toggleExpand}
+          key={group} list={list} project={project} salesItems={salesItems} expanded={expanded} toggleExpand={toggleExpand}
           orders={orders} vendors={vendors} projectId={id} onChanged={reload}
           updateField={updateField} updateProject={updateProject}
         />
@@ -223,17 +224,19 @@ export default function BudgetPage() {
   )
 }
 
-// BNS予算：項目ごとに「売上・原価・利益」で見る。予算は項目ごとではなくPJ全体で入力する。
+// BNS予算：項目ごとに「売上・原価・利益」で見る。売上も原価も、項目ごとに複数の行（内訳）で入れる。
+// 予算は項目ごとではなく、PJ全体で入力する。
 function BnsSection({
-  list, project, expanded, toggleExpand, orders, vendors, projectId, onChanged, updateField, updateProject,
+  list, project, salesItems, expanded, toggleExpand, orders, vendors, projectId, onChanged, updateField, updateProject,
 }: {
-  list: CategorySummary[]; project: Project; expanded: Set<string>; toggleExpand: (id: string) => void
+  list: CategorySummary[]; project: Project; salesItems: SalesItem[] | null
+  expanded: Set<string>; toggleExpand: (id: string) => void
   orders: Order[]; vendors: Vendor[]; projectId: string; onChanged: () => void
   updateField: (c: BudgetCategory, f: EditableField, v: number) => void
   updateProject: (patch: Partial<Project>) => void
 }) {
   const rows = list.map(s => {
-    const sales = s.category.original_budget || 0
+    const sales = categorySales(s.category, salesItems)
     const counted = s.category.counts_as_cost          // BNS利益・PJ予備費・設計デザイン費用(社内)などは原価に含めない
     const cost = counted ? s.landingForecast : 0
     return { s, sales, cost, counted, profit: sales - cost }
@@ -250,6 +253,37 @@ function BnsSection({
   ]
 
   const profitTone = (v: number) => (v < 0 ? 'text-rose-600' : v === 0 ? 'text-slate-300' : 'text-emerald-600')
+
+  // 開いたときの中身：左に「売上の内訳」、右に「原価の内訳」を並べる
+  const detail = (r: typeof rows[number]) => (
+    <div className="grid gap-4 md:grid-cols-2">
+      <div className="rounded-lg border border-slate-200 bg-white p-3">
+        <div className="text-[13px] font-semibold text-slate-700 mb-2">売上の内訳 <span className="font-normal text-slate-400">（税別）</span></div>
+        {salesItems === null ? (
+          <div className="grid gap-2">
+            <EditableRow label="売上（一括入力）" value={r.sales} onCommit={v => updateField(r.s.category, 'original_budget', v)} />
+            <p className="text-[12px] text-amber-700">売上を複数の行で入れるには、SQLパッチ014の実行が必要です。</p>
+          </div>
+        ) : (
+          <SalesBreakdown
+            items={salesItems.filter(i => i.category_id === r.s.category.id)}
+            projectId={projectId} categoryId={r.s.category.id} categoryName={r.s.category.name} onChanged={onChanged}
+          />
+        )}
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-3">
+        <div className="text-[13px] font-semibold text-slate-700 mb-2">原価の内訳 <span className="font-normal text-slate-400">（税別・発注）</span></div>
+        {r.counted ? (
+          <CategoryBreakdown
+            orders={orders.filter(o => o.category_id === r.s.category.id)} vendors={vendors} projectId={projectId}
+            categoryId={r.s.category.id} categoryName={r.s.category.name} onChanged={onChanged}
+          />
+        ) : (
+          <p className="text-[13px] text-slate-400">この項目は、原価に含めない設定です（売上がそのまま利益になります）。</p>
+        )}
+      </div>
+    </div>
+  )
 
   return (
     <div>
@@ -293,28 +327,17 @@ function BnsSection({
 
       {/* mobile: cards */}
       <div className="grid gap-2 sm:hidden">
-        {rows.map(({ s, sales, cost, counted, profit }) => (
-          <div key={s.category.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <div className="mb-2">
-              {counted ? (
-                <button onClick={() => toggleExpand(s.category.id)} className="flex items-center gap-1.5 text-[15px] font-semibold text-slate-900">
-                  <span className={`text-slate-400 text-[11.5px] transition-transform ${expanded.has(s.category.id) ? 'rotate-90' : ''}`}>▶</span>
-                  {s.category.name}
-                </button>
-              ) : <span className="text-[15px] font-semibold text-slate-900">{s.category.name}</span>}
-            </div>
-            <EditableRow label="売上" value={sales} onCommit={v => updateField(s.category, 'original_budget', v)} />
-            <Row label="原価" value={counted ? formatYen(cost) : '—'} muted />
+        {rows.map(r => (
+          <div key={r.s.category.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+            <button onClick={() => toggleExpand(r.s.category.id)} className="flex items-center gap-1.5 text-[15px] font-semibold text-slate-900 mb-2">
+              <span className={`text-slate-400 text-[11.5px] transition-transform ${expanded.has(r.s.category.id) ? 'rotate-90' : ''}`}>▶</span>
+              {r.s.category.name}
+            </button>
+            <Row label="売上" value={formatYen(r.sales)} />
+            <Row label="原価" value={r.counted ? formatYen(r.cost) : '—'} muted />
             <div className="h-px bg-slate-100 my-1.5" />
-            <Row label="利益" value={formatSignedYen(profit)} tone={profit < 0 ? 'danger' : 'good'} strong />
-            {counted && expanded.has(s.category.id) && (
-              <div className="mt-3 pt-3 border-t border-slate-100">
-                <CategoryBreakdown
-                  orders={orders.filter(o => o.category_id === s.category.id)} vendors={vendors} projectId={projectId}
-                  categoryId={s.category.id} categoryName={s.category.name} onChanged={onChanged}
-                />
-              </div>
-            )}
+            <Row label="利益" value={formatSignedYen(r.profit)} tone={r.profit < 0 ? 'danger' : 'good'} strong />
+            {expanded.has(r.s.category.id) && <div className="mt-3 pt-3 border-t border-slate-100">{detail(r)}</div>}
           </div>
         ))}
         <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
@@ -330,43 +353,31 @@ function BnsSection({
         <table className="w-full text-[13.5px] min-w-[620px]">
           <thead>
             <tr className="text-left text-slate-600 bg-slate-100 border-b border-slate-300 text-[13px]">
-              <th className="px-3 py-2.5 font-semibold whitespace-nowrap">項目</th>
+              <th className="px-3 py-2.5 font-semibold whitespace-nowrap">項目 <span className="font-normal text-slate-400">（行をクリックして、売上・原価の内訳を入力）</span></th>
               <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">売上</th>
               <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap bg-blue-100/70 text-blue-800">原価</th>
               <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">利益</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ s, sales, cost, counted, profit }) => (
-              <Fragment key={s.category.id}>
-                <tr
-                  onClick={counted ? () => toggleExpand(s.category.id) : undefined}
-                  className={`border-b border-slate-200 last:border-0 hover:bg-slate-50 ${counted ? 'cursor-pointer' : ''}`}
-                >
+            {rows.map(r => (
+              <Fragment key={r.s.category.id}>
+                <tr onClick={() => toggleExpand(r.s.category.id)} className="border-b border-slate-200 last:border-0 hover:bg-slate-50 cursor-pointer">
                   <td className="px-3 py-3 font-semibold text-slate-900 whitespace-nowrap">
-                    {counted ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className={`text-slate-400 text-[11.5px] transition-transform ${expanded.has(s.category.id) ? 'rotate-90' : ''}`}>▶</span>
-                        {s.category.name}
-                      </div>
-                    ) : <span className="pl-[19px]">{s.category.name}</span>}
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-slate-400 text-[11.5px] transition-transform ${expanded.has(r.s.category.id) ? 'rotate-90' : ''}`}>▶</span>
+                      {r.s.category.name}
+                    </div>
                   </td>
-                  <td className="px-1 py-1.5 text-right cursor-default" onClick={e => e.stopPropagation()}>
-                    <InlineAmount value={sales} onCommit={v => updateField(s.category, 'original_budget', v)} />
+                  <td className={`px-3 py-3 text-right tabular-nums font-semibold ${zeroMute(r.sales, 'text-slate-900')}`}>{formatYen(r.sales)}</td>
+                  <td className={`px-3 py-3 text-right tabular-nums font-bold bg-blue-50/60 ${r.counted ? zeroMute(r.cost, 'text-slate-900') : 'text-slate-300'}`} title={r.counted ? undefined : '原価に含めない項目です'}>
+                    {r.counted ? formatYen(r.cost) : '—'}
                   </td>
-                  <td className={`px-3 py-3 text-right tabular-nums font-bold bg-blue-50/60 ${counted ? zeroMute(cost, 'text-slate-900') : 'text-slate-300'}`} title={counted ? undefined : '原価に含めない項目です'}>
-                    {counted ? formatYen(cost) : '—'}
-                  </td>
-                  <td className={`px-3 py-3 text-right tabular-nums font-semibold ${profitTone(profit)}`}>{formatSignedYen(profit)}</td>
+                  <td className={`px-3 py-3 text-right tabular-nums font-semibold ${profitTone(r.profit)}`}>{formatSignedYen(r.profit)}</td>
                 </tr>
-                {counted && expanded.has(s.category.id) && (
+                {expanded.has(r.s.category.id) && (
                   <tr className="border-b border-slate-100">
-                    <td colSpan={4} className="bg-slate-50/60 px-6 py-4">
-                      <CategoryBreakdown
-                        orders={orders.filter(o => o.category_id === s.category.id)} vendors={vendors} projectId={projectId}
-                        categoryId={s.category.id} categoryName={s.category.name} onChanged={onChanged}
-                      />
-                    </td>
+                    <td colSpan={4} className="bg-slate-50/60 px-5 py-4">{detail(r)}</td>
                   </tr>
                 )}
               </Fragment>
@@ -384,6 +395,69 @@ function BnsSection({
           </tfoot>
         </table>
       </div>
+    </div>
+  )
+}
+
+// 売上の内訳（項目ごとに複数行）。原価の内訳（発注）と同じ操作感：名前・金額はタップで編集、下の欄から追加
+function SalesBreakdown({
+  items, projectId, categoryId, categoryName, onChanged,
+}: { items: SalesItem[]; projectId: string; categoryId: string; categoryName: string; onChanged: () => void }) {
+  const [title, setTitle] = useState('')
+  const [amount, setAmount] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const add = async () => {
+    if (!title.trim() || !amount) { setError('項目名と金額は必須です'); return }
+    setSaving(true)
+    const { error: err } = await supabase.from('pjb_sales_items').insert({
+      project_id: projectId, category_id: categoryId, title: title.trim(), amount: Number(amount),
+    })
+    setSaving(false)
+    if (err) { setError(`登録に失敗しました：${err.message}`); return }
+    await logActivity({ projectId, action: 'create', entityType: 'sales_item', entityLabel: `${categoryName} 売上：${title.trim()}`, after: amount })
+    setTitle(''); setAmount(''); setError('')
+    onChanged()
+  }
+  const update = async (it: SalesItem, patch: Partial<SalesItem>, label: string, before: unknown, after: unknown) => {
+    const { error: err } = await supabase.from('pjb_sales_items').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', it.id)
+    if (err) { alert(`保存に失敗しました：${err.message}`); return }
+    await logActivity({ projectId, action: 'update', entityType: 'sales_item', entityLabel: `${categoryName} 売上：${it.title} ${label}`, before: String(before), after: String(after) })
+    onChanged()
+  }
+  const remove = async (it: SalesItem) => {
+    if (!confirm(`「${it.title}」を削除しますか？`)) return
+    const { error: err } = await supabase.from('pjb_sales_items').delete().eq('id', it.id)
+    if (err) { alert(`削除に失敗しました：${err.message}`); return }
+    await logActivity({ projectId, action: 'delete', entityType: 'sales_item', entityLabel: `${categoryName} 売上：${it.title}`, before: String(it.amount) })
+    onChanged()
+  }
+
+  return (
+    <div className="grid gap-2">
+      {items.length === 0 && <p className="text-[13px] text-slate-400">まだ売上がありません。下から追加してください。</p>}
+      {items.map(it => (
+        <div key={it.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-150 bg-slate-50/50 px-3 py-2">
+          <InlineText value={it.title} onCommit={v => update(it, { title: v }, '項目名', it.title, v)} className="text-[13.5px] font-medium text-slate-900" />
+          <div className="flex items-center gap-1 shrink-0">
+            <InlineAmount value={it.amount} onCommit={v => update(it, { amount: v }, '金額', it.amount, v)} />
+            <button onClick={() => remove(it)} className="text-slate-300 hover:text-rose-500 text-[12px]" aria-label="削除">✕</button>
+          </div>
+        </div>
+      ))}
+      <div className="rounded-lg border border-dashed border-slate-250 bg-slate-50/60 px-3 py-2.5 grid gap-1.5 sm:flex sm:items-end sm:gap-2">
+        <label className="grid gap-0.5 flex-1 min-w-0">
+          <span className="text-[12px] text-slate-400">項目名</span>
+          <input value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => { if (isCommitEnter(e)) add() }} placeholder="例）家具一式" className="border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px]" />
+        </label>
+        <label className="grid gap-0.5 sm:w-36">
+          <span className="text-[12px] text-slate-400">売上（税別）</span>
+          <MoneyInput value={amount} onChange={setAmount} placeholder="0" className="w-full min-w-0 border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px]" />
+        </label>
+        <button onClick={add} disabled={saving} className="px-3 py-1.5 rounded-md bg-blue-600 text-white text-[13.5px] font-medium disabled:opacity-50 whitespace-nowrap">＋ 追加</button>
+      </div>
+      {error && <p className="text-[12.5px] text-rose-600">{error}</p>}
     </div>
   )
 }
