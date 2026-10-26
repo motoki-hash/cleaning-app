@@ -604,9 +604,10 @@ export default function SchedulePage() {
   }, [kind, kindBars, preopenCols, previewStart, project?.schedule_open_week, project?.zero_open_week, roughBase, project?.open_date, months, roughColCount, zeroColCount])
 
   // ---- バーの選択・コピー・貼り付け・削除（⌘C / ⌘V / Delete）----
-  const [selBarId, setSelBarId] = useState<string | null>(null)
+  const [selBarIds, setSelBarIds] = useState<string[]>([])
   const [selCell, setSelCell] = useState<{ rowId: string; col: number } | null>(null)
-  const [clip, setClip] = useState<{ label: string; color: string; len: number } | null>(null)
+  // コピーした内容。複数のバーは、行・位置の相対的な並びをそのまま覚える
+  const [clip, setClip] = useState<Array<{ rowOffset: number; startOffset: number; len: number; label: string; color: string }> | null>(null)
   const [notice, setNotice] = useState('')
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const say = (m: string) => {
@@ -614,52 +615,66 @@ export default function SchedulePage() {
     if (noticeTimer.current) clearTimeout(noticeTimer.current)
     noticeTimer.current = setTimeout(() => setNotice(''), 4000)
   }
-  useEffect(() => { setSelBarId(null); setSelCell(null) }, [kind, activeSchedule?.id])
+  useEffect(() => { setSelBarIds([]); setSelCell(null) }, [kind, activeSchedule?.id])
 
-  const copySelectedBar = () => {
-    const bar = bars.find(b => b.id === selBarId)
-    if (!bar) return
-    const len = kind !== 'preopen'
-      ? bar.length_weeks || 1
-      : diffDays(parseYmd(bar.start_date!), parseYmd(bar.end_date!)) + 1
-    setClip({ label: bar.label, color: bar.color, len })
-    say(`「${bar.label || 'バー'}」をコピーしました。貼り付けたい場所の空きマスをクリックして、⌘V（Ctrl+V）を押してください`)
+  // バーの位置（概算・ゼロ工程表は週の番号、OPEN前は表示開始日からの日数）と長さ
+  const barPos = (b: ScheduleBar) => (kind !== 'preopen'
+    ? { start: b.start_week ?? 0, len: b.length_weeks || 1 }
+    : { start: diffDays(previewStart, parseYmd(b.start_date!)), len: diffDays(parseYmd(b.start_date!), parseYmd(b.end_date!)) + 1 })
+
+  const copySelectedBars = () => {
+    const picked = bars.filter(b => selBarIds.includes(b.id))
+    if (picked.length === 0) return
+    const withRow = picked.map(b => ({ b, row: kindTasks.findIndex(t => t.id === b.task_id), ...barPos(b) })).filter(x => x.row >= 0)
+    const baseRow = Math.min(...withRow.map(x => x.row))
+    const baseStart = Math.min(...withRow.map(x => x.start))
+    setClip(withRow.map(x => ({ rowOffset: x.row - baseRow, startOffset: x.start - baseStart, len: x.len, label: x.b.label, color: x.b.color })))
+    say(`${withRow.length}個のバーをコピーしました。貼り付けたい場所の空きマスをクリックして、⌘V（Ctrl+V）を押してください`)
   }
 
   const pasteClip = async () => {
-    if (!clip) return
+    if (!clip || clip.length === 0) return
     if (!selCell) { say('貼り付ける場所の空きマスを、先に1回クリックしてください'); return }
     const total = gantt.cols.length
-    const len = Math.min(clip.len, total)
-    const col = Math.min(selCell.col, total - len)
+    const baseRow = kindTasks.findIndex(t => t.id === selCell.rowId)
+    if (baseRow < 0) return
+    const rows: Array<Record<string, unknown>> = []
+    let skipped = 0
+    for (const c of clip) {
+      const task = kindTasks[baseRow + c.rowOffset]
+      if (!task) { skipped++; continue }          // 行が足りないぶんは貼り付けない
+      const len = Math.min(c.len, total)
+      const col = Math.max(0, Math.min(selCell.col + c.startOffset, total - len))
+      rows.push({
+        task_id: task.id, project_id: id, kind, label: c.label, color: c.color,
+        ...(kind !== 'preopen'
+          ? { start_week: col, length_weeks: len }
+          : { start_date: toYmd(addDays(previewStart, col)), end_date: toYmd(addDays(previewStart, col + len - 1)) }),
+        ...(schedulesReady ? { schedule_id: task.schedule_id ?? activeSchedule?.id ?? null } : {}),
+      })
+    }
+    if (rows.length === 0) { say('貼り付ける行がありません'); return }
     pushHistory()
-    const patch: Partial<ScheduleBar> = kind !== 'preopen'
-      ? { start_week: col, length_weeks: len }
-      : { start_date: toYmd(addDays(previewStart, col)), end_date: toYmd(addDays(previewStart, col + len - 1)) }
-    const task = tasks.find(t => t.id === selCell.rowId)
     setBusy(true)
-    const { error } = await supabase.from('pjb_schedule_bars').insert({
-      task_id: selCell.rowId, project_id: id, kind, label: clip.label, color: clip.color, ...patch,
-      ...(schedulesReady ? { schedule_id: task?.schedule_id ?? activeSchedule?.id ?? null } : {}),
-    })
+    const { error } = await supabase.from('pjb_schedule_bars').insert(rows)
     setBusy(false)
     if (error) { alert(`貼り付けに失敗しました：${error.message}`); return }
-    say('貼り付けました')
+    say(skipped > 0 ? `${rows.length}個を貼り付けました（行が足りず、${skipped}個は貼り付けられませんでした）` : `${rows.length}個のバーを貼り付けました`)
     loadSchedule()
   }
 
-  const deleteSelectedBar = async () => {
-    const bar = bars.find(b => b.id === selBarId)
-    if (!bar) return
+  const deleteSelectedBars = async () => {
+    const ids = selBarIds.filter(i => bars.some(b => b.id === i))
+    if (ids.length === 0) return
     pushHistory()
-    setSelBarId(null)
-    await supabase.from('pjb_schedule_bars').delete().eq('id', bar.id)
-    say('バーを削除しました（⌘Zで元に戻せます）')
+    setSelBarIds([])
+    await supabase.from('pjb_schedule_bars').delete().in('id', ids)
+    say(`${ids.length}個のバーを削除しました（⌘Zで元に戻せます）`)
     loadSchedule()
   }
 
-  const editKeysRef = useRef({ copy: copySelectedBar, paste: pasteClip, del: deleteSelectedBar })
-  editKeysRef.current = { copy: copySelectedBar, paste: pasteClip, del: deleteSelectedBar }
+  const editKeysRef = useRef({ copy: copySelectedBars, paste: pasteClip, del: deleteSelectedBars })
+  editKeysRef.current = { copy: copySelectedBars, paste: pasteClip, del: deleteSelectedBars }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
@@ -675,7 +690,7 @@ export default function SchedulePage() {
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault(); editKeysRef.current.del()
       } else if (e.key === 'Escape') {
-        setSelBarId(null); setSelCell(null)
+        setSelBarIds([]); setSelCell(null)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -835,7 +850,7 @@ export default function SchedulePage() {
       </div>
 
       <p className="text-[12.5px] text-slate-500 mb-2 print:hidden">
-        空いているマスをドラッグすると新しいバーを作成、バーは、1回クリックで選択（⌘Cでコピー、Deleteで削除）、ダブルクリックで内容を編集、横にドラッグで日付の移動・両端でリサイズ、上下にドラッグで行の入れ替えができます。空きマスは、1回クリックして選んで⌘Vで貼り付け、ダブルクリックで新しいバーを作成、ドラッグでも作成できます。Alt(Option)キーを押しながらドラッグすると複製できます。左の工程名をクリックすると行を編集、左端の「⋮⋮」を掴んで上下にドラッグすると行を並べ替えできます。
+        空いているマスをドラッグすると新しいバーを作成、バーは、1回クリックで選択（Shiftを押しながらクリックで複数選択。⌘Cでコピー、Deleteで削除）、ダブルクリックで内容を編集、横にドラッグで日付の移動・両端でリサイズ、上下にドラッグで行の入れ替えができます。空きマスは、1回クリックして選んで⌘Vで貼り付け、ダブルクリックで新しいバーを作成、ドラッグでも作成できます。Alt(Option)キーを押しながらドラッグすると複製できます。左の工程名をクリックすると行を編集、左端の「⋮⋮」を掴んで上下にドラッグすると行を並べ替えできます。
         {kind === 'zero'
           ? 'ゼロ工程表は日付・祝日を考慮しません（1ヶ月＝4週）。設定した期間（初期値12ヶ月）の工期の目安を、週単位で組みます。'
           : kind === 'rough'
@@ -867,11 +882,11 @@ export default function SchedulePage() {
             bars={gantt.ganttBars}
             minCw={Math.round(gantt.baseCw * ZOOM[zoom])}
             onBarChange={changeBar}
-            onBarClick={id => { setSelBarId(id); setSelCell(null) }}
+            onBarClick={(id, additive) => { setSelBarIds(prev => additive ? (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]) : [id]); setSelCell(null) }}
             onBarOpen={openBarEditById}
-            selectedBarId={selBarId}
+            selectedBarIds={selBarIds}
             selectedCell={selCell}
-            onSelectCell={(rowId, col) => { setSelCell({ rowId, col }); setSelBarId(null) }}
+            onSelectCell={(rowId, col) => { setSelCell({ rowId, col }); setSelBarIds([]) }}
             onBarCopy={duplicateBar}
             onCreate={(taskId, start, len) => setBarEdit({ mode: 'new', taskId, start, len })}
             onRowClick={taskId => setTaskEdit(kindTasks.find(t => t.id === taskId) || null)}
