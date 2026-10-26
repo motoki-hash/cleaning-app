@@ -15,7 +15,11 @@ type Props = {
   bars: GanttBar[]
   minCw: number   // 1マスの最小幅(px)。画面に余裕があれば自動で広げる
   onBarChange: (id: string, start: number, len: number) => void
-  onBarClick: (id: string) => void
+  onBarClick: (id: string) => void        // バーを1回クリック＝選択（コピー・削除の対象）
+  onBarOpen: (id: string) => void         // バーをダブルクリック＝内容を編集
+  selectedBarId?: string | null
+  selectedCell?: { rowId: string; col: number } | null   // 空きマスを1回クリック＝選択（貼り付け先）
+  onSelectCell: (rowId: string, col: number) => void
   onBarCopy: (id: string, start: number, len: number) => void   // Alt(Option)を押しながらドラッグで複製
   onCreate: (rowId: string, start: number, len: number) => void
   onRowClick: (rowId: string) => void
@@ -31,9 +35,17 @@ const HANDLE_W = 24
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
 // 週/日を1マスとした簡易ガントチャート。バーはドラッグで移動・両端でリサイズ、空きマスのドラッグで新規作成。
-export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBarChange, onBarClick, onBarCopy, onCreate, onRowClick, onReorder, onRowDelete }: Props) {
+export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBarChange, onBarClick, onBarOpen, selectedBarId, selectedCell, onSelectCell, onBarCopy, onCreate, onRowClick, onReorder, onRowDelete }: Props) {
   const [drag, setDrag] = useState<{ id: string; start: number; len: number; copy: boolean } | null>(null)
   const rowsRef = useRef<HTMLDivElement>(null)
+  const lastClick = useRef<{ key: string; t: number }>({ key: '', t: 0 })
+  // 同じ場所を350ミリ秒以内に2回クリックしたら、ダブルクリックとみなす
+  const isDouble = (key: string) => {
+    const now = Date.now()
+    const dbl = lastClick.current.key === key && now - lastClick.current.t < 350
+    lastClick.current = dbl ? { key: '', t: 0 } : { key, t: now }
+    return dbl
+  }
   const [rowDrag, setRowDrag] = useState<{ id: string; from: number; to: number } | null>(null)
   const [creating, setCreating] = useState<{ rowId: string; a: number; b: number } | null>(null)
 
@@ -93,7 +105,7 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
       setDrag(null)
       setRowDrag(null)
       if (axis === 'v') { if (toRow !== fromRow) onReorder(bar.rowId, toRow); return }
-      if (!moved) onBarClick(bar.id)
+      if (!moved) { if (isDouble(`bar:${bar.id}`)) onBarOpen(bar.id); else onBarClick(bar.id) }
       else if (cur.start !== bar.start || cur.len !== bar.len) (copy ? onBarCopy : onBarChange)(bar.id, cur.start, cur.len)
     }
     window.addEventListener('pointermove', onMove)
@@ -134,7 +146,10 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       setCreating(null)
-      onCreate(rowId, Math.min(a, b), Math.abs(b - a) + 1)
+      if (a !== b) { onCreate(rowId, Math.min(a, b), Math.abs(b - a) + 1); return }
+      // ドラッグしないでクリックしたとき：1回＝マスを選択（貼り付け先）、ダブルクリック＝その場所に新しいバーを作る
+      if (isDouble(`cell:${rowId}:${a}`)) onCreate(rowId, a, 1)
+      else onSelectCell(rowId, a)
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
@@ -243,6 +258,9 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
                 style={{ width: trackW, backgroundImage: lines }}
                 onPointerDown={e => startCreate(e, row.id)}
               >
+                {selectedCell && selectedCell.rowId === row.id && !creating && (
+                  <div className="absolute top-0 bottom-0 border-2 border-slate-700 pointer-events-none z-[3]" style={{ left: selectedCell.col * cw, width: cw }} />
+                )}
                 {creating && creating.rowId === row.id && (
                   <div className="absolute top-1.5 bottom-1.5 rounded bg-blue-300/60 border border-blue-500 pointer-events-none"
                     style={{ left: Math.min(creating.a, creating.b) * cw, width: (Math.abs(creating.b - creating.a) + 1) * cw }} />
@@ -263,7 +281,7 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
                     <div className="absolute top-1.5 bottom-1.5" style={{ left: cur.start * cw, width: w, touchAction: 'none' }}>
                       <div
                         onPointerDown={e => startBarDrag(e, b, 'move')}
-                        className={`h-full rounded-md ${color} shadow-sm cursor-grab active:cursor-grabbing flex items-center px-1.5 text-[12px] font-medium whitespace-nowrap`}
+                        className={`h-full rounded-md ${color} ${selectedBarId === b.id ? 'ring-2 ring-slate-800' : ''} shadow-sm cursor-grab active:cursor-grabbing flex items-center px-1.5 text-[12px] font-medium whitespace-nowrap`}
                         title={b.label}
                       >
                         {/* バーより長いラベルは右側の空きマスにはみ出して表示する */}
