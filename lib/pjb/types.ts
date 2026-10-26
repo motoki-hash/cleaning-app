@@ -214,6 +214,10 @@ export type VeItem = {
   target_item: string | null
   planned_reduction: number
   confirmed_reduction: number
+  drawing_no?: string | null
+  original_amount?: number
+  changed_amount?: number
+  designer_comment?: string | null
   status: VeStatus
   notes: string | null
   created_by: string | null
