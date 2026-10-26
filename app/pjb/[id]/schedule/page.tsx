@@ -663,6 +663,22 @@ export default function SchedulePage() {
     loadSchedule()
   }
 
+  // 複数選択したバーを、まとめて横に動かす（dx＝動かすマス数）
+  const moveBars = async (ids: string[], dx: number) => {
+    const targets = bars.filter(b => ids.includes(b.id))
+    if (targets.length === 0 || dx === 0) return
+    pushHistory()
+    const patches = targets.map(b => ({
+      id: b.id,
+      patch: (kind !== 'preopen'
+        ? { start_week: Math.max(0, (b.start_week ?? 0) + dx) }
+        : { start_date: toYmd(addDays(parseYmd(b.start_date!), dx)), end_date: toYmd(addDays(parseYmd(b.end_date!), dx)) }) as Partial<ScheduleBar>,
+    }))
+    setBars(prev => prev.map(b => { const p = patches.find(x => x.id === b.id); return p ? { ...b, ...p.patch } : b }))
+    const results = await Promise.all(patches.map(p => supabase.from('pjb_schedule_bars').update(p.patch).eq('id', p.id)))
+    if (results.some(r => r.error)) { alert('移動の保存に失敗しました'); loadSchedule() }
+  }
+
   const deleteSelectedBars = async () => {
     const ids = selBarIds.filter(i => bars.some(b => b.id === i))
     if (ids.length === 0) return
@@ -850,7 +866,7 @@ export default function SchedulePage() {
       </div>
 
       <p className="text-[12.5px] text-slate-500 mb-2 print:hidden">
-        空いているマスをドラッグすると新しいバーを作成、バーは、1回クリックで選択（Shiftを押しながらクリックで複数選択。⌘Cでコピー、Deleteで削除）、ダブルクリックで内容を編集、横にドラッグで日付の移動・両端でリサイズ、上下にドラッグで行の入れ替えができます。空きマスは、1回クリックして選んで⌘Vで貼り付け、ダブルクリックで新しいバーを作成、ドラッグでも作成できます。Alt(Option)キーを押しながらドラッグすると複製できます。左の工程名をクリックすると行を編集、左端の「⋮⋮」を掴んで上下にドラッグすると行を並べ替えできます。
+        空いているマスをドラッグすると新しいバーを作成、バーは、1回クリックで選択（Shiftを押しながらクリックで複数選択。選んだバーは、1つを掴んで横にドラッグすると、まとめて動きます。⌘Cでコピー、Deleteで削除）、ダブルクリックで内容を編集、横にドラッグで日付の移動・両端でリサイズ、上下にドラッグで行の入れ替えができます。空きマスは、1回クリックして選んで⌘Vで貼り付け、ダブルクリックで新しいバーを作成、ドラッグでも作成できます。Alt(Option)キーを押しながらドラッグすると複製できます。左の工程名をクリックすると行を編集、左端の「⋮⋮」を掴んで上下にドラッグすると行を並べ替えできます。
         {kind === 'zero'
           ? 'ゼロ工程表は日付・祝日を考慮しません（1ヶ月＝4週）。設定した期間（初期値12ヶ月）の工期の目安を、週単位で組みます。'
           : kind === 'rough'
@@ -884,6 +900,7 @@ export default function SchedulePage() {
             onBarChange={changeBar}
             onBarClick={(id, additive) => { setSelBarIds(prev => additive ? (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]) : [id]); setSelCell(null) }}
             onBarOpen={openBarEditById}
+            onBarsMove={moveBars}
             selectedBarIds={selBarIds}
             selectedCell={selCell}
             onSelectCell={(rowId, col) => { setSelCell({ rowId, col }); setSelBarIds([]) }}

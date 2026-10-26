@@ -17,6 +17,7 @@ type Props = {
   onBarChange: (id: string, start: number, len: number) => void
   onBarClick: (id: string, additive: boolean) => void   // バーを1回クリック＝選択（Shift／⌘／Ctrlを押しながら＝複数選択）
   onBarOpen: (id: string) => void         // バーをダブルクリック＝内容を編集
+  onBarsMove: (ids: string[], dx: number) => void   // 複数選択したバーを、まとめて横に動かす
   selectedBarIds?: string[]
   selectedCell?: { rowId: string; col: number } | null   // 空きマスを1回クリック＝選択（貼り付け先）
   onSelectCell: (rowId: string, col: number) => void
@@ -35,9 +36,10 @@ const HANDLE_W = 24
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
 // 週/日を1マスとした簡易ガントチャート。バーはドラッグで移動・両端でリサイズ、空きマスのドラッグで新規作成。
-export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBarChange, onBarClick, onBarOpen, selectedBarIds, selectedCell, onSelectCell, onBarCopy, onCreate, onRowClick, onReorder, onRowDelete }: Props) {
+export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBarChange, onBarClick, onBarOpen, onBarsMove, selectedBarIds, selectedCell, onSelectCell, onBarCopy, onCreate, onRowClick, onReorder, onRowDelete }: Props) {
   const [drag, setDrag] = useState<{ id: string; start: number; len: number; copy: boolean } | null>(null)
   const rowsRef = useRef<HTMLDivElement>(null)
+  const [groupDx, setGroupDx] = useState<number | null>(null)   // 複数選択をまとめて動かしている間の移動量（マス）
   const lastClick = useRef<{ key: string; t: number }>({ key: '', t: 0 })
   // 同じ場所を350ミリ秒以内に2回クリックしたら、ダブルクリックとみなす
   const isDouble = (key: string) => {
@@ -72,6 +74,30 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
     e.preventDefault()
     // Shift／⌘／Ctrlを押しながらクリック＝複数選択（選択の追加・解除だけ。ドラッグはしない）
     if ((e.shiftKey || e.metaKey || e.ctrlKey) && mode === 'move') { onBarClick(bar.id, true); return }
+    // 複数選択しているバーのどれかを掴んで横にドラッグ＝選択中のバーを、まとめて動かす
+    if (mode === 'move' && selectedBarIds && selectedBarIds.length > 1 && selectedBarIds.includes(bar.id)) {
+      const members = bars.filter(b => selectedBarIds.includes(b.id))
+      const minStart = Math.min(...members.map(b => b.start))
+      const maxEnd = Math.max(...members.map(b => b.start + b.len))
+      const gx0 = e.clientX
+      let gdx = 0
+      let gMoved = false
+      const onGMove = (ev: PointerEvent) => {
+        if (Math.abs(ev.clientX - gx0) > 3) gMoved = true
+        gdx = clamp(Math.round((ev.clientX - gx0) / cw), -minStart, cols.length - maxEnd)
+        if (gMoved) setGroupDx(gdx)
+      }
+      const onGUp = () => {
+        window.removeEventListener('pointermove', onGMove)
+        window.removeEventListener('pointerup', onGUp)
+        setGroupDx(null)
+        if (!gMoved) { if (isDouble(`bar:${bar.id}`)) onBarOpen(bar.id); else onBarClick(bar.id, false) }
+        else if (gdx !== 0) onBarsMove(members.map(b => b.id), gdx)
+      }
+      window.addEventListener('pointermove', onGMove)
+      window.addEventListener('pointerup', onGUp)
+      return
+    }
     const x0 = e.clientX
     const y0 = e.clientY
     const copy = e.altKey && mode === 'move'
@@ -268,7 +294,10 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
                     style={{ left: Math.min(creating.a, creating.b) * cw, width: (Math.abs(creating.b - creating.a) + 1) * cw }} />
                 )}
                 {rowBars.map(b => {
-                  const cur = drag && drag.id === b.id ? { start: drag.start, len: drag.len } : { start: b.start, len: b.len }
+                  const inGroup = groupDx !== null && !!selectedBarIds?.includes(b.id)
+                  const cur = inGroup
+                    ? { start: b.start + groupDx!, len: b.len }
+                    : drag && drag.id === b.id ? { start: drag.start, len: drag.len } : { start: b.start, len: b.len }
                   const w = cur.len * cw
                   const color = BAR_COLORS[b.color]?.cls || BAR_COLORS.gray.cls
                   // 同じ行の次のバーにぶつからない範囲までラベルを表示する（超える分は…で省略）
