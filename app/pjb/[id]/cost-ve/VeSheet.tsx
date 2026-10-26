@@ -23,7 +23,7 @@ function TextCell({ value, onSave, placeholder, bold }: { value: string; onSave:
       onChange={e => setV(e.target.value)}
       onBlur={() => { if (v !== value) onSave(v) }}
       onKeyDown={e => { if (isCommitEnter(e)) (e.target as HTMLInputElement).blur() }}
-      className={`w-full bg-transparent px-2 py-2 text-[13px] rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-300 ${bold ? 'font-medium text-slate-900' : 'text-slate-700'}`}
+      className={`w-full bg-transparent px-1.5 py-2 text-[12.5px] rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-300 ${bold ? 'font-medium text-slate-900' : 'text-slate-700'}`}
     />
   )
 }
@@ -35,7 +35,7 @@ function AmountCell({ value, onSave, formulaKey }: { value: number; onSave: (v: 
     <span onBlur={() => { const n = Number(draft) || 0; if (n !== value) onSave(n) }}>
       <MoneyInput
         value={draft} onChange={setDraft} formulaKey={formulaKey} allowNegative placeholder="0"
-        className="w-full bg-transparent px-2 py-2 text-[13px] text-right tabular-nums rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-300"
+        className="w-full bg-transparent px-1.5 py-2 text-[12.5px] text-right tabular-nums rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-300"
       />
     </span>
   )
@@ -106,7 +106,7 @@ export default function VeSheet({
     save(v, { status: on ? '採用' : '検討中' }, '採用可否', v.status, on ? '採用' : '検討中')
   }
 
-  const header = 'px-2 py-2 text-left text-[12px] font-semibold text-white'
+  const header = 'px-1.5 py-2 text-left text-[11.5px] leading-tight font-semibold text-white align-bottom'
   const cell = 'border-b border-slate-200'
 
   return (
@@ -142,32 +142,32 @@ export default function VeSheet({
 
       {/* 表 */}
       <div className="rounded-xl border border-slate-300 bg-white overflow-x-auto">
-        <table className="w-full min-w-[1100px] table-fixed text-[13px]">
+        <table className="w-full min-w-[820px] table-fixed text-[12.5px]">
           <colgroup>
-            <col style={{ width: '3rem' }} />
-            <col style={{ width: '6.5rem' }} />
-            <col style={{ width: '16rem' }} />
-            <col style={{ width: '16rem' }} />
-            <col style={{ width: '5.5rem' }} />
-            <col style={{ width: '9rem' }} />
-            <col style={{ width: '9rem' }} />
-            <col style={{ width: '9rem' }} />
-            <col style={{ width: '14rem' }} />
-            <col style={{ width: '14rem' }} />
-            <col style={{ width: '2.5rem' }} />
+            <col style={{ width: '3%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '4%' }} />
           </colgroup>
           <thead>
             <tr className="bg-slate-700">
               <th className={`${header} text-center`}>No.</th>
               <th className={header}>図面番号</th>
               <th className={header}>項目</th>
-              <th className={header}>増減対象：VE・CD候補</th>
+              <th className={header}>増減対象：<br />VE・CD候補</th>
               <th className={`${header} text-center`}>採用可否</th>
-              <th className={`${header} text-right`}>元値（現状金額）</th>
+              <th className={`${header} text-right`}>元値<br />（現状金額）</th>
               <th className={`${header} text-right`}>変更金額</th>
-              <th className={`${header} text-right`}>想定増減金額</th>
-              <th className={header}>設計会社コメント欄</th>
-              <th className={header}>別途質疑及びコメント、備考</th>
+              <th className={`${header} text-right`}>想定<br />増減金額</th>
+              <th className={header}>設計会社<br />コメント欄</th>
+              <th className={header}>別途質疑・<br />コメント、備考</th>
               <th />
             </tr>
           </thead>
@@ -199,12 +199,9 @@ export default function VeSheet({
           </tbody>
           <tfoot>
             <tr className="bg-slate-700 text-white">
-              <td colSpan={5} className="px-3 py-2.5 text-right text-[12.5px]">
-                合計（採用可否にチェックした行）
-              </td>
-              <td />
-              <td className="px-2 py-2.5 text-right text-[12px] text-slate-300">候補すべて {formatSignedYen(allTotal)}</td>
-              <td className="px-2 py-2.5 text-right tabular-nums font-bold">{formatSignedYen(adoptedTotal)}</td>
+              <td colSpan={5} className="px-3 py-2.5 text-right text-[12px]">合計（採用可否にチェックした行）</td>
+              <td colSpan={2} className="px-1.5 py-2.5 text-right text-[11.5px] text-slate-300 leading-tight">候補すべて<br />{formatSignedYen(allTotal)}</td>
+              <td className="px-1.5 py-2.5 text-right tabular-nums font-bold text-[13px]">{formatSignedYen(adoptedTotal)}</td>
               <td colSpan={3} />
             </tr>
           </tfoot>
