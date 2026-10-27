@@ -121,23 +121,23 @@ export default function PjbHomePage() {
   return (
     <TopShell active="home">
     <div className="min-h-screen bg-slate-100 pb-24">
-      {/* 上部：サイドバーと同じ深いグリーンの帯（タイトル＋状況のタイル） */}
-      <div className="bg-[#17382f]">
-        <header>
+      {/* 上部：タイトル＋状況のタイル（明るい背景） */}
+      <div>
+        <header className="bg-white border-b border-slate-200">
           <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
             <div className="flex items-baseline gap-3 min-w-0">
-              <h1 className="text-[18px] font-semibold text-white whitespace-nowrap">PJ予算管理</h1>
-              <span className="hidden sm:inline text-[12px] font-mono tracking-wide text-emerald-100/50">BARE NOTE STUDIO</span>
+              <h1 className="text-[18px] font-semibold text-slate-900 whitespace-nowrap">PJ予算管理</h1>
+              <span className="hidden sm:inline text-[12px] font-mono tracking-wide text-slate-400">BARE NOTE STUDIO</span>
             </div>
             <button
               onClick={() => setShowNew(true)}
-              className="text-[14px] font-medium bg-[#e2efe8] hover:bg-white text-[#17382f] px-4 py-2 rounded-lg whitespace-nowrap"
+              className="text-[14px] font-medium bg-[#17382f] hover:bg-[#0f2a22] text-white px-4 py-2 rounded-lg whitespace-nowrap"
             >
               ＋ 新規案件
             </button>
           </div>
         </header>
-        <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-7">
+        <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-2">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <SummaryTile
               label="進行中の案件" value={`${summary.active}件`} sub={`総予算 ${formatYen(summary.budget)}`}
@@ -355,7 +355,7 @@ function SummaryTile({
     <button
       onClick={onClick}
       className={`text-left rounded-xl border bg-white px-4 py-3 transition-colors ${
-        selected ? 'border-emerald-300 ring-2 ring-emerald-300' : 'border-transparent hover:border-emerald-200'
+        selected ? 'border-emerald-300 ring-2 ring-emerald-300' : 'border-slate-200 hover:border-emerald-300'
       }`}
     >
       <div className="text-[13px] text-slate-500 mb-1">{label}</div>
