@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useProjectCards } from '@/lib/pjb/useProjectCards'
 import { BUSINESSES, UNCLASSIFIED } from '@/lib/pjb/constants'
 import { formatYen, formatPercent } from '@/lib/pjb/format'
+import { parseTable, extractPlans, type ImportResult } from '@/lib/pjb/planImport'
 import { FY_MONTH_LABELS, fiscalYearOf, fiscalMonthIndex, currentFiscal } from '@/lib/pjb/fiscal'
 
 type Plan = { fiscal_year: number; business: string; month: number; sales: number; cost: number; updated_at?: string }
@@ -22,6 +23,7 @@ export default function FyPage() {
   const { cards, loading } = useProjectCards(true)
   const [plans, setPlans] = useState<Plan[]>([])
   const [planError, setPlanError] = useState(false)
+  const [showImport, setShowImport] = useState(false)
 
   const loadPlans = useCallback(async () => {
     const { data, error } = await supabase.from('pjb_fy_plans').select('*').eq('fiscal_year', fy)
@@ -38,6 +40,17 @@ export default function FyPage() {
     setPlans(prev => [...prev.filter(p => !(p.business === b && p.month === m)), row as Plan])
     const { error } = await supabase.from('pjb_fy_plans').upsert(row, { onConflict: 'fiscal_year,business,month' })
     if (error) { alert('計画を保存できませんでした。SQLパッチ018が実行されているか確認してください。'); loadPlans() }
+  }
+
+  // シートから読み込んだ計画を保存する（その年度の3事業×12か月を上書き）
+  const applyImport = async (year: number, imported: ImportResult['plans']) => {
+    const now = new Date().toISOString()
+    const rows = imported.map(p => ({ fiscal_year: year, ...p, updated_at: now }))
+    const { error } = await supabase.from('pjb_fy_plans').upsert(rows, { onConflict: 'fiscal_year,business,month' })
+    if (error) { alert(`計画を保存できませんでした：${error.message}（SQLパッチ018が実行されているか確認してください）`); return false }
+    setShowImport(false)
+    if (year !== fy) setFy(year); else loadPlans()
+    return true
   }
 
   // 実績（完了）・見込（それ以外）を、事業×月で集計
@@ -93,6 +106,7 @@ export default function FyPage() {
           <select value={fy} onChange={e => setFy(Number(e.target.value))} className="border border-slate-200 rounded-lg px-2 py-1 text-[14px] bg-white">
             {[now.year - 1, now.year, now.year + 1].map(y => <option key={y} value={y}>{y}年度（{y}年4月〜{y + 1}年3月）</option>)}
           </select>
+          <button onClick={() => setShowImport(true)} className="ml-auto text-[13px] px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">シートから計画を読み込む</button>
         </div>
         <p className="text-[13px] text-slate-500 mb-4">
           売上は各案件の「売上計上月」で集計します（完了＝実績、それ以外＝見込）。金額は税別。計画は下の表に入力できます。
@@ -178,7 +192,7 @@ export default function FyPage() {
               <SectionTitle>計画の入力（事業別・月別・円）</SectionTitle>
               <p className="text-[12px] text-slate-500 mb-1">金額をタップして入力します（計算式も使えます）。利益計画＝売上計画 − 原価計画。</p>
               <p className="text-[12px] text-slate-500 mb-2">
-                事業計画のスプレッドシートと連携している場合、ここの数字はシートの値で自動的に更新されます（直接直しても、次の同期でシートの値に戻ります）。
+                上の「シートから計画を読み込む」で、事業計画シートの数字をまとめて入れられます。
                 {plans.length > 0 && <>最終更新：{new Date(plans.reduce((m, p) => (p.updated_at && p.updated_at > m ? p.updated_at : m), '')).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</>}
               </p>
               <table className="w-full text-[13px] min-w-[1100px]">
@@ -230,7 +244,83 @@ export default function FyPage() {
           </>
         )}
       </div>
+      {showImport && <ImportModal fy={fy} onClose={() => setShowImport(false)} onApply={applyImport} />}
     </TopShell>
+  )
+}
+
+function ImportModal({ fy, onClose, onApply }: { fy: number; onClose: () => void; onApply: (year: number, plans: ImportResult['plans']) => Promise<boolean> }) {
+  const [text, setText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const parsed = useMemo(() => {
+    if (!text.trim()) return null
+    try { return { ok: extractPlans(parseTable(text)) } } catch (e) { return { error: (e as Error).message } }
+  }, [text])
+  const year = parsed && 'ok' in parsed && parsed.ok ? parsed.ok.fiscalYear ?? fy : fy
+
+  const readFile = async (file: File | undefined) => { if (file) setText(await file.text()) }
+  const apply = async () => {
+    if (!parsed || !('ok' in parsed) || !parsed.ok) return
+    setSaving(true)
+    const ok = await onApply(year, parsed.ok.plans)
+    if (!ok) setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-xl rounded-t-2xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
+        <div className="text-[17px] font-semibold text-slate-900 mb-1">シートから計画を読み込む</div>
+        <ol className="text-[13px] text-slate-600 mb-3 list-decimal pl-5 grid gap-0.5">
+          <li>事業計画のシートの「予定値」タブを開きます</li>
+          <li>見出し（26年度・合計・26/4…）から「売上総利益」の行までを、ドラッグして選び、コピー（⌘C）します</li>
+          <li>下の欄に貼り付け（⌘V）ます。CSVファイルを選んでもOKです</li>
+        </ol>
+        <textarea
+          value={text} onChange={e => setText(e.target.value)} rows={6} placeholder="ここに貼り付け"
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[12px] font-mono"
+        />
+        <div className="flex items-center gap-2 mt-2">
+          <label className="text-[13px] px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer">
+            CSVファイルを選ぶ
+            <input type="file" accept=".csv,.tsv,text/csv,text/plain" className="hidden" onChange={e => readFile(e.target.files?.[0])} />
+          </label>
+        </div>
+
+        {parsed && 'error' in parsed && <div className="mt-3 text-[13px] text-rose-600">{parsed.error}</div>}
+        {parsed && 'ok' in parsed && parsed.ok && (
+          <div className="mt-3 rounded-lg border border-slate-200 p-3">
+            <div className="text-[13px] font-semibold text-slate-800 mb-1.5">
+              {year}年度として読み込みます{parsed.ok.fiscalYear === null && '（年度が読み取れないため、いま表示中の年度にします）'}
+            </div>
+            <table className="w-full text-[13px] tabular-nums">
+              <thead><tr className="text-slate-500"><th className="text-left font-medium">事業</th><th className="text-right font-medium">売上計画（年間）</th><th className="text-right font-medium">原価計画（年間）</th></tr></thead>
+              <tbody>
+                {BUSINESSES.map(b => {
+                  const ps = parsed.ok!.plans.filter(p => p.business === b)
+                  return (
+                    <tr key={b} className="border-t border-slate-100">
+                      <td className="py-1">{b}</td>
+                      <td className="text-right">{formatYen(sum(ps.map(p => p.sales)))}</td>
+                      <td className="text-right">{formatYen(sum(ps.map(p => p.cost)))}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            <div className="text-[12px] text-slate-500 mt-1.5">この年度の3事業の計画が、この内容で上書きされます。</div>
+          </div>
+        )}
+
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose} className="flex-1 border border-slate-300 rounded-lg py-2.5 text-[14px] text-slate-700">キャンセル</button>
+          <button
+            onClick={apply} disabled={saving || !parsed || !('ok' in parsed)}
+            className="flex-1 bg-[#17382f] disabled:opacity-40 text-white rounded-lg py-2.5 text-[14px] font-medium"
+          >{saving ? '保存中…' : '計画に反映する'}</button>
+        </div>
+      </div>
+    </div>
   )
 }
 
