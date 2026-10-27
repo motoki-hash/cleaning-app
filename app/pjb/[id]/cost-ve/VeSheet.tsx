@@ -44,9 +44,14 @@ function AmountCell({ value, onSave, formulaKey }: { value: number; onSave: (v: 
 export default function VeSheet({
   projectId, categories, veItems, salesItems, onChanged,
 }: { projectId: string; categories: BudgetCategory[]; veItems: VeItem[]; salesItems: SalesItem[] | null; onChanged: () => void }) {
-  const defaultCat = categories.find(c => c.name === '内装工事')?.id ?? categories[0]?.id ?? ALL
+  // 対象は「内装工事（BNS外予算）」と「追加工事（BNS予算）」の2つだけ（どちらも無いときだけ全カテゴリー）
+  const targets = useMemo(() => {
+    const t = categories.filter(c => (c.name === '内装工事' && c.group_name === 'BNS外予算') || (c.name === '追加工事' && c.group_name === 'BNS予算'))
+    return t.length > 0 ? t : categories
+  }, [categories])
+  const defaultCat = targets[0]?.id ?? ALL
   const [catId, setCatId] = useState<string>(defaultCat)
-  useEffect(() => { if (catId !== ALL && !categories.some(c => c.id === catId)) setCatId(defaultCat) }, [categories, catId, defaultCat])
+  useEffect(() => { if (!targets.some(c => c.id === catId)) setCatId(defaultCat) }, [targets, catId, defaultCat])
 
   const cat = categories.find(c => c.id === catId)
   const items = useMemo(
@@ -93,6 +98,17 @@ export default function VeSheet({
     onChanged()
   }
 
+  // 入力済みの行を、もう一方のカテゴリー（内装工事⇄追加工事）へ移す
+  const moveTo = targets.find(c => c.id !== catId)
+  const move = async (v: VeItem) => {
+    if (!moveTo) return
+    if (!confirm(`「${v.content || '（無題）'}」を ${moveTo.name}（${moveTo.group_name}）に移動しますか？`)) return
+    const { error } = await supabase.from('pjb_ve_items').update({ category_id: moveTo.id, updated_at: new Date().toISOString() }).eq('id', v.id)
+    if (error) { alert(`移動に失敗しました：${error.message}`); return }
+    await logActivity({ projectId, action: 'update', entityType: 've_item', entityLabel: `${v.content || '（無題）'} カテゴリー`, before: cat ? `${cat.name}（${cat.group_name}）` : '', after: `${moveTo.name}（${moveTo.group_name}）` })
+    onChanged()
+  }
+
   const remove = async (v: VeItem) => {
     if ((v.content || orig(v) || chg(v)) && !confirm(`「${v.content || '（無題）'}」を削除しますか？`)) return
     const { error } = await supabase.from('pjb_ve_items').delete().eq('id', v.id)
@@ -115,8 +131,7 @@ export default function VeSheet({
       <div className="flex items-center gap-2 flex-wrap mb-3">
         <span className="text-[13px] text-slate-500">対象</span>
         <select value={catId} onChange={e => setCatId(e.target.value)} className="border border-slate-200 rounded-lg px-2 py-1.5 text-[14px] bg-white">
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}（{c.group_name}）</option>)}
-          <option value={ALL}>すべてのカテゴリー</option>
+          {targets.map(c => <option key={c.id} value={c.id}>{c.name}（{c.group_name}）</option>)}
         </select>
         <span className="text-[12.5px] text-slate-400">カテゴリーごとに、元値と変更金額を比べます</span>
       </div>
@@ -152,9 +167,9 @@ export default function VeSheet({
             <col style={{ width: '10%' }} />
             <col style={{ width: '10%' }} />
             <col style={{ width: '10%' }} />
-            <col style={{ width: '11%' }} />
-            <col style={{ width: '11%' }} />
-            <col style={{ width: '4%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '7%' }} />
           </colgroup>
           <thead>
             <tr className="bg-slate-700">
@@ -192,6 +207,9 @@ export default function VeSheet({
                 <td className={cell}><TextCell value={v.designer_comment ?? ''} onSave={x => save(v, { designer_comment: x || null }, '設計会社コメント', v.designer_comment, x)} /></td>
                 <td className={cell}><TextCell value={v.notes ?? ''} onSave={x => save(v, { notes: x || null }, '備考', v.notes, x)} /></td>
                 <td className={`${cell} text-center`}>
+                  {moveTo && (
+                    <button onClick={() => move(v)} title={`${moveTo.name}（${moveTo.group_name}）へ移動`} className="mr-1 text-[11px] text-slate-400 hover:text-slate-700 border border-slate-200 rounded px-1 py-0.5 whitespace-nowrap">→{moveTo.name.slice(0, 2)}</button>
+                  )}
                   <button onClick={() => remove(v)} className="text-slate-300 hover:text-rose-500" aria-label="行を削除">✕</button>
                 </td>
               </tr>
