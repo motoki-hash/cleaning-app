@@ -42,8 +42,8 @@ function AmountCell({ value, onSave, formulaKey }: { value: number; onSave: (v: 
 }
 
 export default function VeSheet({
-  projectId, categories, veItems, salesItems, onChanged,
-}: { projectId: string; categories: BudgetCategory[]; veItems: VeItem[]; salesItems: SalesItem[] | null; onChanged: () => void }) {
+  projectId, projectName, categories, veItems, salesItems, onChanged,
+}: { projectId: string; projectName?: string; categories: BudgetCategory[]; veItems: VeItem[]; salesItems: SalesItem[] | null; onChanged: () => void }) {
   // 対象は「内装工事（BNS外予算）」と「追加工事（BNS予算）」の2つだけ（どちらも無いときだけ全カテゴリー）
   const targets = useMemo(() => {
     const t = categories.filter(c => (c.name === '内装工事' && c.group_name === 'BNS外予算') || (c.name === '追加工事' && c.group_name === 'BNS予算'))
@@ -122,6 +122,39 @@ export default function VeSheet({
     save(v, { status: on ? '採用' : '検討中' }, '採用可否', v.status, on ? '採用' : '検討中')
   }
 
+  // スプレッドシートへの出力（施工店・設計会社に共有する用）。いま表示している表をそのまま出す
+  const [copied, setCopied] = useState(false)
+  const exportRows = (): (string | number)[][] => {
+    const d = new Date()
+    const rows: (string | number)[][] = [
+      [`VE/CD表　${projectName || ''}`],
+      [`対象：${cat ? `${cat.name}（${cat.group_name}）` : 'すべて'}　／　出力日：${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}　／　金額は税別`],
+      [],
+      ['No.', '図面番号', '項目', '増減対象：VE・CD候補', '採用可否', '元値（現状金額）', '変更金額', '想定増減金額', '設計会社コメント欄', '別途質疑・コメント、備考'],
+      ...items.map((v, i) => [i + 1, v.drawing_no ?? '', v.content, v.target_item ?? '', adopted(v) ? '採用' : '', orig(v), chg(v), delta(v), v.designer_comment ?? '', v.notes ?? '']),
+      ['', '', '', '', '合計（採用）', '', '', adoptedTotal, '', ''],
+      ['', '', '', '', '候補すべて', '', '', allTotal, '', ''],
+    ]
+    return rows
+  }
+  const copyTable = async () => {
+    // 1セルずつ貼り付けられるよう、タブ区切りで渡す（セル内の改行・タブは空白にする）
+    const text = exportRows().map(r => r.map(x => String(x).replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\n')
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2500) }
+    catch { alert('コピーできませんでした。「CSVでダウンロード」をお使いください。') }
+  }
+  const downloadCsv = () => {
+    const esc = (x: string | number) => { const t = String(x); return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t }
+    const csv = '\uFEFF' + exportRows().map(r => r.map(esc).join(',')).join('\r\n')   // 先頭のBOMで、ExcelやGoogleスプレッドシートでも文字化けしない
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    const d = new Date()
+    a.href = url
+    a.download = `VE-CD表_${projectName || ''}_${cat?.name || ''}_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const header = 'px-1.5 py-2 text-left text-[11.5px] leading-tight font-semibold text-white align-bottom'
   const cell = 'border-b border-slate-200'
 
@@ -134,6 +167,12 @@ export default function VeSheet({
           {targets.map(c => <option key={c.id} value={c.id}>{c.name}（{c.group_name}）</option>)}
         </select>
         <span className="text-[12.5px] text-slate-400">カテゴリーごとに、元値と変更金額を比べます</span>
+        <span className="ml-auto flex items-center gap-2">
+          <button onClick={copyTable} className="text-[13px] px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
+            {copied ? 'コピーしました' : '表をコピー'}
+          </button>
+          <button onClick={downloadCsv} className="text-[13px] px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">CSVでダウンロード</button>
+        </span>
       </div>
 
       {/* 集計 */}
