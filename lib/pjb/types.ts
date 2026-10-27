@@ -13,6 +13,7 @@ export type Project = {
   started_at: string | null
   completed_at: string | null
   notes: string | null
+  business?: string | null
   client_name?: string | null
   operator_name?: string | null
   address?: string | null

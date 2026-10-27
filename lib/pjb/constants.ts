@@ -25,3 +25,7 @@ export const STATUS_COLORS: Record<string, string> = {
   warning: 'text-amber-700 bg-amber-50 border-amber-200',
   danger: 'text-rose-700 bg-rose-50 border-rose-200',
 }
+
+// 始動している事業（案件登録のときに選ぶ）。増やすときは、ここに足す
+export const BUSINESSES = ['illi Stays', 'illi Hotels', 'Kyo Residence', 'Setup Office'] as const
+export const UNCLASSIFIED = '未分類'

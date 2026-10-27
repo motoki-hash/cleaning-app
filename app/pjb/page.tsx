@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { DEFAULT_CATEGORIES } from '@/lib/pjb/constants'
+import { DEFAULT_CATEGORIES, BUSINESSES, UNCLASSIFIED } from '@/lib/pjb/constants'
 import { summarizeCategory, summarizeProject, buildAlerts } from '@/lib/pjb/calc'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
 import { MoneyInput, KpiCard } from './components/ui'
@@ -19,10 +19,17 @@ type ProjectCardData = {
   grossProfit: number
   grossMargin: number
   bnsSell: number
+  bnsCost: number
+  business: string
   alertCount: number
 }
 
 const KPI_RATE = 0.01   // 予実管理のKPI：残予算が総予算の±1%以内
+
+type SortKey = 'newest' | 'name' | 'budget' | 'sell' | 'profit' | 'margin'
+const SORT_LABELS: Record<SortKey, string> = {
+  newest: '登録が新しい順', name: '案件名順', budget: '総予算が大きい順', sell: '売上が大きい順', profit: '利益が大きい順', margin: '利益率が高い順',
+}
 
 type Filter = '全て' | '進行中' | '完了' | '予算超過' | '要対応あり'
 
@@ -34,6 +41,9 @@ export default function PjbHomePage() {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('全て')
   const [showNew, setShowNew] = useState(false)
+  const [businessFilter, setBusinessFilter] = useState<string>('すべて')
+  const [sortKey, setSortKey] = useState<SortKey>('newest')
+  const [groupByBusiness, setGroupByBusiness] = useState(false)
   const [scope, setScope] = useState<'all' | 'active'>('all')
   const [showAgg, setShowAgg] = useState(true)
   useEffect(() => {
@@ -90,6 +100,8 @@ export default function PjbHomePage() {
         grossProfit: totals.bnsGrossProfit,
         grossMargin: totals.grossMargin,
         bnsSell: totals.bnsSell,
+        bnsCost: totals.bnsCost,
+        business: project.business || UNCLASSIFIED,
         alertCount: alerts.length,
       }
     })
@@ -98,7 +110,8 @@ export default function PjbHomePage() {
   }
 
   const filtered = useMemo(() => {
-    return cards.filter(c => {
+    const list = cards.filter(c => {
+      if (businessFilter !== 'すべて' && c.business !== businessFilter) return false
       if (query && !c.project.name.includes(query)) return false
       if (filter === '進行中') return c.project.status === '進行中'
       if (filter === '完了') return c.project.status === '完了'
@@ -106,7 +119,20 @@ export default function PjbHomePage() {
       if (filter === '要対応あり') return c.alertCount > 0
       return true
     })
-  }, [cards, query, filter])
+    const margin = (c: ProjectCardData) => (c.bnsSell > 0 ? c.grossProfit / c.bnsSell : -Infinity)
+    const cmp: Record<SortKey, (a: ProjectCardData, b: ProjectCardData) => number> = {
+      newest: (a, b) => b.project.created_at.localeCompare(a.project.created_at),
+      name: (a, b) => a.project.name.localeCompare(b.project.name, 'ja'),
+      budget: (a, b) => b.totalBudget - a.totalBudget,
+      sell: (a, b) => b.bnsSell - a.bnsSell,
+      profit: (a, b) => b.grossProfit - a.grossProfit,
+      margin: (a, b) => margin(b) - margin(a),
+    }
+    return list.sort(cmp[sortKey])
+  }, [cards, query, filter, businessFilter, sortKey])
+
+  // 事業の並び（登録している事業 → 未分類）。案件がある事業だけ、絞り込みの候補に出す
+  const businessNames = [...BUSINESSES, UNCLASSIFIED]
 
   if (!checked) return null
 
@@ -135,6 +161,18 @@ export default function PjbHomePage() {
       ratedCount: rated.length,
     }
   })()
+  // 事業別の売上・原価・利益（上の「全案件／進行中のみ」の切り替えに合わせる）
+  const bizStats = businessNames
+    .map(name => {
+      const list = pool.filter(c => c.business === name)
+      const sell = list.reduce((s, c) => s + c.bnsSell, 0)
+      const cost = list.reduce((s, c) => s + c.bnsCost, 0)
+      const profit = list.reduce((s, c) => s + c.grossProfit, 0)
+      const budget = list.reduce((s, c) => s + c.totalBudget, 0)
+      const remaining = list.reduce((s, c) => s + c.remaining, 0)
+      return { name, count: list.length, sell, cost, profit, margin: sell > 0 ? profit / sell : 0, budget, rate: budget > 0 ? remaining / budget : 0 }
+    })
+    .filter(b => b.count > 0 || b.name !== UNCLASSIFIED)
   const rateTone = Math.abs(agg.rate) <= KPI_RATE ? 'good' : agg.rate < 0 ? 'danger' : 'warning'
   const toggleFilter = (f: Filter) => setFilter(filter === f ? '全て' : f)
 
@@ -220,6 +258,52 @@ export default function PjbHomePage() {
               <KpiCard label="予実1%以内の案件" value={agg.ratedCount > 0 ? `${agg.achieved}/${agg.ratedCount}件` : '—'}
                 tone={agg.ratedCount > 0 && agg.achieved === agg.ratedCount ? 'good' : 'default'} sub="残予算が総予算の±1%以内" />
             </div>
+
+            {/* 事業別の分析 */}
+            <div className="mt-4 rounded-xl border border-slate-200 bg-white overflow-x-auto">
+              <div className="px-4 py-2.5 border-b border-slate-100 text-[14px] font-semibold text-slate-900">
+                事業別の分析 <span className="text-[12px] font-normal text-slate-400 ml-1">（行を押すと、その事業の案件だけを一覧に出します）</span>
+              </div>
+              <table className="w-full min-w-[760px] text-[13.5px]">
+                <thead>
+                  <tr className="text-left text-slate-500 text-[12.5px] bg-slate-50 border-b border-slate-100">
+                    <th className="px-4 py-2 font-medium">事業</th>
+                    <th className="px-3 py-2 font-medium text-right">案件数</th>
+                    <th className="px-3 py-2 font-medium text-right">売上</th>
+                    <th className="px-3 py-2 font-medium text-right">原価</th>
+                    <th className="px-3 py-2 font-medium text-right">利益</th>
+                    <th className="px-3 py-2 font-medium text-right">利益率</th>
+                    <th className="px-3 py-2 font-medium text-right">総予算</th>
+                    <th className="px-4 py-2 font-medium text-right">残予算率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bizStats.map(b => (
+                    <tr key={b.name} onClick={() => setBusinessFilter(businessFilter === b.name ? 'すべて' : b.name)}
+                      className={`border-b border-slate-100 cursor-pointer hover:bg-slate-50 ${businessFilter === b.name ? 'bg-slate-50' : ''}`}>
+                      <td className="px-4 py-2.5 font-semibold text-slate-900">{b.name}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{b.count}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(b.sell)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(b.cost)}</td>
+                      <td className={`px-3 py-2.5 text-right tabular-nums font-semibold ${b.profit < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{formatSignedYen(b.profit)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{b.sell > 0 ? formatPercent(b.margin, 1) : '—'}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(b.budget)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{b.budget > 0 ? formatPercent(b.rate, 1) : '—'}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-slate-50 font-semibold">
+                    <td className="px-4 py-2.5">合計</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{pool.length}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(agg.sell)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(pool.reduce((s, c) => s + c.bnsCost, 0))}</td>
+                    <td className={`px-3 py-2.5 text-right tabular-nums ${agg.profit < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{formatSignedYen(agg.profit)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{agg.sell > 0 ? formatPercent(agg.margin, 1) : '—'}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(agg.totalBudget)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{agg.totalBudget > 0 ? formatPercent(agg.rate, 1) : '—'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
             </>
           )}
         </div>
@@ -249,6 +333,30 @@ export default function PjbHomePage() {
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[12.5px] text-slate-500 mr-1">事業</span>
+            {['すべて', ...businessNames.filter(n => n !== UNCLASSIFIED || cards.some(c => c.business === UNCLASSIFIED))].map(n => (
+              <button key={n} onClick={() => setBusinessFilter(n)}
+                className={`text-[13px] px-3 py-1.5 rounded-full whitespace-nowrap border ${
+                  businessFilter === n ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200'
+                }`}>
+                {n}{n !== 'すべて' && <span className="ml-1 opacity-60">{cards.filter(c => c.business === n).length}</span>}
+              </button>
+            ))}
+          </div>
+          <label className="flex items-center gap-1.5 text-[13px] text-slate-600">
+            並べ替え
+            <select value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)} className="border border-slate-200 bg-white rounded-lg px-2 py-1.5 text-[13px]">
+              {(Object.keys(SORT_LABELS) as SortKey[]).map(k => <option key={k} value={k}>{SORT_LABELS[k]}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5 text-[13px] text-slate-600 cursor-pointer">
+            <input type="checkbox" checked={groupByBusiness} onChange={e => setGroupByBusiness(e.target.checked)} />
+            事業ごとにまとめて表示
+          </label>
+        </div>
+
         {loading && <p className="text-center text-[14px] text-slate-400 py-10">読み込み中…</p>}
         {!loading && filtered.length === 0 && (
           <div className="bg-white rounded-xl border border-dashed border-slate-300 text-center text-[14px] text-slate-400 py-16">
@@ -256,7 +364,28 @@ export default function PjbHomePage() {
           </div>
         )}
 
-        {filtered.length > 0 && (
+        {filtered.length > 0 && groupByBusiness && (
+          <div className="grid gap-6">
+            {businessNames.map(name => {
+              const list = filtered.filter(c => c.business === name)
+              if (list.length === 0) return null
+              const sell = list.reduce((s, c) => s + c.bnsSell, 0)
+              const profit = list.reduce((s, c) => s + c.grossProfit, 0)
+              return (
+                <section key={name}>
+                  <div className="flex items-baseline gap-3 mb-2">
+                    <h3 className="text-[15px] font-bold text-slate-900">{name}</h3>
+                    <span className="text-[12.5px] text-slate-500">{list.length}件　売上 {formatYen(sell)}　利益 {formatSignedYen(profit)}</span>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {list.map(c => <ProjectCard key={c.project.id} data={c} />)}
+                  </div>
+                </section>
+              )
+            })}
+          </div>
+        )}
+        {filtered.length > 0 && !groupByBusiness && (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {filtered.map(c => <ProjectCard key={c.project.id} data={c} />)}
           </div>
@@ -305,6 +434,9 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
           <div className="text-[15px] font-semibold text-slate-900 truncate">{project.name}</div>
           <span className={`inline-block mt-1 text-[12px] px-2 py-0.5 rounded-full border font-medium ${STATUS_PILL[project.status]}`}>
             {project.status}
+          </span>
+          <span className="inline-block mt-1 ml-1.5 text-[12px] px-2 py-0.5 rounded-full border border-slate-200 bg-white text-slate-600">
+            {data.business}
           </span>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -361,16 +493,19 @@ function Badge({ tone, children }: { tone: 'danger' | 'warning' | 'info' | 'good
 function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [name, setName] = useState('')
   const [targetProfit, setTargetProfit] = useState('')
+  const [business, setBusiness] = useState('')
   const [roomCount, setRoomCount] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const submit = async () => {
     if (!name.trim()) { setError('プロジェクト名は必須です'); return }
+    if (!business) { setError('事業を選んでください'); return }
     setSaving(true)
     const { data, error: err } = await supabase.from('pjb_projects').insert({
       name: name.trim(),
       total_budget: 0,
+      business,
       target_profit: Number(targetProfit) || 0,
       room_count: Number(roomCount) || 0,
     }).select('id').single()
@@ -393,6 +528,13 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
           <label className="grid gap-1">
             <span className="text-[13px] text-slate-500">プロジェクト名</span>
             <input value={name} onChange={e => setName(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-[15px]" placeholder="例）赤坂ウエストビル改修工事" />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-[13px] text-slate-500">事業</span>
+            <select value={business} onChange={e => setBusiness(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-[15px] bg-white">
+              <option value="">選択してください</option>
+              {BUSINESSES.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
           </label>
           <label className="grid gap-1">
             <span className="text-[13px] text-slate-500">目標利益（円・任意）</span>

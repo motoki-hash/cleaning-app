@@ -6,6 +6,8 @@ import Shell from '../components/Shell'
 import DeleteProjectModal from '../components/DeleteProjectModal'
 import { KpiCard, AlertList, StatePill, SectionTitle, InlineNumber } from '../components/ui'
 import { supabase } from '@/lib/supabase'
+import { logActivity } from '@/lib/pjb/activity'
+import { BUSINESSES } from '@/lib/pjb/constants'
 import { useProjectData } from '@/lib/pjb/useProjectData'
 import { summarizeCategory, summarizeProject, buildAlerts, categorySales } from '@/lib/pjb/calc'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
@@ -40,6 +42,25 @@ export default function DashboardPage() {
 
   return (
     <Shell projectId={id} projectName={project.name} projectStatus={project.status} active="dashboard" onQuickAdded={reload}>
+      <div className="flex items-center gap-2 flex-wrap mb-5">
+        <span className="text-[13px] text-slate-500">事業</span>
+        <select
+          value={project.business || ''}
+          onChange={async e => {
+            const next = e.target.value || null
+            const { error } = await supabase.from('pjb_projects').update({ business: next, updated_at: new Date().toISOString() }).eq('id', id)
+            if (error) { alert(`保存に失敗しました：${error.message}（SQLパッチ017を実行していない場合は、先に実行してください）`); return }
+            await logActivity({ projectId: id, action: 'update', entityType: 'project', entityLabel: '事業', before: project.business || '未分類', after: next || '未分類' })
+            reload()
+          }}
+          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[14px] bg-white"
+        >
+          <option value="">未分類</option>
+          {BUSINESSES.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
+        <span className="text-[12.5px] text-slate-400">案件一覧の絞り込みと、事業別の分析に使います</span>
+      </div>
+
       <SectionTitle>予算KPI <span className="text-[12px] font-normal text-slate-400 ml-1">金額はすべて税別</span></SectionTitle>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <KpiCard label="PJ総予算" value={formatYen(totals.totalBudget)} sub="BNS外予算の当初予算合計 ＋ BNS予算の売上合計（自動）" />
