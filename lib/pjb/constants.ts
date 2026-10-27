@@ -29,3 +29,13 @@ export const STATUS_COLORS: Record<string, string> = {
 // 始動している事業（案件登録のときに選ぶ）。増やすときは、ここに足す
 export const BUSINESSES = ['illi Stays', 'illi Hotels', 'Kyo Residence', 'Setup Office'] as const
 export const UNCLASSIFIED = '未分類'
+
+// 案件の担当者の欄（ラベルと、保存する項目名）
+export const STAFF_FIELDS = [
+  { key: 'pm_name', label: '進行管理', kind: 'person' },
+  { key: 'qa_name', label: '品質管理', kind: 'person' },
+  { key: 'design_company', label: '設計会社', kind: 'company' },
+  { key: 'contractor_company', label: '施工会社', kind: 'company' },
+  { key: 'client_name', label: 'クライアント', kind: 'company' },
+] as const
+export type StaffKey = typeof STAFF_FIELDS[number]['key']

@@ -31,7 +31,7 @@ const STATUS_PILL: Record<ProjectStatus, string> = {
 }
 
 // サイドメニュー用の線アイコン
-function NavIcon({ name }: { name: string }) {
+export function NavIcon({ name }: { name: string }) {
   const p = {
     dashboard: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
     budget: <><path d="M4 20V10M10 20V4M16 20v-8M22 20H2" /></>,
@@ -41,6 +41,9 @@ function NavIcon({ name }: { name: string }) {
     payments: <><rect x="3" y="6" width="18" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /></>,
     investors: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M17 5.5a3 3 0 0 1 0 5.8M21.5 20c0-2.6-1.4-4.5-3.5-5.5" /></>,
     history: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    home: <><path d="M3 11l9-8 9 8" /><path d="M5 10v10h14V10" /></>,
+    fy: <><path d="M3 20h18" /><path d="M5 16l4-5 4 3 6-8" /><circle cx="19" cy="6" r="1.2" /></>,
+    resources: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M17 5.5a3 3 0 0 1 0 5.8M21.5 20c0-2.6-1.4-4.5-3.5-5.5" /></>,
     documents: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></>,
   }[name] ?? null
   return (

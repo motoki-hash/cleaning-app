@@ -14,6 +14,11 @@ export type Project = {
   completed_at: string | null
   notes: string | null
   business?: string | null
+  pm_name?: string | null
+  qa_name?: string | null
+  design_company?: string | null
+  contractor_company?: string | null
+  sales_month?: string | null
   client_name?: string | null
   operator_name?: string | null
   address?: string | null

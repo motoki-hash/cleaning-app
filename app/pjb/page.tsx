@@ -4,25 +4,13 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { DEFAULT_CATEGORIES, BUSINESSES, UNCLASSIFIED } from '@/lib/pjb/constants'
-import { summarizeCategory, summarizeProject, buildAlerts } from '@/lib/pjb/calc'
+import { DEFAULT_CATEGORIES, BUSINESSES, UNCLASSIFIED, STAFF_FIELDS } from '@/lib/pjb/constants'
+import { fiscalYearOf, currentFiscal, monthInputToDate } from '@/lib/pjb/fiscal'
+import { useProjectCards, type ProjectCardData } from '@/lib/pjb/useProjectCards'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
 import { MoneyInput, KpiCard } from './components/ui'
-import type { Project, BudgetCategory, Order, AdditionalWork, VeItem, SalesItem } from '@/lib/pjb/types'
-
-type ProjectCardData = {
-  project: Project
-  totalBudget: number
-  landingForecast: number
-  remaining: number
-  consumptionRate: number
-  grossProfit: number
-  grossMargin: number
-  bnsSell: number
-  bnsCost: number
-  business: string
-  alertCount: number
-}
+import TopShell from './components/TopShell'
+import type { Project } from '@/lib/pjb/types'
 
 const KPI_RATE = 0.01   // 予実管理のKPI：残予算が総予算の±1%以内
 
@@ -31,13 +19,12 @@ const SORT_LABELS: Record<SortKey, string> = {
   newest: '登録が新しい順', name: '案件名順', budget: '総予算が大きい順', sell: '売上が大きい順', profit: '利益が大きい順', margin: '利益率が高い順',
 }
 
-type Filter = '全て' | '進行中' | '完了' | '予算超過' | '要対応あり'
+type Filter = '全て' | '進行中' | '完了' | '予算超過' | '要対応あり' | '今期売上'
 
 export default function PjbHomePage() {
   const router = useRouter()
   const [checked, setChecked] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [cards, setCards] = useState<ProjectCardData[]>([])
+  const { cards, loading, reload: load } = useProjectCards(checked)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('全て')
   const [showNew, setShowNew] = useState(false)
@@ -63,52 +50,6 @@ export default function PjbHomePage() {
     })
   }, [router])
 
-  useEffect(() => { if (checked) load() }, [checked])
-
-  const load = async () => {
-    setLoading(true)
-    const { data: projects } = await supabase.from('pjb_projects').select('*').order('created_at', { ascending: false })
-    const list = (projects || []) as Project[]
-    if (list.length === 0) { setCards([]); setLoading(false); return }
-
-    const ids = list.map(p => p.id)
-    const [catRes, orderRes, workRes, veRes, salesRes] = await Promise.all([
-      supabase.from('pjb_budget_categories').select('*').in('project_id', ids),
-      supabase.from('pjb_orders').select('*').in('project_id', ids),
-      supabase.from('pjb_additional_works').select('*').in('project_id', ids),
-      supabase.from('pjb_ve_items').select('*').in('project_id', ids),
-      supabase.from('pjb_sales_items').select('*').in('project_id', ids),
-    ])
-    // 売上の内訳のテーブルがまだないときは null（従来どおり、項目に直接入れた売上を使う）
-    const salesAll: SalesItem[] | null = salesRes.error ? null : ((salesRes.data || []) as SalesItem[])
-    const categories = (catRes.data || []) as BudgetCategory[]
-    const orders = (orderRes.data || []) as Order[]
-    const works = (workRes.data || []) as AdditionalWork[]
-    const ves = (veRes.data || []) as VeItem[]
-
-    const result: ProjectCardData[] = list.map(project => {
-      const cats = categories.filter(c => c.project_id === project.id)
-      const summaries = cats.map(c => summarizeCategory(c, orders, works, ves))
-      const totals = summarizeProject(project, cats, summaries, salesAll === null ? null : salesAll.filter(x => x.project_id === project.id))
-      const alerts = buildAlerts(cats, summaries, orders.filter(o => o.project_id === project.id), works.filter(w => w.project_id === project.id), ves.filter(v => v.project_id === project.id), `/pjb/${project.id}`)
-      return {
-        project,
-        totalBudget: totals.totalBudget,
-        landingForecast: totals.landingForecast,
-        remaining: totals.remaining,
-        consumptionRate: totals.consumptionRate,
-        grossProfit: totals.bnsGrossProfit,
-        grossMargin: totals.grossMargin,
-        bnsSell: totals.bnsSell,
-        bnsCost: totals.bnsCost,
-        business: project.business || UNCLASSIFIED,
-        alertCount: alerts.length,
-      }
-    })
-    setCards(result)
-    setLoading(false)
-  }
-
   const filtered = useMemo(() => {
     const list = cards.filter(c => {
       if (businessFilter !== 'すべて' && c.business !== businessFilter) return false
@@ -117,6 +58,7 @@ export default function PjbHomePage() {
       if (filter === '完了') return c.project.status === '完了'
       if (filter === '予算超過') return c.remaining < 0
       if (filter === '要対応あり') return c.alertCount > 0
+      if (filter === '今期売上') return fiscalYearOf(c.project.sales_month) === currentFiscal().year
       return true
     })
     const margin = (c: ProjectCardData) => (c.bnsSell > 0 ? c.grossProfit / c.bnsSell : -Infinity)
@@ -177,6 +119,7 @@ export default function PjbHomePage() {
   const toggleFilter = (f: Filter) => setFilter(filter === f ? '全て' : f)
 
   return (
+    <TopShell active="home">
     <div className="min-h-screen bg-slate-100 pb-24">
       {/* 上部：サイドバーと同じ深いグリーンの帯（タイトル＋状況のタイル） */}
       <div className="bg-[#17382f]">
@@ -319,7 +262,7 @@ export default function PjbHomePage() {
             className="w-full sm:w-64 border border-slate-200 bg-white rounded-lg px-3 py-2 text-[14px]"
           />
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-            {(['全て', '進行中', '完了', '予算超過', '要対応あり'] as Filter[]).map(f => (
+            {(['全て', '進行中', '完了', '予算超過', '要対応あり', '今期売上'] as Filter[]).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -394,6 +337,7 @@ export default function PjbHomePage() {
 
       {showNew && <NewProjectModal onClose={() => setShowNew(false)} onCreated={(id) => router.push(`/pjb/${id}`)} />}
     </div>
+    </TopShell>
   )
 }
 
@@ -438,6 +382,9 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
           <span className="inline-block mt-1 ml-1.5 text-[12px] px-2 py-0.5 rounded-full border border-slate-200 bg-white text-slate-600">
             {data.business}
           </span>
+          {fiscalYearOf(project.sales_month) === currentFiscal().year && (
+            <span className="inline-block mt-1 ml-1.5 text-[12px] px-2 py-0.5 rounded-full border border-emerald-300 bg-white text-emerald-700 font-medium">今期売上</span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {data.totalBudget > 0 && Math.abs(data.remaining / data.totalBudget) <= KPI_RATE && <Badge tone="good">予実1%以内</Badge>}
@@ -469,6 +416,12 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
         </div>
       </div>
 
+      {(project.pm_name || project.qa_name) && (
+        <div className="text-[12px] text-slate-500 mb-2">
+          {project.pm_name && <span className="mr-3">進行 {project.pm_name}</span>}
+          {project.qa_name && <span>品質 {project.qa_name}</span>}
+        </div>
+      )}
       <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
         <div
           className={`h-full ${over ? 'bg-rose-500' : warn ? 'bg-amber-500' : 'bg-emerald-500'}`}
@@ -494,6 +447,8 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
   const [name, setName] = useState('')
   const [targetProfit, setTargetProfit] = useState('')
   const [business, setBusiness] = useState('')
+  const [salesMonth, setSalesMonth] = useState('')
+  const [staff, setStaff] = useState<Record<string, string>>({})
   const [roomCount, setRoomCount] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -506,6 +461,9 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
       name: name.trim(),
       total_budget: 0,
       business,
+      // 入力があるものだけ送る（SQLパッチ018の前でも、空のままなら登録できるように）
+      ...(salesMonth ? { sales_month: monthInputToDate(salesMonth) } : {}),
+      ...Object.fromEntries(STAFF_FIELDS.filter(f => (staff[f.key] || '').trim()).map(f => [f.key, staff[f.key].trim()])),
       target_profit: Number(targetProfit) || 0,
       room_count: Number(roomCount) || 0,
     }).select('id').single()
@@ -536,6 +494,22 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
               {BUSINESSES.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           </label>
+          <label className="grid gap-1">
+            <span className="text-[13px] text-slate-500">売上計上月（任意・その月に売上が立つ）</span>
+            <input type="month" value={salesMonth} onChange={e => setSalesMonth(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-[15px] bg-white" />
+          </label>
+          <div className="rounded-lg border border-slate-200 p-3 grid gap-2.5">
+            <div className="text-[13px] font-semibold text-slate-700">担当者 <span className="font-normal text-slate-400">（任意・あとから編集できます）</span></div>
+            {STAFF_FIELDS.map(f => (
+              <label key={f.key} className="grid grid-cols-[6rem_1fr] items-center gap-2">
+                <span className="text-[13px] text-slate-500">{f.label}</span>
+                <input
+                  value={staff[f.key] || ''} onChange={e => setStaff(prev => ({ ...prev, [f.key]: e.target.value }))}
+                  className="border border-slate-200 rounded-lg px-3 py-1.5 text-[14px]" placeholder="未設定"
+                />
+              </label>
+            ))}
+          </div>
           <label className="grid gap-1">
             <span className="text-[13px] text-slate-500">目標利益（円・任意）</span>
             <MoneyInput value={targetProfit} onChange={setTargetProfit} className="border border-slate-200 rounded-lg px-3 py-2 text-[15px]" placeholder="1,700,000" />
