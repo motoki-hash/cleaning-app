@@ -9,7 +9,7 @@ import { BUSINESSES, UNCLASSIFIED } from '@/lib/pjb/constants'
 import { formatYen, formatPercent } from '@/lib/pjb/format'
 import { FY_MONTH_LABELS, fiscalYearOf, fiscalMonthIndex, currentFiscal } from '@/lib/pjb/fiscal'
 
-type Plan = { fiscal_year: number; business: string; month: number; sales: number; cost: number }
+type Plan = { fiscal_year: number; business: string; month: number; sales: number; cost: number; updated_at?: string }
 
 const sum = (a: number[]) => a.reduce((s, x) => s + x, 0)
 const cumulative = (a: number[]) => a.reduce<number[]>((acc, x) => [...acc, (acc[acc.length - 1] || 0) + x], [])
@@ -176,7 +176,11 @@ export default function FyPage() {
 
             <div className="bg-white rounded-xl border border-slate-200 p-4 mb-5 overflow-x-auto">
               <SectionTitle>計画の入力（事業別・月別・円）</SectionTitle>
-              <p className="text-[12px] text-slate-500 mb-2">金額をタップして入力します（計算式も使えます）。利益計画＝売上計画 − 原価計画。</p>
+              <p className="text-[12px] text-slate-500 mb-1">金額をタップして入力します（計算式も使えます）。利益計画＝売上計画 − 原価計画。</p>
+              <p className="text-[12px] text-slate-500 mb-2">
+                事業計画のスプレッドシートと連携している場合、ここの数字はシートの値で自動的に更新されます（直接直しても、次の同期でシートの値に戻ります）。
+                {plans.length > 0 && <>最終更新：{new Date(plans.reduce((m, p) => (p.updated_at && p.updated_at > m ? p.updated_at : m), '')).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</>}
+              </p>
               <table className="w-full text-[13px] min-w-[1100px]">
                 <thead>
                   <tr className="text-slate-500">
