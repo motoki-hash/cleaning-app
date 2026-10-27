@@ -27,8 +27,12 @@ export const STATUS_COLORS: Record<string, string> = {
 }
 
 // 始動している事業（案件登録のときに選ぶ）。増やすときは、ここに足す
-export const BUSINESSES = ['illi Stays', 'illi Hotels', 'Kyo Residence', 'Setup Office'] as const
+export const BUSINESSES = ['illi Stays & Hotels', 'Kyo Residence', 'Setup Office'] as const
 export const UNCLASSIFIED = '未分類'
+
+// 以前は illi Stays と illi Hotels を分けていた。DBの値が古いままでも、ひとつの事業として扱う
+export const normalizeBusiness = (b: string | null | undefined): string =>
+  !b ? UNCLASSIFIED : b === 'illi Stays' || b === 'illi Hotels' ? 'illi Stays & Hotels' : b
 
 // 案件の担当者の欄（ラベルと、保存する項目名）
 export const STAFF_FIELDS = [

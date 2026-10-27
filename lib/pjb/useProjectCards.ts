@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { UNCLASSIFIED } from './constants'
+import { normalizeBusiness } from './constants'
 import { summarizeCategory, summarizeProject, buildAlerts } from './calc'
 import type { Project, BudgetCategory, Order, AdditionalWork, VeItem, SalesItem } from './types'
 
@@ -60,7 +60,7 @@ export function useProjectCards(enabled: boolean) {
         grossMargin: totals.grossMargin,
         bnsSell: totals.bnsSell,
         bnsCost: totals.bnsCost,
-        business: project.business || UNCLASSIFIED,
+        business: normalizeBusiness(project.business),
         alertCount: alerts.length,
       }
     })

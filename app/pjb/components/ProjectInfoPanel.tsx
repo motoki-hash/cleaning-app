@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { BUSINESSES, STAFF_FIELDS, type StaffKey } from '@/lib/pjb/constants'
+import { BUSINESSES, STAFF_FIELDS, normalizeBusiness, type StaffKey } from '@/lib/pjb/constants'
 import { fiscalYearOf, currentFiscal, dateToMonthInput, monthInputToDate } from '@/lib/pjb/fiscal'
 import { logActivity } from '@/lib/pjb/activity'
 import { isCommitEnter } from './ui'
@@ -63,7 +63,7 @@ export default function ProjectInfoPanel({ project, onChanged }: { project: Proj
         <label className="grid gap-1">
           <span className="text-[12px] text-slate-500">事業</span>
           <select
-            value={project.business || ''}
+            value={project.business ? normalizeBusiness(project.business) : ''}
             onChange={e => save({ business: e.target.value || null }, '事業', project.business || '未分類', e.target.value || '未分類')}
             className="border border-slate-200 rounded-lg px-3 py-2 text-[14px] bg-white"
           >
