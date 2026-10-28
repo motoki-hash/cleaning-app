@@ -9,12 +9,15 @@ import { isCommitEnter } from './ui'
 import type { Project } from '@/lib/pjb/types'
 
 // 案件の基本情報：事業・売上計上月・担当者（進行管理／品質管理／設計会社／施工会社／クライアント）。すべて任意で、いつでも編集できる
-function Field({ label, value, onSave, list, type = 'text' }: { label: string; value: string; onSave: (v: string) => void; list?: string; type?: string }) {
+function Field({ label, hint, hintTone, value, onSave, list, type = 'text' }: { label: string; hint?: string; hintTone?: 'accent'; value: string; onSave: (v: string) => void; list?: string; type?: string }) {
   const [v, setV] = useState(value)
   useEffect(() => { setV(value) }, [value])
   return (
-    <label className="grid gap-1">
-      <span className="text-[12px] text-slate-500">{label}</span>
+    <label className="grid gap-1 content-start">
+      <span className="flex items-baseline justify-between gap-2 text-[12px] text-slate-500">
+        <span>{label}</span>
+        {hint && <span className={hintTone === 'accent' ? 'text-emerald-700 font-medium' : 'text-slate-400'}>{hint}</span>}
+      </span>
       <input
         type={type} list={list} value={v} placeholder="未設定"
         onChange={e => setV(e.target.value)}
@@ -60,7 +63,7 @@ export default function ProjectInfoPanel({ project, onChanged }: { project: Proj
         <span className="text-[12px] text-slate-400">担当者・売上計上月は任意です。あとからいつでも入力・変更できます</span>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <label className="grid gap-1">
+        <label className="grid gap-1 content-start">
           <span className="text-[12px] text-slate-500">事業</span>
           <select
             value={project.business ? normalizeBusiness(project.business) : ''}
@@ -71,18 +74,11 @@ export default function ProjectInfoPanel({ project, onChanged }: { project: Proj
             {BUSINESSES.map(b => <option key={b} value={b}>{b}</option>)}
           </select>
         </label>
-        <div className="grid gap-1">
-          <Field
-            label="売上計上月（その月に売上が立つ）" type="month" value={dateToMonthInput(project.sales_month)}
-            onSave={v => save({ sales_month: monthInputToDate(v) }, '売上計上月', project.sales_month, monthInputToDate(v))}
-          />
-          {fy !== null && (
-            <span className={`text-[12px] ${fy === nowFy ? 'text-emerald-700 font-medium' : 'text-slate-400'}`}>
-              {fy}年度{fy === nowFy ? '（今期売上）' : ''}
-            </span>
-          )}
-        </div>
-        <span className="hidden lg:block" />
+        <Field
+          label="売上計上月（その月に売上が立つ）" type="month" value={dateToMonthInput(project.sales_month)}
+          hint={fy !== null ? `${fy}年度${fy === nowFy ? '（今期売上）' : ''}` : undefined} hintTone={fy === nowFy ? 'accent' : undefined}
+          onSave={v => save({ sales_month: monthInputToDate(v) }, '売上計上月', project.sales_month, monthInputToDate(v))}
+        />
         {STAFF_FIELDS.map(f => (
           <Field
             key={f.key} label={f.label} value={(project[f.key as StaffKey] as string | null | undefined) ?? ''}
