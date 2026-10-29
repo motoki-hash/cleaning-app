@@ -94,9 +94,10 @@ export default function PjbHomePage() {
     const remaining = pool.reduce((s, c) => s + c.remaining, 0)
     const sell = pool.reduce((s, c) => s + c.bnsSell, 0)
     const profit = pool.reduce((s, c) => s + c.grossProfit, 0)
+    const cashOut = pool.reduce((s, c) => s + c.cashOut, 0)
     const rated = pool.filter(c => c.totalBudget > 0)
     return {
-      totalBudget, landing, remaining, sell, profit,
+      totalBudget, landing, remaining, sell, profit, cashOut,
       rate: totalBudget > 0 ? remaining / totalBudget : 0,
       margin: sell > 0 ? profit / sell : 0,
       achieved: rated.filter(c => Math.abs(c.remaining / c.totalBudget) <= KPI_RATE).length,
@@ -112,7 +113,8 @@ export default function PjbHomePage() {
       const profit = list.reduce((s, c) => s + c.grossProfit, 0)
       const budget = list.reduce((s, c) => s + c.totalBudget, 0)
       const remaining = list.reduce((s, c) => s + c.remaining, 0)
-      return { name, count: list.length, sell, cost, profit, margin: sell > 0 ? profit / sell : 0, budget, rate: budget > 0 ? remaining / budget : 0 }
+      const cashOut = list.reduce((s, c) => s + c.cashOut, 0)
+      return { name, count: list.length, sell, cost, profit, cashOut, margin: sell > 0 ? profit / sell : 0, budget, rate: budget > 0 ? remaining / budget : 0 }
     })
     .filter(b => b.count > 0 || b.name !== UNCLASSIFIED)
   const rateTone = Math.abs(agg.rate) <= KPI_RATE ? 'good' : agg.rate < 0 ? 'danger' : 'warning'
@@ -201,13 +203,17 @@ export default function PjbHomePage() {
               <KpiCard label="予実1%以内の案件" value={agg.ratedCount > 0 ? `${agg.achieved}/${agg.ratedCount}件` : '—'}
                 tone={agg.ratedCount > 0 && agg.achieved === agg.ratedCount ? 'good' : 'default'} sub="残予算が総予算の±1%以内" />
             </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+              <KpiCard label="BNSキャッシュ持ち出し（合計）" value={formatYen(agg.cashOut)} tone={agg.cashOut > 0 ? 'warning' : 'default'} sub="売上にならず、BNSが補填した費用" />
+              <KpiCard label="粗利益 − 持ち出し" value={formatSignedYen(agg.profit - agg.cashOut)} tone={agg.profit - agg.cashOut < 0 ? 'danger' : 'good'} sub="BNS粗利益（合計）から持ち出しを引いた額" />
+            </div>
 
             {/* 事業別の分析 */}
             <div className="mt-4 rounded-xl border border-slate-200 bg-white overflow-x-auto">
               <div className="px-4 py-2.5 border-b border-slate-100 text-[14px] font-semibold text-slate-900">
                 事業別の分析 <span className="text-[12px] font-normal text-slate-400 ml-1">（行を押すと、その事業の案件だけを一覧に出します）</span>
               </div>
-              <table className="w-full min-w-[760px] text-[13.5px]">
+              <table className="w-full min-w-[840px] text-[13.5px]">
                 <thead>
                   <tr className="text-left text-slate-500 text-[12.5px] bg-slate-50 border-b border-slate-100">
                     <th className="px-4 py-2 font-medium">事業</th>
@@ -216,6 +222,7 @@ export default function PjbHomePage() {
                     <th className="px-3 py-2 font-medium text-right">原価</th>
                     <th className="px-3 py-2 font-medium text-right">利益</th>
                     <th className="px-3 py-2 font-medium text-right">利益率</th>
+                    <th className="px-3 py-2 font-medium text-right">持ち出し</th>
                     <th className="px-3 py-2 font-medium text-right">総予算</th>
                     <th className="px-4 py-2 font-medium text-right">残予算率</th>
                   </tr>
@@ -230,6 +237,7 @@ export default function PjbHomePage() {
                       <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(b.cost)}</td>
                       <td className={`px-3 py-2.5 text-right tabular-nums font-semibold ${b.profit < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{formatSignedYen(b.profit)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{b.sell > 0 ? formatPercent(b.margin, 1) : '—'}</td>
+                      <td className={`px-3 py-2.5 text-right tabular-nums ${b.cashOut === 0 ? 'text-slate-300' : 'text-amber-700'}`}>{formatYen(b.cashOut)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(b.budget)}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">{b.budget > 0 ? formatPercent(b.rate, 1) : '—'}</td>
                     </tr>
@@ -241,6 +249,7 @@ export default function PjbHomePage() {
                     <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(pool.reduce((s, c) => s + c.bnsCost, 0))}</td>
                     <td className={`px-3 py-2.5 text-right tabular-nums ${agg.profit < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{formatSignedYen(agg.profit)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{agg.sell > 0 ? formatPercent(agg.margin, 1) : '—'}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(agg.cashOut)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(agg.totalBudget)}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{agg.totalBudget > 0 ? formatPercent(agg.rate, 1) : '—'}</td>
                   </tr>
@@ -416,6 +425,9 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
         </div>
       </div>
 
+      {data.cashOut > 0 && (
+        <div className="text-[12px] text-amber-700 mb-2">BNSキャッシュ持ち出し {formatYen(data.cashOut)}</div>
+      )}
       {(project.pm_name || project.qa_name) && (
         <div className="text-[12px] text-slate-500 mb-2">
           {project.pm_name && <span className="mr-3">進行 {project.pm_name}</span>}

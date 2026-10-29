@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { normalizeBusiness } from './constants'
 import { summarizeCategory, summarizeProject, buildAlerts } from './calc'
-import type { Project, BudgetCategory, Order, AdditionalWork, VeItem, SalesItem } from './types'
+import type { Project, BudgetCategory, Order, AdditionalWork, VeItem, SalesItem, CashOut } from './types'
 
 // 全案件の、一覧用の集計（案件一覧・年度ダッシュボード・リソース管理で共通に使う）
 export type ProjectCardData = {
@@ -18,26 +18,31 @@ export type ProjectCardData = {
   bnsSell: number
   bnsCost: number
   business: string
+  cashOut: number          // BNSキャッシュ持ち出しの合計（売上・利益には含めない）
   alertCount: number
 }
 
 export function useProjectCards(enabled: boolean) {
   const [cards, setCards] = useState<ProjectCardData[]>([])
+  const [cashOuts, setCashOuts] = useState<CashOut[]>([])
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     const { data: projects } = await supabase.from('pjb_projects').select('*').order('created_at', { ascending: false })
     const list = (projects || []) as Project[]
-    if (list.length === 0) { setCards([]); setLoading(false); return }
+    if (list.length === 0) { setCards([]); setCashOuts([]); setLoading(false); return }
 
     const ids = list.map(p => p.id)
-    const [catRes, orderRes, workRes, veRes, salesRes] = await Promise.all([
+    const [catRes, orderRes, workRes, veRes, salesRes, cashRes] = await Promise.all([
       supabase.from('pjb_budget_categories').select('*').in('project_id', ids),
       supabase.from('pjb_orders').select('*').in('project_id', ids),
       supabase.from('pjb_additional_works').select('*').in('project_id', ids),
       supabase.from('pjb_ve_items').select('*').in('project_id', ids),
       supabase.from('pjb_sales_items').select('*').in('project_id', ids),
+      supabase.from('pjb_cash_outs').select('*').in('project_id', ids),
     ])
+    // 持ち出しのテーブルがまだないときは、持ち出しなし（0）として扱う
+    const cashAll = (cashRes.error ? [] : (cashRes.data || [])) as CashOut[]
     // 売上の内訳のテーブルがまだないときは null（従来どおり、項目に直接入れた売上を使う）
     const salesAll: SalesItem[] | null = salesRes.error ? null : ((salesRes.data || []) as SalesItem[])
     const categories = (catRes.data || []) as BudgetCategory[]
@@ -61,14 +66,16 @@ export function useProjectCards(enabled: boolean) {
         bnsSell: totals.bnsSell,
         bnsCost: totals.bnsCost,
         business: normalizeBusiness(project.business),
+        cashOut: cashAll.filter(x => x.project_id === project.id).reduce((s, x) => s + Number(x.amount || 0), 0),
         alertCount: alerts.length,
       }
     })
     setCards(result)
+    setCashOuts(cashAll)
     setLoading(false)
   }, [])
 
   useEffect(() => { if (enabled) load() }, [enabled, load])
 
-  return { cards, loading, reload: load }
+  return { cards, cashOuts, loading, reload: load }
 }

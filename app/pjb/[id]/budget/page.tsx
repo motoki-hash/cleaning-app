@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import Shell from '../../components/Shell'
+import CashOutPanel from '../../components/CashOutPanel'
 import { KpiCard, StatePill, SectionTitle, EmptyState, InlineAmount, InlineText, MoneyInput, isCommitEnter } from '../../components/ui'
 import { useProjectData, findOrCreateVendor } from '@/lib/pjb/useProjectData'
 import { summarizeCategory, summarizeProject, categorySales } from '@/lib/pjb/calc'
@@ -219,6 +220,8 @@ export default function BudgetPage() {
           )}
         </div>
       ))}
+
+      <CashOutPanel projectId={id} />
 
     </Shell>
   )
