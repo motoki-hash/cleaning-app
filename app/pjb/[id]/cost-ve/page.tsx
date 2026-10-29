@@ -124,7 +124,7 @@ export default function CostVePage() {
         </div>
       )}
 
-      <SectionTitle>VE / CD表 <span className="text-[12px] font-normal text-slate-400 ml-1">金額は税別</span></SectionTitle>
+      <SectionTitle>増減表 <span className="text-[12px] font-normal text-slate-400 ml-1">金額は税別</span></SectionTitle>
       <VeSheet projectId={id} projectName={project.name} categories={categories} veItems={veItems} salesItems={salesItems} onChanged={reload} />
 
       {addMode && (

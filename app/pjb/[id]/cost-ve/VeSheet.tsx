@@ -3,12 +3,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MoneyInput, isCommitEnter } from '../../components/ui'
-import { categorySales } from '@/lib/pjb/calc'
 import { formatYen, formatSignedYen } from '@/lib/pjb/format'
 import { logActivity } from '@/lib/pjb/activity'
 import type { BudgetCategory, SalesItem, VeItem } from '@/lib/pjb/types'
 
-// VE/CD表（スプレッドシート風）。元値と変更金額を並べて、想定増減金額（変更金額−元値）を自動で出す。
+// 増減表（旧：VE/CD表。スプレッドシート風）。元値と変更金額を並べて、想定増減金額（変更金額−元値）を自動で出す。
 // 「採用可否」にチェックした行の想定増減が、予算（実行費用）に反映される。
 
 const ALL = '__all__'
@@ -69,11 +68,19 @@ export default function VeSheet({
   const adoptedTotal = items.filter(adopted).reduce((s, v) => s + delta(v), 0)
   const allTotal = items.reduce((s, v) => s + delta(v), 0)
 
-  // 上の集計（スプレッドシートの「内装工事予算／見積／目標VE額／VE・増減金額／差額・合計」）
-  const budget = cat ? (cat.group_name === 'BNS予算' ? categorySales(cat, salesItems) : cat.original_budget) : 0
-  const quote = cat ? cat.latest_budget : 0                 // 取得した見積金額（内訳の合計）
-  const target = quote - budget                              // 目標VE額（プラス＝予算超過、削る必要がある額）
-  const finalDiff = target + adoptedTotal                    // 増減の最終金額
+  // 上の集計。契約金額（内装工事予算・BNS外）に対して、施工店の見積がどれだけ上振れているか、
+  // 工事中の増減（採用した行）を足して、最終的にいくら増減するか（＝BNSが施工店に追加で払う額）
+  const contractCat = categories.find(c => c.name === '内装工事' && c.group_name === 'BNS外予算')
+  const extraCat = categories.find(c => c.name === '追加工事' && c.group_name === 'BNS予算')
+  const contract = contractCat?.original_budget ?? 0                                        // 契約金額
+  const quote = (contractCat?.latest_budget ?? 0) + (extraCat?.latest_budget ?? 0)           // 工事の見積金額（内訳の合計：内装工事＋追加工事）
+  const overrun = quote - contract                                                            // 見積の上振れ（プラス＝契約より高い）
+  const targetIds = new Set(targets.map(c => c.id))
+  const adoptedRows = veItems.filter(v => adopted(v) && v.category_id && targetIds.has(v.category_id))
+  const increase = adoptedRows.reduce((t, v) => t + Math.max(delta(v), 0), 0)                // 工事中の増額
+  const decrease = adoptedRows.reduce((t, v) => t + Math.min(delta(v), 0), 0)                // 工事中の減額（マイナス）
+  const netChange = increase + decrease
+  const finalDiff = overrun + netChange                                                       // 最終増減額（契約金額に対して）
 
   const save = async (v: VeItem, patch: Partial<VeItem>, label: string, before?: unknown, after?: unknown) => {
     const next = { ...v, ...patch }
@@ -127,7 +134,7 @@ export default function VeSheet({
   const exportRows = (): (string | number)[][] => {
     const d = new Date()
     const rows: (string | number)[][] = [
-      [`VE/CD表　${projectName || ''}`],
+      [`増減表　${projectName || ''}`],
       [`対象：${cat ? `${cat.name}（${cat.group_name}）` : 'すべて'}　／　出力日：${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}　／　金額は税別`],
       [],
       ['No.', '図面番号', '項目', '増減対象：VE・CD候補', '採用可否', '元値（現状金額）', '変更金額', '想定増減金額', '設計会社コメント欄', '別途質疑・コメント、備考'],
@@ -150,7 +157,7 @@ export default function VeSheet({
     const a = document.createElement('a')
     const d = new Date()
     a.href = url
-    a.download = `VE-CD表_${projectName || ''}_${cat?.name || ''}_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.csv`
+    a.download = `増減表_${projectName || ''}_${cat?.name || ''}_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -175,24 +182,32 @@ export default function VeSheet({
         </span>
       </div>
 
-      {/* 集計 */}
-      {cat && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden mb-4 max-w-xl">
-          {([
-            [`${cat.name}予算`, formatYen(budget), '当初予算（BNS予算は売上）', ''],
-            [`${cat.name}見積`, formatYen(quote), '取得した見積金額（内訳の合計）', ''],
-            ['目標VE額', formatSignedYen(target), '見積−予算（プラス＝予算超過）', target > 0 ? 'text-rose-600' : 'text-slate-900'],
-            ['VE／増減金額', formatSignedYen(adoptedTotal), '採用可否にチェックした行の合計', adoptedTotal < 0 ? 'text-emerald-700' : 'text-slate-900'],
-            ['差額／合計', formatSignedYen(finalDiff), '増減の最終金額（目標VE額＋VE／増減金額）', finalDiff > 0 ? 'text-rose-600 font-bold' : 'text-emerald-700 font-bold'],
-          ] as Array<[string, string, string, string]>).map(([label, value, note, tone], i) => (
-            <div key={label} className={`grid grid-cols-[8.5rem_9rem_1fr] items-center ${i >= 2 ? 'bg-slate-50' : ''} ${i > 0 ? 'border-t border-slate-100' : ''}`}>
+      {/* 集計：契約金額 → 見積の上振れ → 工事中の増減 → 最終増減額 */}
+      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden mb-4 max-w-2xl">
+        {([
+          ['契約', null, null, null],
+          ['契約金額', formatYen(contract), '内装工事の予算（BNS外予算）', ''],
+          ['工事の見積金額', formatYen(quote), '内装工事の見積＋追加工事の見積（内訳の合計）', ''],
+          ['見積の上振れ', formatSignedYen(overrun), '見積 − 契約金額（プラス＝契約より高い）', overrun > 0 ? 'text-rose-600' : 'text-slate-900'],
+          ['工事中の増減（採用した行）', null, null, null],
+          ['増額', formatSignedYen(increase), '採用にチェックした行のうち、増えた分', increase > 0 ? 'text-rose-600' : 'text-slate-900'],
+          ['減額', formatSignedYen(decrease), '採用にチェックした行のうち、減った分', decrease < 0 ? 'text-emerald-700' : 'text-slate-900'],
+          ['増減額の合計', formatSignedYen(netChange), '増額＋減額', netChange > 0 ? 'text-rose-600' : netChange < 0 ? 'text-emerald-700' : 'text-slate-900'],
+          ['最終', null, null, null],
+          ['最終増減額', formatSignedYen(finalDiff), '契約金額に対する最終的な増減（見積の上振れ＋工事中の増減）。プラス＝BNSが施工店に追加で支払う額', finalDiff > 0 ? 'text-rose-600 font-bold' : 'text-emerald-700 font-bold'],
+          ['最終の工事金額', formatYen(contract + finalDiff), '契約金額＋最終増減額', ''],
+        ] as Array<[string, string | null, string | null, string | null]>).map(([label, value, note, tone], i) => (
+          value === null ? (
+            <div key={label} className={`px-3 py-1.5 text-[12px] font-semibold text-slate-500 bg-slate-100 ${i > 0 ? 'border-t border-slate-200' : ''}`}>{label}</div>
+          ) : (
+            <div key={label} className="grid grid-cols-[9rem_9rem_1fr] items-center border-t border-slate-100">
               <div className="px-3 py-2 text-[13px] font-semibold text-slate-700">{label}</div>
               <div className={`px-3 py-2 text-right tabular-nums text-[14px] font-semibold ${tone || 'text-slate-900'}`}>{value}</div>
               <div className="px-3 py-2 text-[12px] text-slate-400">← {note}</div>
             </div>
-          ))}
-        </div>
-      )}
+          )
+        ))}
+      </div>
 
       {/* 表 */}
       <div className="rounded-xl border border-slate-300 bg-white overflow-x-auto">
@@ -227,7 +242,7 @@ export default function VeSheet({
           </thead>
           <tbody>
             {items.length === 0 && (
-              <tr><td colSpan={11} className="px-4 py-8 text-center text-slate-400">まだVE／CDの行がありません。下の「＋ 行を追加」から入力してください。</td></tr>
+              <tr><td colSpan={11} className="px-4 py-8 text-center text-slate-400">まだ増減の行がありません。下の「＋ 行を追加」から入力してください。</td></tr>
             )}
             {items.map((v, i) => (
               <tr key={v.id} className={`${adopted(v) ? 'bg-emerald-50/50' : ''} hover:bg-slate-50`}>
