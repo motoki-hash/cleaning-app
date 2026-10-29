@@ -33,7 +33,7 @@ const zeroMute = (v: number, tone: string) => (v === 0 ? 'text-slate-300' : tone
 
 export default function BudgetPage() {
   const { id } = useParams<{ id: string }>()
-  const { project, categories, orders, additionalWorks, veItems, vendors, salesItems, loading, notFound, reload } = useProjectData(id)
+  const { project, categories, orders, additionalWorks, veItems, vendors, salesItems, cashOutTotal, loading, notFound, reload } = useProjectData(id)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const toggleExpand = (categoryId: string) => {
@@ -48,7 +48,7 @@ export default function BudgetPage() {
     () => categories.map(c => summarizeCategory(c, orders, additionalWorks, veItems)),
     [categories, orders, additionalWorks, veItems]
   )
-  const totals = useMemo(() => project ? summarizeProject(project, categories, summaries, salesItems) : null, [project, categories, summaries, salesItems])
+  const totals = useMemo(() => project ? summarizeProject(project, categories, summaries, salesItems, cashOutTotal) : null, [project, categories, summaries, salesItems, cashOutTotal])
 
   if (notFound) return <div className="p-8 text-center text-slate-400 text-[14px]">プロジェクトが見つかりません</div>
   if (loading || !project || !totals) {
@@ -82,7 +82,7 @@ export default function BudgetPage() {
           <>
             <div className="text-[13px] font-semibold text-slate-600 mb-1.5">プロジェクト全体 <span className="font-normal text-slate-400">（金額はすべて税別）</span></div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-              <KpiCard label="PJ総予算" value={formatYen(totals.totalBudget)} sub="BNS外予算の当初予算合計 ＋ BNS予算の売上合計（自動）" />
+              <KpiCard label="PJ総予算" value={formatYen(totals.totalBudget)} sub="BNS外予算の当初予算合計 ＋ BNS予算の売上合計 ＋ BNSキャッシュ持ち出し（自動）" />
               <KpiCard
                 label="原価（着地見込）"
                 value={formatYen(totals.landingForecast)}
@@ -221,7 +221,7 @@ export default function BudgetPage() {
         </div>
       ))}
 
-      <CashOutPanel projectId={id} />
+      <CashOutPanel projectId={id} onChanged={reload} />
 
     </Shell>
   )

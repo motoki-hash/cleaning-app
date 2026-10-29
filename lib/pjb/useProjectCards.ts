@@ -53,7 +53,8 @@ export function useProjectCards(enabled: boolean) {
     const result: ProjectCardData[] = list.map(project => {
       const cats = categories.filter(c => c.project_id === project.id)
       const summaries = cats.map(c => summarizeCategory(c, orders, works, ves))
-      const totals = summarizeProject(project, cats, summaries, salesAll === null ? null : salesAll.filter(x => x.project_id === project.id))
+      const cashOut = cashAll.filter(x => x.project_id === project.id).reduce((s, x) => s + Number(x.amount || 0), 0)
+      const totals = summarizeProject(project, cats, summaries, salesAll === null ? null : salesAll.filter(x => x.project_id === project.id), cashOut)
       const alerts = buildAlerts(cats, summaries, orders.filter(o => o.project_id === project.id), works.filter(w => w.project_id === project.id), ves.filter(v => v.project_id === project.id), `/pjb/${project.id}`)
       return {
         project,
@@ -66,7 +67,7 @@ export function useProjectCards(enabled: boolean) {
         bnsSell: totals.bnsSell,
         bnsCost: totals.bnsCost,
         business: normalizeBusiness(project.business),
-        cashOut: cashAll.filter(x => x.project_id === project.id).reduce((s, x) => s + Number(x.amount || 0), 0),
+        cashOut,
         alertCount: alerts.length,
       }
     })

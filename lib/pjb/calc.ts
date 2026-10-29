@@ -101,6 +101,7 @@ export function summarizeProject(
   categories: BudgetCategory[],
   summaries: CategorySummary[],
   salesItems: SalesItem[] | null = null,
+  cashOutTotal = 0,
 ): ProjectTotals {
   const orderedAmount = summaries.reduce((s, c) => s + c.orderedAmount, 0)
   const unorderedPlanned = summaries.reduce((s, c) => s + c.unorderedPlanned, 0)
@@ -117,9 +118,10 @@ export function summarizeProject(
   const bnsGrossProfit = bnsSell - bnsCost
   const grossMargin = bnsSell > 0 ? bnsGrossProfit / bnsSell : 0
 
-  // PJ総予算（自動）= BNS外予算の当初予算の合計 + BNS予算の売上の合計
+  // PJ総予算（自動）= BNS外予算の当初予算の合計 + BNS予算の売上の合計 + BNSキャッシュ持ち出し
+  //   （持ち出しは売上・利益にはならないが、BNSが出す分として予算には足す）
   const externalBudget = categories.filter(c => c.group_name === 'BNS外予算').reduce((s, c) => s + (c.original_budget || 0), 0)
-  const totalBudget = externalBudget + bnsSell
+  const totalBudget = externalBudget + bnsSell + cashOutTotal
   const remaining = totalBudget - landingForecast
   const consumptionRate = totalBudget > 0 ? landingForecast / totalBudget : 0
 

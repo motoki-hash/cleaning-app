@@ -74,6 +74,7 @@ export function useProjectData(projectId: string, options: { registerUndo?: bool
   const [billings, setBillings] = useState<InvestorBilling[]>([])
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [salesItems, setSalesItems] = useState<SalesItem[] | null>(null)
+  const [cashOutTotal, setCashOutTotal] = useState(0)   // BNSキャッシュ持ち出しの合計（PJ総予算に足す）
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
@@ -85,7 +86,7 @@ export function useProjectData(projectId: string, options: { registerUndo?: bool
     // 最初の読み込みのときだけ「読み込み中」にする（再読み込みで画面が消えて入力中の内容が飛ぶのを防ぐ）
     if (!loadedOnce.current) setLoading(true)
     const [
-      projectRes, catRes, orderRes, workRes, veRes, investorRes, vendorRes, salesRes,
+      projectRes, catRes, orderRes, workRes, veRes, investorRes, vendorRes, salesRes, cashRes,
     ] = await Promise.all([
       supabase.from('pjb_projects').select('*').eq('id', projectId).maybeSingle(),
       supabase.from('pjb_budget_categories').select('*').eq('project_id', projectId).order('sort_order'),
@@ -95,7 +96,9 @@ export function useProjectData(projectId: string, options: { registerUndo?: bool
       supabase.from('pjb_investors').select('*').eq('project_id', projectId).order('created_at'),
       supabase.from('pjb_vendors').select('*').order('name'),
       supabase.from('pjb_sales_items').select('*').eq('project_id', projectId).order('created_at'),
+      supabase.from('pjb_cash_outs').select('amount').eq('project_id', projectId),
     ])
+    setCashOutTotal(cashRes.error ? 0 : ((cashRes.data || []) as Array<{ amount: number }>).reduce((s, x) => s + Number(x.amount || 0), 0))
     // 売上の内訳のテーブルがまだないときは null（従来どおり、項目に直接入れた売上を使う）
     const salesRows: SalesItem[] | null = salesRes.error ? null : ((salesRes.data || []) as SalesItem[])
     setSalesItems(salesRows)
@@ -191,7 +194,7 @@ export function useProjectData(projectId: string, options: { registerUndo?: bool
   }, [registerUndo, projectId, step, canUndo, canRedo, historyTick])
 
   return {
-    project, categories, orders, additionalWorks, veItems, investors, billings, vendors, salesItems,
+    project, categories, orders, additionalWorks, veItems, investors, billings, vendors, salesItems, cashOutTotal,
     loading, notFound, reload: load,
     undo: () => step('undo'), redo: () => step('redo'), canUndo, canRedo,
   }

@@ -11,7 +11,7 @@ import type { CashOut } from '@/lib/pjb/types'
 // 売上・原価・利益・予算の計算には含めず、別枠で合計だけを見る（トップのダッシュボードと年度の売上分析にも出る）
 const today = () => new Date().toISOString().slice(0, 10)
 
-export default function CashOutPanel({ projectId }: { projectId: string }) {
+export default function CashOutPanel({ projectId, onChanged }: { projectId: string; onChanged?: () => void }) {
   const [items, setItems] = useState<CashOut[]>([])
   const [missing, setMissing] = useState(false)
   const [date, setDate] = useState(today())
@@ -38,12 +38,14 @@ export default function CashOutPanel({ projectId }: { projectId: string }) {
     await logActivity({ projectId, action: 'create', entityType: 'cash_out', entityLabel: `キャッシュ持ち出し：${content.trim()}`, after: amount })
     setContent(''); setAmount('')
     load()
+    onChanged?.()   // PJ総予算に足されるので、上の数字も更新する
   }
   const update = async (it: CashOut, patch: Partial<CashOut>, label: string, before: unknown, after: unknown) => {
     const { error } = await supabase.from('pjb_cash_outs').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', it.id)
     if (error) { alert(`保存に失敗しました：${error.message}`); return }
     await logActivity({ projectId, action: 'update', entityType: 'cash_out', entityLabel: `キャッシュ持ち出し：${it.content} ${label}`, before: String(before ?? ''), after: String(after ?? '') })
     load()
+    onChanged?.()   // PJ総予算に足されるので、上の数字も更新する
   }
   const remove = async (it: CashOut) => {
     if (!confirm(`「${it.content || '（無題）'}」を削除しますか？`)) return
@@ -51,6 +53,7 @@ export default function CashOutPanel({ projectId }: { projectId: string }) {
     if (error) { alert(`削除に失敗しました：${error.message}`); return }
     await logActivity({ projectId, action: 'delete', entityType: 'cash_out', entityLabel: `キャッシュ持ち出し：${it.content}`, before: String(it.amount) })
     load()
+    onChanged?.()   // PJ総予算に足されるので、上の数字も更新する
   }
 
   return (
