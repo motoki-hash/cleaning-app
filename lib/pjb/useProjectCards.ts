@@ -23,14 +23,17 @@ export type ProjectCardData = {
   alertCount: number
 }
 
+// 前に読み込んだ一覧を覚えておき、ページを切り替えたとき空の「読み込み中」を挟まず、すぐ表示して裏で更新する
+let cardsCache: ProjectCardData[] | null = null
+
 export function useProjectCards(enabled: boolean) {
-  const [cards, setCards] = useState<ProjectCardData[]>([])
-  const [loading, setLoading] = useState(true)
+  const [cards, setCards] = useState<ProjectCardData[]>(cardsCache ?? [])
+  const [loading, setLoading] = useState(cardsCache === null)
 
   const load = useCallback(async () => {
     const { data: projects } = await supabase.from('pjb_projects').select('*').order('created_at', { ascending: false })
     const list = (projects || []) as Project[]
-    if (list.length === 0) { setCards([]); setLoading(false); return }
+    if (list.length === 0) { cardsCache = []; setCards([]); setLoading(false); return }
 
     const ids = list.map(p => p.id)
     const [catRes, orderRes, workRes, veRes, salesRes] = await Promise.all([
@@ -68,6 +71,7 @@ export function useProjectCards(enabled: boolean) {
         alertCount: alerts.length,
       }
     })
+    cardsCache = result
     setCards(result)
     setLoading(false)
   }, [])

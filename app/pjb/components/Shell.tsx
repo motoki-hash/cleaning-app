@@ -8,10 +8,10 @@ import type { ProjectStatus } from '@/lib/pjb/types'
 import { logActivity } from '@/lib/pjb/activity'
 import QuickAddSheet from './QuickAddSheet'
 import { InlineText } from './ui'
+import { authState } from '@/lib/pjb/authState'
 import { getUndoHandlers, useUndoHandlers } from '@/lib/pjb/undo'
 
 // ページを切り替えてもサイドメニューが一瞬消えないように、確認済みの状態と案件名・ステータスを覚えておく
-let authChecked = false
 const shellInfo = new Map<string, { name?: string; status?: ProjectStatus }>()
 
 const TABS = [
@@ -75,7 +75,7 @@ export default function Shell({
   const router = useRouter()
   const pathname = usePathname()
   const [showQuickAdd, setShowQuickAdd] = useState(false)
-  const [checked, setChecked] = useState(authChecked)
+  const [checked, setChecked] = useState(authState.checked)
   const [status, setStatus] = useState<ProjectStatus | undefined>(projectStatus ?? shellInfo.get(projectId)?.status)
   const [name, setName] = useState(projectName ?? shellInfo.get(projectId)?.name)
   const undoH = useUndoHandlers()
@@ -138,7 +138,7 @@ export default function Shell({
       if (!user) {
         router.push(`/login?redirect=${encodeURIComponent(pathname || '/pjb')}`)
       } else {
-        authChecked = true
+        authState.checked = true
         setChecked(true)
       }
     })

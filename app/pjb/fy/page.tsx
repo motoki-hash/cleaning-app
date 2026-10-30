@@ -17,11 +17,14 @@ const cumulative = (a: number[]) => a.reduce<number[]>((acc, x) => [...acc, (acc
 const k = (v: number) => Math.round(v / 1000).toLocaleString('ja-JP')
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 
+// 年度ごとの計画を覚えておき、ページを切り替えたときすぐ表示する
+const plansCache = new Map<number, Plan[]>()
+
 export default function FyPage() {
   const now = currentFiscal()
   const [fy, setFy] = useState(now.year)
   const { cards, loading } = useProjectCards(true)
-  const [plans, setPlans] = useState<Plan[]>([])
+  const [plans, setPlans] = useState<Plan[]>(plansCache.get(now.year) ?? [])
   const [planError, setPlanError] = useState(false)
   const [showImport, setShowImport] = useState(false)
 
@@ -29,6 +32,7 @@ export default function FyPage() {
     const { data, error } = await supabase.from('pjb_fy_plans').select('*').eq('fiscal_year', fy)
     if (error) { setPlanError(true); setPlans([]); return }
     setPlanError(false)
+    plansCache.set(fy, (data || []) as Plan[])
     setPlans((data || []) as Plan[])
   }, [fy])
   useEffect(() => { loadPlans() }, [loadPlans])

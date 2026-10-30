@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { authState } from '@/lib/pjb/authState'
 import { supabase } from '@/lib/supabase'
 import { NavIcon } from './Shell'
 
@@ -17,12 +18,12 @@ export const TOP_TABS = [
 export default function TopShell({ active, children }: { active: typeof TOP_TABS[number]['key']; children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [checked, setChecked] = useState(false)
+  const [checked, setChecked] = useState(authState.checked)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) router.push(`/login?redirect=${encodeURIComponent(pathname || '/pjb')}`)
-      else setChecked(true)
+      else { authState.checked = true; setChecked(true) }
     })
   }, [router, pathname])
 

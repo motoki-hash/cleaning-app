@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { authState } from '@/lib/pjb/authState'
 import { DEFAULT_CATEGORIES, BUSINESSES, UNCLASSIFIED, STAFF_FIELDS } from '@/lib/pjb/constants'
 import { fiscalYearOf, currentFiscal, monthInputToDate } from '@/lib/pjb/fiscal'
 import { useProjectCards, type ProjectCardData } from '@/lib/pjb/useProjectCards'
@@ -24,7 +25,7 @@ type Filter = '全て' | '進行中' | '完了' | '予算超過' | '要対応あ
 
 export default function PjbHomePage() {
   const router = useRouter()
-  const [checked, setChecked] = useState(false)
+  const [checked, setChecked] = useState(authState.checked)
   const { cards, loading, reload: load } = useProjectCards(checked)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('全て')
@@ -47,6 +48,7 @@ export default function PjbHomePage() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) { router.push('/login?redirect=%2Fpjb'); return }
+      authState.checked = true
       setChecked(true)
     })
   }, [router])
