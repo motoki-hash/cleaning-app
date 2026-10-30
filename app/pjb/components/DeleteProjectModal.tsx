@@ -4,19 +4,18 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-// 案件を完全に削除する。誤操作を防ぐため、案件名を入力しないと削除できない。
+// 案件を完全に削除する。誤操作を防ぐため、確認を2回（このダイアログ → もう一度の確認）出す。
 export default function DeleteProjectModal({
   projectId, projectName, onClose,
 }: { projectId: string; projectName: string; onClose: () => void }) {
   const router = useRouter()
-  const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  const matches = typed.trim() === projectName.trim()
-
   const remove = async () => {
-    if (!matches || busy) return
+    if (busy) return
+    // 2回目の確認
+    if (!confirm(`本当に「${projectName}」を削除しますか？\nこの操作は元に戻せません。`)) return
     setBusy(true)
     setError('')
     // 予算・発注・支払・投資家・スケジュール・操作履歴などは、案件に紐づいて一緒に削除される
@@ -33,22 +32,12 @@ export default function DeleteProjectModal({
         <p className="text-[13.5px] text-slate-700 leading-relaxed">
           「<b>{projectName}</b>」を削除します。この案件の<b>予算・発注・支払・投資家請求・スケジュール・操作履歴</b>がすべて消え、<b>元に戻せません</b>。
         </p>
-        <label className="grid gap-1 mt-4">
-          <span className="text-[13px] text-slate-500">確認のため、案件名を入力してください</span>
-          <input
-            value={typed}
-            onChange={e => setTyped(e.target.value)}
-            placeholder={projectName}
-            autoFocus
-            className="border border-slate-200 rounded-lg px-3 py-2 text-[15px]"
-          />
-        </label>
         {error && <p className="text-[13px] text-rose-600 mt-2">{error}</p>}
         <div className="flex gap-2 mt-5">
           <button onClick={onClose} disabled={busy} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-[14px] text-slate-600">キャンセル</button>
           <button
             onClick={remove}
-            disabled={!matches || busy}
+            disabled={busy}
             className="flex-1 py-2.5 rounded-lg bg-rose-600 text-white text-[14px] font-medium disabled:opacity-40"
           >
             {busy ? '削除中…' : '削除する'}

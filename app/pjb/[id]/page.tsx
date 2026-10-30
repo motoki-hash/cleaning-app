@@ -8,6 +8,7 @@ import ProjectInfoPanel from '../components/ProjectInfoPanel'
 import PjBudgetKpis from '../components/PjBudgetKpis'
 import { KpiCard, AlertList, StatePill, SectionTitle, InlineNumber } from '../components/ui'
 import { supabase } from '@/lib/supabase'
+import { periodName, periodLabelOf } from '@/lib/pjb/periods'
 import { useProjectData } from '@/lib/pjb/useProjectData'
 import { summarizeCategory, summarizeProject, buildAlerts, categorySales } from '@/lib/pjb/calc'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
@@ -118,7 +119,7 @@ export default function DashboardPage() {
           この案件を削除…
         </button>
       </div>
-      {showDelete && <DeleteProjectModal projectId={id} projectName={project.name} onClose={() => setShowDelete(false)} />}
+      {showDelete && <DeleteProjectModal projectId={id} projectName={periodName(project.name, periodLabelOf(project))} onClose={() => setShowDelete(false)} />}
     </Shell>
   )
 }
