@@ -69,8 +69,8 @@ export default function AllPeriodsPage() {
         {kpi && <KpiCard label="予実の差額（総予算−実行費用）" value={rated.length > 0 ? formatSignedYen(ratedGap) : '—'} tone={gapTone} sub="総予算を入力した期のみ" />}
         {kpi && <KpiCard label="予実の差率（目標 ±1%以内）" value={ratedRate === null ? '—' : formatPercent(ratedRate, 2)} tone={gapTone} sub={`達成 ${rated.filter(c => budgetGapStatus(c.totalBudget, c.budgetGap) === 'ok').length}/${rated.length}期`} />}
         <KpiCard label="着地見込（全期）" value={formatYen(landing)} />
-        <KpiCard label="残予算（実行費用−着地見込）" value={formatSignedYen(remaining)} tone={remaining < 0 ? 'danger' : 'good'} />
-        <KpiCard label="消化率（対実行費用）" value={execution > 0 ? formatPercent(landing / execution) : '—'} />
+        <KpiCard label="残予算（PJ総予算−実行費用）" value={totalBudget > 0 ? formatSignedYen(remaining) : '—'} tone={totalBudget <= 0 ? 'default' : remaining < 0 ? 'danger' : 'good'} sub="総予算を入力した期の合計" />
+        <KpiCard label="消化率（実行費用÷PJ総予算）" value={totalBudget > 0 ? formatPercent(execution / totalBudget) : '—'} />
       </div>
 
       <SectionTitle>全期のBNS収益KPI</SectionTitle>

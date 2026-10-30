@@ -112,8 +112,8 @@ export type ProjectTotals = {
   orderedAmount: number
   unorderedPlanned: number
   landingForecast: number
-  remaining: number
-  consumptionRate: number
+  remaining: number          // 残予算 = PJ総予算 − 実行費用（総予算が未入力のときは0）
+  consumptionRate: number    // 実行費用 ÷ PJ総予算（総予算が未入力のときは0）
   bnsSell: number
   bnsCost: number
   bnsGrossProfit: number
@@ -154,8 +154,9 @@ export function summarizeProject(
   const totalBudget = project.total_budget || 0
   const budgetGap = totalBudget - executionBudget
   const budgetGapRate = totalBudget > 0 ? budgetGap / totalBudget : null
-  const remaining = executionBudget - landingForecast
-  const consumptionRate = executionBudget > 0 ? landingForecast / executionBudget : 0
+  // 残予算 = PJ総予算（手入力）− 実行費用（自動）。総予算が未入力のときは判定しない（0）
+  const remaining = totalBudget > 0 ? totalBudget - executionBudget : 0
+  const consumptionRate = totalBudget > 0 ? executionBudget / totalBudget : 0
 
   return {
     totalBudget,

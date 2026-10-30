@@ -93,8 +93,9 @@ export default function BudgetPage() {
   return (
     <Shell projectId={id} projectName={project.name} projectStatus={project.status} active="budget" onQuickAdded={reload}>
       {(() => {
-        const remainingRate = totals.executionBudget > 0 ? totals.remaining / totals.executionBudget : 0
-        const remainTone = remainingRate < 0 ? 'danger' : remainingRate <= 0.01 ? 'warning' : 'good'
+        const hasTotal = totals.totalBudget > 0
+        const remainingRate = hasTotal ? totals.remaining / totals.totalBudget : 0
+        const remainTone = !hasTotal ? 'default' : remainingRate < 0 ? 'danger' : 'good'
         return (
           <>
             <div className="text-[13px] font-semibold text-slate-600 mb-1.5">プロジェクト全体 <span className="font-normal text-slate-400">（金額はすべて税別）</span></div>
@@ -105,10 +106,9 @@ export default function BudgetPage() {
               <KpiCard
                 label="原価（着地見込）"
                 value={formatYen(totals.landingForecast)}
-                tone={totals.remaining < 0 ? 'danger' : totals.consumptionRate >= 0.9 ? 'warning' : 'default'}
               />
-              <KpiCard label="残予算（実行費用−原価）" value={formatSignedYen(totals.remaining)} tone={totals.remaining < 0 ? 'danger' : 'good'} />
-              <KpiCard label="残予算率（対実行費用）" value={formatPercent(remainingRate, 1)} tone={remainTone} />
+              <KpiCard label="残予算（PJ総予算−実行費用）" value={hasTotal ? formatSignedYen(totals.remaining) : '—'} tone={remainTone} sub={hasTotal ? undefined : 'PJ総予算を入力すると出ます'} />
+              <KpiCard label="残予算率（対PJ総予算）" value={hasTotal ? formatPercent(remainingRate, 1) : '—'} tone={remainTone} />
             </div>
             <div className="text-[13px] font-semibold text-slate-600 mb-1.5">BNS収益</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">

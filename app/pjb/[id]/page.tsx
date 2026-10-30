@@ -52,10 +52,9 @@ export default function DashboardPage() {
         <KpiCard
           label="着地見込"
           value={formatYen(totals.landingForecast)}
-          tone={totals.remaining < 0 ? 'danger' : totals.consumptionRate >= 0.9 ? 'warning' : 'default'}
         />
-        <KpiCard label="残予算（実行費用−着地見込）" value={formatSignedYen(totals.remaining)} tone={totals.remaining < 0 ? 'danger' : 'good'} />
-        <KpiCard label="消化率（対実行費用）" value={formatPercent(totals.consumptionRate)} tone={totals.consumptionRate >= 1 ? 'danger' : totals.consumptionRate >= 0.9 ? 'warning' : 'default'} />
+        <KpiCard label="残予算（PJ総予算−実行費用）" value={totals.totalBudget > 0 ? formatSignedYen(totals.remaining) : '—'} tone={totals.totalBudget <= 0 ? 'default' : totals.remaining < 0 ? 'danger' : 'good'} sub={totals.totalBudget > 0 ? undefined : 'PJ総予算を入力すると出ます'} />
+        <KpiCard label="消化率（実行費用÷PJ総予算）" value={totals.totalBudget > 0 ? formatPercent(totals.consumptionRate) : '—'} tone={totals.totalBudget > 0 && totals.consumptionRate > 1 ? 'danger' : 'default'} />
       </div>
 
       <SectionTitle>

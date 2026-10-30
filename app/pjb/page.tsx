@@ -175,7 +175,7 @@ export default function PjbHomePage() {
             />
             <SummaryTile
               label="予算超過" value={`${summary.over}件`} tone={summary.over > 0 ? 'danger' : 'default'}
-              sub="着地見込が総予算を超えている案件" selected={filter === '予算超過'} onClick={() => toggleFilter('予算超過')}
+              sub="実行費用がPJ総予算を超えている案件" selected={filter === '予算超過'} onClick={() => toggleFilter('予算超過')}
             />
             <SummaryTile
               label="完了" value={`${summary.done}件`} sub="完了にした案件"
@@ -230,7 +230,7 @@ export default function PjbHomePage() {
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
               <KpiCard label="着地見込（合計）" value={formatYen(agg.landing)} />
-              <KpiCard label="残予算（実行費用−着地見込）" value={formatSignedYen(agg.remaining)} tone={agg.remaining < 0 ? 'danger' : 'good'} />
+              <KpiCard label="残予算（PJ総予算−実行費用）" value={formatSignedYen(agg.remaining)} tone={agg.remaining < 0 ? 'danger' : 'good'} sub="総予算を入力した案件の合計" />
             </div>
 
             {/* 事業別の分析 */}
@@ -400,8 +400,7 @@ function SummaryTile({
 function ProjectCard({ data }: { data: ProjectCardData }) {
   const { project } = data
   const over = data.remaining < 0
-  const warn = !over && data.consumptionRate >= 0.9
-  const tone = over ? 'border-rose-300' : warn ? 'border-amber-300' : 'border-slate-200'
+  const tone = over ? 'border-rose-300' : 'border-slate-200'
   const kpi = hasBudgetKpi(data.business)
   const gapStatus = kpi ? budgetGapStatus(data.totalBudget, data.budgetGap) : 'unset'
 
@@ -424,8 +423,7 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
           {gapStatus === 'ok' && <Badge tone="good">予実1%以内</Badge>}
           {(gapStatus === 'over' || gapStatus === 'under') && <Badge tone={gapStatus === 'over' ? 'danger' : 'warning'}>予実1%超</Badge>}
           {over && <Badge tone="danger">超過</Badge>}
-          {warn && <Badge tone="warning">要注意</Badge>}
-          {data.alertCount > 0 && <Badge tone="info">要対応 {data.alertCount}件</Badge>}
+                    {data.alertCount > 0 && <Badge tone="info">要対応 {data.alertCount}件</Badge>}
         </div>
       </div>
 
@@ -461,11 +459,11 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
       )}
       <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
         <div
-          className={`h-full ${over ? 'bg-rose-500' : warn ? 'bg-amber-500' : 'bg-emerald-500'}`}
+          className={`h-full ${over ? 'bg-rose-500' : 'bg-emerald-500'}`}
           style={{ width: `${Math.min(100, Math.max(0, data.consumptionRate * 100))}%` }}
         />
       </div>
-      <div className="text-[12px] text-slate-400 mt-1">着地見込 {formatYen(data.landingForecast)}　残予算 {formatSignedYen(data.remaining)}　消化率 {formatPercent(data.consumptionRate)}</div>
+      <div className="text-[12px] text-slate-400 mt-1">着地見込 {formatYen(data.landingForecast)}　残予算 {data.totalBudget > 0 ? formatSignedYen(data.remaining) : '—'}　消化率 {data.totalBudget > 0 ? formatPercent(data.consumptionRate) : '—'}</div>
     </Link>
   )
 }
