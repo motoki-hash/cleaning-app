@@ -8,11 +8,12 @@ import { DEFAULT_CATEGORIES, BUSINESSES, UNCLASSIFIED, STAFF_FIELDS } from '@/li
 import { fiscalYearOf, currentFiscal, monthInputToDate } from '@/lib/pjb/fiscal'
 import { useProjectCards, type ProjectCardData } from '@/lib/pjb/useProjectCards'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
+import { BUDGET_KPI_RATE, budgetGapStatus } from '@/lib/pjb/calc'
 import { MoneyInput, KpiCard } from './components/ui'
 import TopShell from './components/TopShell'
 import type { Project } from '@/lib/pjb/types'
 
-const KPI_RATE = 0.01   // 予実管理のKPI：残予算が総予算の±1%以内
+
 
 type SortKey = 'newest' | 'name' | 'budget' | 'sell' | 'profit' | 'margin'
 const SORT_LABELS: Record<SortKey, string> = {
@@ -86,22 +87,26 @@ export default function PjbHomePage() {
     over: openCards.filter(c => c.remaining < 0).length,
     done: cards.filter(c => c.project.status === '完了').length,
   }
-  // 全案件（または進行中のみ）の集計。予実管理のKPIは「総予算に対する残予算（余り）が±1%以内」
+  // 全案件（または進行中のみ）の集計。予実管理のKPIは「PJ総予算（手入力）と実行費用（自動）の差が、総予算の±1%以内」
+  // 総予算が未入力（0）の案件は、判定の対象にしない
   const pool = scope === 'active' ? cards.filter(c => c.project.status === '進行中') : cards
   const agg = (() => {
-    const totalBudget = pool.reduce((s, c) => s + c.totalBudget, 0)
+    const rated = pool.filter(c => c.totalBudget > 0)
+    const totalBudget = rated.reduce((s, c) => s + c.totalBudget, 0)
+    const execution = rated.reduce((s, c) => s + c.executionBudget, 0)
+    const gap = rated.reduce((s, c) => s + c.budgetGap, 0)
     const landing = pool.reduce((s, c) => s + c.landingForecast, 0)
     const remaining = pool.reduce((s, c) => s + c.remaining, 0)
     const sell = pool.reduce((s, c) => s + c.bnsSell, 0)
     const profit = pool.reduce((s, c) => s + c.grossProfit, 0)
     const cashOut = pool.reduce((s, c) => s + c.cashOut, 0)
-    const rated = pool.filter(c => c.totalBudget > 0)
     return {
-      totalBudget, landing, remaining, sell, profit, cashOut,
-      rate: totalBudget > 0 ? remaining / totalBudget : 0,
+      totalBudget, execution, gap, landing, remaining, sell, profit, cashOut,
+      rate: totalBudget > 0 ? gap / totalBudget : 0,
       margin: sell > 0 ? profit / sell : 0,
-      achieved: rated.filter(c => Math.abs(c.remaining / c.totalBudget) <= KPI_RATE).length,
+      achieved: rated.filter(c => budgetGapStatus(c.totalBudget, c.budgetGap) === 'ok').length,
       ratedCount: rated.length,
+      unsetCount: pool.length - rated.length,
     }
   })()
   // 事業別の売上・原価・利益（上の「全案件／進行中のみ」の切り替えに合わせる）
@@ -111,13 +116,14 @@ export default function PjbHomePage() {
       const sell = list.reduce((s, c) => s + c.bnsSell, 0)
       const cost = list.reduce((s, c) => s + c.bnsCost, 0)
       const profit = list.reduce((s, c) => s + c.grossProfit, 0)
-      const budget = list.reduce((s, c) => s + c.totalBudget, 0)
-      const remaining = list.reduce((s, c) => s + c.remaining, 0)
+      const ratedList = list.filter(c => c.totalBudget > 0)
+      const budget = ratedList.reduce((s, c) => s + c.totalBudget, 0)
+      const gap = ratedList.reduce((s, c) => s + c.budgetGap, 0)
       const cashOut = list.reduce((s, c) => s + c.cashOut, 0)
-      return { name, count: list.length, sell, cost, profit, cashOut, margin: sell > 0 ? profit / sell : 0, budget, rate: budget > 0 ? remaining / budget : 0 }
+      return { name, count: list.length, sell, cost, profit, cashOut, margin: sell > 0 ? profit / sell : 0, budget, rate: budget > 0 ? gap / budget : 0 }
     })
     .filter(b => b.count > 0 || b.name !== UNCLASSIFIED)
-  const rateTone = Math.abs(agg.rate) <= KPI_RATE ? 'good' : agg.rate < 0 ? 'danger' : 'warning'
+  const rateTone = agg.totalBudget <= 0 ? 'default' : Math.abs(agg.rate) <= BUDGET_KPI_RATE ? 'good' : agg.rate < 0 ? 'danger' : 'warning'
   const toggleFilter = (f: Filter) => setFilter(filter === f ? '全て' : f)
 
   return (
@@ -170,7 +176,7 @@ export default function PjbHomePage() {
               <h2 className="text-[16px] font-bold text-slate-900 flex items-center gap-2"><span className="w-1 h-4 rounded-sm bg-blue-600" />全案件サマリー</h2>
               {!showAgg && (
                 <span className="text-[13px] text-slate-500 ml-2">
-                  残予算率 <b className={rateTone === 'good' ? 'text-emerald-700' : rateTone === 'danger' ? 'text-rose-700' : 'text-amber-700'}>{formatPercent(agg.rate, 1)}</b>（目標±1%以内）／BNS粗利益 <b>{formatYen(agg.profit)}</b>
+                  予実差率 <b className={rateTone === 'good' ? 'text-emerald-700' : rateTone === 'danger' ? 'text-rose-700' : rateTone === 'warning' ? 'text-amber-700' : 'text-slate-500'}>{agg.totalBudget > 0 ? formatPercent(agg.rate, 2) : '—'}</b>（目標±1%以内）／BNS粗利益 <b>{formatYen(agg.profit)}</b>
                 </span>
               )}
             </button>
@@ -186,12 +192,12 @@ export default function PjbHomePage() {
           {showAgg && (
             <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-              <KpiCard label="総予算（合計）" value={formatYen(agg.totalBudget)} sub={`${pool.length}案件`} />
-              <KpiCard label="着地見込（合計）" value={formatYen(agg.landing)} />
-              <KpiCard label="残予算（合計）" value={formatSignedYen(agg.remaining)} tone={rateTone} />
+              <KpiCard label="PJ総予算（合計・手入力）" value={formatYen(agg.totalBudget)} sub={`入力済 ${agg.ratedCount}案件${agg.unsetCount > 0 ? `／未入力 ${agg.unsetCount}案件（除く）` : ''}`} />
+              <KpiCard label="実行費用（合計・自動）" value={formatYen(agg.execution)} sub="BNS外予算 ＋ BNS売上 ＋ 持ち出し" />
+              <KpiCard label="予実の差額（総予算−実行費用）" value={agg.ratedCount > 0 ? formatSignedYen(agg.gap) : '—'} tone={rateTone} />
               <KpiCard
-                label="残予算率（対総予算）"
-                value={formatPercent(agg.rate, 1)}
+                label="予実の差率（対総予算）"
+                value={agg.totalBudget > 0 ? formatPercent(agg.rate, 2) : '—'}
                 sub={`目標：±1%以内　${agg.ratedCount > 0 ? `達成 ${agg.achieved}/${agg.ratedCount}案件` : ''}`}
                 tone={rateTone}
               />
@@ -201,9 +207,11 @@ export default function PjbHomePage() {
               <KpiCard label="BNS粗利益（合計）" value={formatYen(agg.profit)} tone={agg.profit < 0 ? 'danger' : 'good'} />
               <KpiCard label="粗利率" value={formatPercent(agg.margin, 1)} tone={agg.margin < 0 ? 'danger' : 'default'} />
               <KpiCard label="予実1%以内の案件" value={agg.ratedCount > 0 ? `${agg.achieved}/${agg.ratedCount}件` : '—'}
-                tone={agg.ratedCount > 0 && agg.achieved === agg.ratedCount ? 'good' : 'default'} sub="残予算が総予算の±1%以内" />
+                tone={agg.ratedCount > 0 && agg.achieved === agg.ratedCount ? 'good' : 'default'} sub="総予算と実行費用の差が±1%以内" />
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+              <KpiCard label="着地見込（合計）" value={formatYen(agg.landing)} />
+              <KpiCard label="残予算（実行費用−着地見込）" value={formatSignedYen(agg.remaining)} tone={agg.remaining < 0 ? 'danger' : 'good'} />
               <KpiCard label="BNSキャッシュ持ち出し（合計）" value={formatYen(agg.cashOut)} tone={agg.cashOut > 0 ? 'warning' : 'default'} sub="売上にならず、BNSが補填した費用" />
               <KpiCard label="粗利益 − 持ち出し" value={formatSignedYen(agg.profit - agg.cashOut)} tone={agg.profit - agg.cashOut < 0 ? 'danger' : 'good'} sub="BNS粗利益（合計）から持ち出しを引いた額" />
             </div>
@@ -224,7 +232,7 @@ export default function PjbHomePage() {
                     <th className="px-3 py-2 font-medium text-right">利益率</th>
                     <th className="px-3 py-2 font-medium text-right">持ち出し</th>
                     <th className="px-3 py-2 font-medium text-right">総予算</th>
-                    <th className="px-4 py-2 font-medium text-right">残予算率</th>
+                    <th className="px-4 py-2 font-medium text-right">予実差率</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -239,7 +247,7 @@ export default function PjbHomePage() {
                       <td className="px-3 py-2.5 text-right tabular-nums">{b.sell > 0 ? formatPercent(b.margin, 1) : '—'}</td>
                       <td className={`px-3 py-2.5 text-right tabular-nums ${b.cashOut === 0 ? 'text-slate-300' : 'text-amber-700'}`}>{formatYen(b.cashOut)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(b.budget)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{b.budget > 0 ? formatPercent(b.rate, 1) : '—'}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{b.budget > 0 ? formatPercent(b.rate, 2) : '—'}</td>
                     </tr>
                   ))}
                   <tr className="bg-slate-50 font-semibold">
@@ -251,7 +259,7 @@ export default function PjbHomePage() {
                     <td className="px-3 py-2.5 text-right tabular-nums">{agg.sell > 0 ? formatPercent(agg.margin, 1) : '—'}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(agg.cashOut)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(agg.totalBudget)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{agg.totalBudget > 0 ? formatPercent(agg.rate, 1) : '—'}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{agg.totalBudget > 0 ? formatPercent(agg.rate, 2) : '—'}</td>
                   </tr>
                 </tbody>
               </table>
@@ -379,6 +387,7 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
   const over = data.remaining < 0
   const warn = !over && data.consumptionRate >= 0.9
   const tone = over ? 'border-rose-300' : warn ? 'border-amber-300' : 'border-slate-200'
+  const gapStatus = budgetGapStatus(data.totalBudget, data.budgetGap)
 
   return (
     <Link href={`/pjb/${project.id}`} className={`block rounded-xl border bg-white p-4 hover:shadow-sm transition-shadow ${tone}`}>
@@ -396,7 +405,8 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {data.totalBudget > 0 && Math.abs(data.remaining / data.totalBudget) <= KPI_RATE && <Badge tone="good">予実1%以内</Badge>}
+          {gapStatus === 'ok' && <Badge tone="good">予実1%以内</Badge>}
+          {(gapStatus === 'over' || gapStatus === 'under') && <Badge tone={gapStatus === 'over' ? 'danger' : 'warning'}>予実1%超</Badge>}
           {over && <Badge tone="danger">超過</Badge>}
           {warn && <Badge tone="warning">要注意</Badge>}
           {data.alertCount > 0 && <Badge tone="info">要対応 {data.alertCount}件</Badge>}
@@ -405,18 +415,18 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
 
       <div className="grid grid-cols-2 gap-2 text-[13.5px] mb-2">
         <div>
-          <div className="text-slate-400 text-[12px]">総予算</div>
-          <div className="font-medium tabular-nums">{formatYen(data.totalBudget)}</div>
+          <div className="text-slate-400 text-[12px]">PJ総予算</div>
+          <div className="font-medium tabular-nums">{data.totalBudget > 0 ? formatYen(data.totalBudget) : <span className="text-slate-300">未入力</span>}</div>
         </div>
         <div>
-          <div className="text-slate-400 text-[12px]">着地見込</div>
-          <div className={`font-medium tabular-nums ${over ? 'text-rose-600' : ''}`}>{formatYen(data.landingForecast)}</div>
+          <div className="text-slate-400 text-[12px]">実行費用</div>
+          <div className="font-medium tabular-nums">{formatYen(data.executionBudget)}</div>
         </div>
         <div>
-          <div className="text-slate-400 text-[12px]">残予算</div>
-          <div className={`font-medium tabular-nums ${over ? 'text-rose-600' : 'text-emerald-600'}`}>
-            {formatSignedYen(data.remaining)}
-            {data.totalBudget > 0 && <span className="ml-1 text-[12px] font-normal text-slate-500">({formatPercent(data.remaining / data.totalBudget, 1)})</span>}
+          <div className="text-slate-400 text-[12px]">予実の差</div>
+          <div className={`font-medium tabular-nums ${gapStatus === 'ok' ? 'text-emerald-600' : gapStatus === 'over' ? 'text-rose-600' : gapStatus === 'under' ? 'text-amber-700' : 'text-slate-300'}`}>
+            {gapStatus === 'unset' ? '—' : formatSignedYen(data.budgetGap)}
+            {gapStatus !== 'unset' && <span className="ml-1 text-[12px] font-normal text-slate-500">({formatPercent(data.budgetGap / data.totalBudget, 2)})</span>}
           </div>
         </div>
         <div>
@@ -440,7 +450,7 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
           style={{ width: `${Math.min(100, Math.max(0, data.consumptionRate * 100))}%` }}
         />
       </div>
-      <div className="text-[12px] text-slate-400 mt-1">予算の消化率 {formatPercent(data.consumptionRate)}</div>
+      <div className="text-[12px] text-slate-400 mt-1">着地見込 {formatYen(data.landingForecast)}　残予算 {formatSignedYen(data.remaining)}　消化率 {formatPercent(data.consumptionRate)}</div>
     </Link>
   )
 }

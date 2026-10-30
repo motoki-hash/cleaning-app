@@ -81,8 +81,20 @@ export function categorySales(category: BudgetCategory, salesItems: SalesItem[] 
   return salesItems.filter(s => s.category_id === category.id).reduce((t, s) => t + (s.amount || 0), 0)
 }
 
+// 予実管理のKPI：PJ総予算（手入力）と実行費用（自動）の差が、総予算の±1%以内
+export const BUDGET_KPI_RATE = 0.01
+export type BudgetGapStatus = 'unset' | 'ok' | 'over' | 'under'
+export function budgetGapStatus(totalBudget: number, gap: number): BudgetGapStatus {
+  if (!(totalBudget > 0)) return 'unset'
+  if (Math.abs(gap / totalBudget) <= BUDGET_KPI_RATE) return 'ok'
+  return gap < 0 ? 'over' : 'under'
+}
+
 export type ProjectTotals = {
-  totalBudget: number
+  totalBudget: number        // PJ総予算（手入力・最初に決まった予算）
+  executionBudget: number    // 実行費用（自動）
+  budgetGap: number          // 総予算 − 実行費用（プラス＝実行費用が総予算より少ない）
+  budgetGapRate: number | null
   orderedAmount: number
   unorderedPlanned: number
   landingForecast: number
@@ -118,15 +130,22 @@ export function summarizeProject(
   const bnsGrossProfit = bnsSell - bnsCost
   const grossMargin = bnsSell > 0 ? bnsGrossProfit / bnsSell : 0
 
-  // PJ総予算（自動）= BNS外予算の当初予算の合計 + BNS予算の売上の合計 + BNSキャッシュ持ち出し
-  //   （持ち出しは売上・利益にはならないが、BNSが出す分として予算には足す）
+  // 実行費用（自動）= BNS外予算の当初予算の合計 + BNS予算の売上の合計 + BNSキャッシュ持ち出し
+  //   （持ち出しは売上・利益にはならないが、BNSが出す分として加える）
   const externalBudget = categories.filter(c => c.group_name === 'BNS外予算').reduce((s, c) => s + (c.original_budget || 0), 0)
-  const totalBudget = externalBudget + bnsSell + cashOutTotal
-  const remaining = totalBudget - landingForecast
-  const consumptionRate = totalBudget > 0 ? landingForecast / totalBudget : 0
+  const executionBudget = externalBudget + bnsSell + cashOutTotal
+  // PJ総予算は手入力（最初に決まった予算）。実行費用との差が±1%以内かを予実管理で見る
+  const totalBudget = project.total_budget || 0
+  const budgetGap = totalBudget - executionBudget
+  const budgetGapRate = totalBudget > 0 ? budgetGap / totalBudget : null
+  const remaining = executionBudget - landingForecast
+  const consumptionRate = executionBudget > 0 ? landingForecast / executionBudget : 0
 
   return {
     totalBudget,
+    executionBudget,
+    budgetGap,
+    budgetGapRate,
     orderedAmount,
     unorderedPlanned,
     landingForecast,

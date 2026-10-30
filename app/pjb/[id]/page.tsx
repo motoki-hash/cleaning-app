@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import Shell from '../components/Shell'
 import DeleteProjectModal from '../components/DeleteProjectModal'
 import ProjectInfoPanel from '../components/ProjectInfoPanel'
+import PjBudgetKpis from '../components/PjBudgetKpis'
 import { KpiCard, AlertList, StatePill, SectionTitle, InlineNumber } from '../components/ui'
 import { supabase } from '@/lib/supabase'
 import { useProjectData } from '@/lib/pjb/useProjectData'
@@ -44,8 +45,8 @@ export default function DashboardPage() {
       <ProjectInfoPanel project={project} onChanged={reload} />
 
       <SectionTitle>予算KPI <span className="text-[12px] font-normal text-slate-400 ml-1">金額はすべて税別</span></SectionTitle>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        <KpiCard label="PJ総予算" value={formatYen(totals.totalBudget)} sub="BNS外予算の当初予算合計 ＋ BNS予算の売上合計 ＋ BNSキャッシュ持ち出し（自動）" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <PjBudgetKpis project={project} totals={totals} onChanged={reload} />
         <KpiCard label="発注済金額" value={formatYen(totals.orderedAmount)} />
         <KpiCard label="未発注予定" value={formatYen(totals.unorderedPlanned)} />
         <KpiCard
@@ -53,8 +54,8 @@ export default function DashboardPage() {
           value={formatYen(totals.landingForecast)}
           tone={totals.remaining < 0 ? 'danger' : totals.consumptionRate >= 0.9 ? 'warning' : 'default'}
         />
-        <KpiCard label="残予算" value={formatSignedYen(totals.remaining)} tone={totals.remaining < 0 ? 'danger' : 'good'} />
-        <KpiCard label="予算消化率" value={formatPercent(totals.consumptionRate)} tone={totals.consumptionRate >= 1 ? 'danger' : totals.consumptionRate >= 0.9 ? 'warning' : 'default'} />
+        <KpiCard label="残予算（実行費用−着地見込）" value={formatSignedYen(totals.remaining)} tone={totals.remaining < 0 ? 'danger' : 'good'} />
+        <KpiCard label="消化率（対実行費用）" value={formatPercent(totals.consumptionRate)} tone={totals.consumptionRate >= 1 ? 'danger' : totals.consumptionRate >= 0.9 ? 'warning' : 'default'} />
       </div>
 
       <SectionTitle>

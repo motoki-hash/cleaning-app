@@ -9,7 +9,9 @@ import type { Project, BudgetCategory, Order, AdditionalWork, VeItem, SalesItem,
 // 全案件の、一覧用の集計（案件一覧・年度ダッシュボード・リソース管理で共通に使う）
 export type ProjectCardData = {
   project: Project
-  totalBudget: number
+  totalBudget: number        // PJ総予算（手入力）
+  executionBudget: number    // 実行費用（自動）
+  budgetGap: number          // 総予算 − 実行費用
   landingForecast: number
   remaining: number
   consumptionRate: number
@@ -59,6 +61,8 @@ export function useProjectCards(enabled: boolean) {
       return {
         project,
         totalBudget: totals.totalBudget,
+        executionBudget: totals.executionBudget,
+        budgetGap: totals.budgetGap,
         landingForecast: totals.landingForecast,
         remaining: totals.remaining,
         consumptionRate: totals.consumptionRate,

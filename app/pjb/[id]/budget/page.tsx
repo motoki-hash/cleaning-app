@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import Shell from '../../components/Shell'
 import CashOutPanel from '../../components/CashOutPanel'
+import PjBudgetKpis from '../../components/PjBudgetKpis'
 import { KpiCard, StatePill, SectionTitle, EmptyState, InlineAmount, InlineText, MoneyInput, isCommitEnter } from '../../components/ui'
 import { useProjectData, findOrCreateVendor } from '@/lib/pjb/useProjectData'
 import { summarizeCategory, summarizeProject, categorySales } from '@/lib/pjb/calc'
@@ -76,20 +77,22 @@ export default function BudgetPage() {
   return (
     <Shell projectId={id} projectName={project.name} projectStatus={project.status} active="budget" onQuickAdded={reload}>
       {(() => {
-        const remainingRate = totals.totalBudget > 0 ? totals.remaining / totals.totalBudget : 0
+        const remainingRate = totals.executionBudget > 0 ? totals.remaining / totals.executionBudget : 0
         const remainTone = remainingRate < 0 ? 'danger' : remainingRate <= 0.01 ? 'warning' : 'good'
         return (
           <>
             <div className="text-[13px] font-semibold text-slate-600 mb-1.5">プロジェクト全体 <span className="font-normal text-slate-400">（金額はすべて税別）</span></div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+              <PjBudgetKpis project={project} totals={totals} onChanged={reload} />
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-              <KpiCard label="PJ総予算" value={formatYen(totals.totalBudget)} sub="BNS外予算の当初予算合計 ＋ BNS予算の売上合計 ＋ BNSキャッシュ持ち出し（自動）" />
               <KpiCard
                 label="原価（着地見込）"
                 value={formatYen(totals.landingForecast)}
                 tone={totals.remaining < 0 ? 'danger' : totals.consumptionRate >= 0.9 ? 'warning' : 'default'}
               />
-              <KpiCard label="残予算" value={formatSignedYen(totals.remaining)} tone={totals.remaining < 0 ? 'danger' : 'good'} />
-              <KpiCard label="残予算率（対総予算）" value={formatPercent(remainingRate, 1)} tone={remainTone} />
+              <KpiCard label="残予算（実行費用−原価）" value={formatSignedYen(totals.remaining)} tone={totals.remaining < 0 ? 'danger' : 'good'} />
+              <KpiCard label="残予算率（対実行費用）" value={formatPercent(remainingRate, 1)} tone={remainTone} />
             </div>
             <div className="text-[13px] font-semibold text-slate-600 mb-1.5">BNS収益</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
