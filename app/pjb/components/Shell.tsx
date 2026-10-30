@@ -10,6 +10,10 @@ import QuickAddSheet from './QuickAddSheet'
 import { InlineText } from './ui'
 import { getUndoHandlers, useUndoHandlers } from '@/lib/pjb/undo'
 
+// ページを切り替えてもサイドメニューが一瞬消えないように、確認済みの状態と案件名・ステータスを覚えておく
+let authChecked = false
+const shellInfo = new Map<string, { name?: string; status?: ProjectStatus }>()
+
 const TABS = [
   { key: 'dashboard', label: 'ダッシュボード', href: '', group: '全体' },
   { key: 'budget', label: '予実管理', href: '/budget', group: '予算' },
@@ -71,9 +75,9 @@ export default function Shell({
   const router = useRouter()
   const pathname = usePathname()
   const [showQuickAdd, setShowQuickAdd] = useState(false)
-  const [checked, setChecked] = useState(false)
-  const [status, setStatus] = useState<ProjectStatus | undefined>(projectStatus)
-  const [name, setName] = useState(projectName)
+  const [checked, setChecked] = useState(authChecked)
+  const [status, setStatus] = useState<ProjectStatus | undefined>(projectStatus ?? shellInfo.get(projectId)?.status)
+  const [name, setName] = useState(projectName ?? shellInfo.get(projectId)?.name)
   const undoH = useUndoHandlers()
 
   // ⌘Z（Ctrl+Z）で元に戻す／⌘⇧Z（Ctrl+Y）でやり直す。入力欄の中では、文字の取り消しを優先する
@@ -94,8 +98,8 @@ export default function Shell({
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  useEffect(() => { setStatus(projectStatus) }, [projectStatus])
-  useEffect(() => { setName(projectName) }, [projectName])
+  useEffect(() => { if (projectStatus) { setStatus(projectStatus); shellInfo.set(projectId, { ...shellInfo.get(projectId), status: projectStatus }) } }, [projectStatus, projectId])
+  useEffect(() => { if (projectName) { setName(projectName); shellInfo.set(projectId, { ...shellInfo.get(projectId), name: projectName }) } }, [projectName, projectId])
 
   const renameProject = async (next: string) => {
     const prev = name
@@ -134,6 +138,7 @@ export default function Shell({
       if (!user) {
         router.push(`/login?redirect=${encodeURIComponent(pathname || '/pjb')}`)
       } else {
+        authChecked = true
         setChecked(true)
       }
     })

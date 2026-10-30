@@ -27,6 +27,13 @@ const getHistory = (pid: string): History => {
   if (!h) { h = { undo: [], redo: [], current: null, skipPush: false }; histories.set(pid, h) }
   return h
 }
+// 前に開いたときのデータを案件ごとに持っておく。サイドバーでページを切り替えたとき、
+// 空の「読み込み中」を挟まず、前のデータをすぐ出して、裏で最新に更新する（画面のチラつき防止）
+type DataCache = {
+  project: Project; categories: BudgetCategory[]; orders: Order[]; additionalWorks: AdditionalWork[]; veItems: VeItem[]
+  investors: Investor[]; billings: InvestorBilling[]; vendors: Vendor[]; salesItems: SalesItem[] | null
+}
+const dataCache = new Map<string, DataCache>()
 const sameSnapshot = (a: Snapshot, b: Snapshot) => JSON.stringify(a) === JSON.stringify(b)
 
 // 今の状態（cur）を、過去の状態（target）に戻す。違う行だけを書き戻し、増えた行は削除する
@@ -65,16 +72,17 @@ async function restoreSnapshot(cur: Snapshot, target: Snapshot): Promise<string 
 
 export function useProjectData(projectId: string, options: { registerUndo?: boolean } = {}) {
   const registerUndo = options.registerUndo !== false
-  const [project, setProject] = useState<Project | null>(null)
-  const [categories, setCategories] = useState<BudgetCategory[]>([])
-  const [orders, setOrders] = useState<Order[]>([])
-  const [additionalWorks, setAdditionalWorks] = useState<AdditionalWork[]>([])
-  const [veItems, setVeItems] = useState<VeItem[]>([])
-  const [investors, setInvestors] = useState<Investor[]>([])
-  const [billings, setBillings] = useState<InvestorBilling[]>([])
-  const [vendors, setVendors] = useState<Vendor[]>([])
-  const [salesItems, setSalesItems] = useState<SalesItem[] | null>(null)
-  const [loading, setLoading] = useState(true)
+  const cached = dataCache.get(projectId)
+  const [project, setProject] = useState<Project | null>(cached?.project ?? null)
+  const [categories, setCategories] = useState<BudgetCategory[]>(cached?.categories ?? [])
+  const [orders, setOrders] = useState<Order[]>(cached?.orders ?? [])
+  const [additionalWorks, setAdditionalWorks] = useState<AdditionalWork[]>(cached?.additionalWorks ?? [])
+  const [veItems, setVeItems] = useState<VeItem[]>(cached?.veItems ?? [])
+  const [investors, setInvestors] = useState<Investor[]>(cached?.investors ?? [])
+  const [billings, setBillings] = useState<InvestorBilling[]>(cached?.billings ?? [])
+  const [vendors, setVendors] = useState<Vendor[]>(cached?.vendors ?? [])
+  const [salesItems, setSalesItems] = useState<SalesItem[] | null>(cached?.salesItems ?? null)
+  const [loading, setLoading] = useState(!cached)
   const [notFound, setNotFound] = useState(false)
 
   const loadedOnce = useRef(false)
@@ -83,7 +91,7 @@ export function useProjectData(projectId: string, options: { registerUndo?: bool
 
   const load = useCallback(async () => {
     // 最初の読み込みのときだけ「読み込み中」にする（再読み込みで画面が消えて入力中の内容が飛ぶのを防ぐ）
-    if (!loadedOnce.current) setLoading(true)
+    if (!loadedOnce.current && !dataCache.has(projectId)) setLoading(true)
     const [
       projectRes, catRes, orderRes, workRes, veRes, investorRes, vendorRes, salesRes,
     ] = await Promise.all([
@@ -125,6 +133,17 @@ export function useProjectData(projectId: string, options: { registerUndo?: bool
       billingRows = (billingData || []) as InvestorBilling[]
     }
     setBillings(billingRows)
+    dataCache.set(projectId, {
+      project: projectRes.data as Project,
+      categories: (catRes.data || []) as BudgetCategory[],
+      orders: (orderRes.data || []) as Order[],
+      additionalWorks: (workRes.data || []) as AdditionalWork[],
+      veItems: (veRes.data || []) as VeItem[],
+      investors: investorRows,
+      billings: billingRows,
+      vendors: (vendorRes.data || []) as Vendor[],
+      salesItems: salesRows,
+    })
 
     // 変更があったときは、変更前の状態を「元に戻す」の履歴に積む（最初の読み込みは基準にするだけ）
     const snap: Snapshot = {
