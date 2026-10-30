@@ -8,6 +8,7 @@ import RoughPrintSheet from './RoughPrintSheet'
 import PreopenPrintSheet from './PreopenPrintSheet'
 import Gantt, { type GanttBar, type GanttCol } from '../../components/Gantt'
 import { isCommitEnter } from '../../components/ui'
+import { periodName, periodLabelOf } from '@/lib/pjb/periods'
 import { setUndoHandlers, clearUndoHandlers } from '@/lib/pjb/undo'
 import { useProjectData } from '@/lib/pjb/useProjectData'
 import {
@@ -345,7 +346,7 @@ export default function SchedulePage() {
     if (!project) return
     setBusy(true)
     try {
-      const { data: target, error: te } = await supabase.from('pjb_projects').select('id, name, open_date').eq('id', targetId).single()
+      const { data: target, error: te } = await supabase.from('pjb_projects').select('id, name, open_date, period_no, period_label').eq('id', targetId).single()
       if (te || !target) throw new Error(te?.message || 'コピー先の案件が見つかりません')
       const { data: existing } = await supabase.from('pjb_schedules').select('sort_order').eq('project_id', targetId).eq('kind', kind)
       const nextOrder = ((existing || []).reduce((m: number, r: { sort_order: number }) => Math.max(m, r.sort_order), -1)) + 1
@@ -354,7 +355,7 @@ export default function SchedulePage() {
       const dayShift = kind === 'preopen' && project.open_date && target.open_date
         ? diffDays(parseYmd(project.open_date), parseYmd(target.open_date)) : 0
       await copyContent(kindTasks, kindBars, { projectId: targetId, scheduleId: created.id, dayShift })
-      alert(`「${target.name}」に、「${name}」としてコピーしました。`)
+      alert(`「${periodName(target.name, periodLabelOf(target))}」に、「${name}」としてコピーしました。`)
     } catch (e) {
       alert(e instanceof Error ? e.message : 'コピーに失敗しました')
     }
@@ -1018,8 +1019,15 @@ function ScheduleDialog({
 
   useEffect(() => {
     if (mode !== 'copyTo') return
-    supabase.from('pjb_projects').select('id, name').order('created_at', { ascending: false }).then(({ data }) => {
-      setProjectOptions((data || []) as Array<{ id: string; name: string }>)
+    // 期がある案件は「案件名 2期」と並べて出し、どの期にコピーするか選べるようにする
+    supabase.from('pjb_projects').select('id, name, period_no, period_label').order('created_at', { ascending: false }).then(({ data }) => {
+      const rows = (data || []) as Array<{ id: string; name: string; period_no: number | null; period_label: string | null }>
+      const opts = rows.map(r => ({ id: r.id, name: periodName(r.name, periodLabelOf(r)), base: r.name, no: r.period_no ?? 0 }))
+      // 同じ案件の期が続けて並ぶよう、案件名ごとにまとめて期の順に並べる（案件の並びは新しい順のまま）
+      const order = new Map<string, number>()
+      opts.forEach(o => { if (!order.has(o.base)) order.set(o.base, order.size) })
+      opts.sort((a, b) => order.get(a.base)! - order.get(b.base)! || a.no - b.no)
+      setProjectOptions(opts.map(o => ({ id: o.id, name: o.name })))
     })
   }, [mode])
 
