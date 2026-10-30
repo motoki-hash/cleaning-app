@@ -31,8 +31,10 @@ type EditableField = 'original_budget'
 // 0円はうすく表示して、値のある行が目立つようにする
 const zeroMute = (v: number, tone: string) => (v === 0 ? 'text-slate-300' : tone)
 
-// 当初予算との差額（実行費用 − 当初予算）。実行費用が未入力（0）の項目は、減ったように見えないよう「—」にする
-const diffFromOriginal = (s: CategorySummary): number | null => (s.effectiveBudget === 0 ? null : s.effectiveBudget - s.category.original_budget)
+// 当初予算との差額（実行費用 − 当初予算）。実行費用が未入力（0）の項目は、減ったように見えないよう「—」にする。
+// ただしPJ予備費は、使っていなければ実行費用0として扱い、差額＝余りの予算として出す
+const diffFromOriginal = (s: CategorySummary): number | null =>
+  s.effectiveBudget === 0 && s.category.name !== 'PJ予備費' ? null : s.effectiveBudget - s.category.original_budget
 const diffTone = (d: number) => (d > 0 ? 'text-rose-600' : d < 0 ? 'text-emerald-600' : 'text-slate-400')
 
 // 発注のマーク：✓ 発注済／◐ 一部発注／○ 未発注（金額は、行を開いた中と発注管理で見る）
@@ -150,7 +152,7 @@ export default function BudgetPage() {
                   <Row label="当初予算合計" value={formatYen(list.reduce((s, c) => s + c.category.original_budget, 0))} />
                   <Row label="実行費用合計" value={formatYen(list.reduce((s, c) => s + c.effectiveBudget, 0))} />
                   <Row
-                    label="当初予算との差額（実行費用が未入力の項目を除く）"
+                    label="当初予算との差額（実行費用が未入力の項目を除く。PJ予備費は含む）"
                     value={formatSignedYen(list.reduce((t, c) => t + (diffFromOriginal(c) ?? 0), 0))}
                     strong
                   />
@@ -222,7 +224,7 @@ export default function BudgetPage() {
                       </td>
                       <td className="px-3 py-3 text-right tabular-nums font-bold whitespace-nowrap" title="実行費用が未入力の項目は除いた合計">
                         {formatSignedYen(list.reduce((t, c) => t + (diffFromOriginal(c) ?? 0), 0))}
-                        <div className="text-[11px] font-normal text-slate-400">実行費用が未入力の項目を除く</div>
+                        <div className="text-[11px] font-normal text-slate-400">実行費用が未入力の項目を除く（PJ予備費は含む）</div>
                       </td>
                       <td colSpan={2}></td>
                     </tr>
