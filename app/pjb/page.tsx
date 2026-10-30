@@ -10,7 +10,7 @@ import { DEFAULT_CATEGORIES, BUSINESSES, UNCLASSIFIED, STAFF_FIELDS } from '@/li
 import { fiscalYearOf, currentFiscal, monthInputToDate } from '@/lib/pjb/fiscal'
 import { useProjectCards, type ProjectCardData } from '@/lib/pjb/useProjectCards'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
-import { BUDGET_KPI_RATE, budgetGapStatus } from '@/lib/pjb/calc'
+import { BUDGET_KPI_RATE, BUDGET_KPI_BUSINESS, budgetGapStatus, hasBudgetKpi } from '@/lib/pjb/calc'
 import { MoneyInput, KpiCard } from './components/ui'
 import TopShell from './components/TopShell'
 import type { Project } from '@/lib/pjb/types'
@@ -91,10 +91,10 @@ export default function PjbHomePage() {
     done: cards.filter(c => c.project.status === '完了').length,
   }
   // 全案件（または進行中のみ）の集計。予実管理のKPIは「PJ総予算（手入力）と実行費用（自動）の差が、総予算の±1%以内」
-  // 総予算が未入力（0）の案件は、判定の対象にしない
+  // 対象は illi Stays & Hotels の案件だけ。総予算が未入力（0）の案件は、判定の対象にしない
   const pool = scope === 'active' ? cards.filter(c => c.project.status === '進行中') : cards
   const agg = (() => {
-    const rated = pool.filter(c => c.totalBudget > 0)
+    const rated = pool.filter(c => hasBudgetKpi(c.business) && c.totalBudget > 0)
     const totalBudget = rated.reduce((s, c) => s + c.totalBudget, 0)
     const execution = rated.reduce((s, c) => s + c.executionBudget, 0)
     const gap = rated.reduce((s, c) => s + c.budgetGap, 0)
@@ -108,7 +108,7 @@ export default function PjbHomePage() {
       margin: sell > 0 ? profit / sell : 0,
       achieved: rated.filter(c => budgetGapStatus(c.totalBudget, c.budgetGap) === 'ok').length,
       ratedCount: rated.length,
-      unsetCount: pool.length - rated.length,
+      unsetCount: pool.filter(c => hasBudgetKpi(c.business)).length - rated.length,
     }
   })()
   // 事業別の売上・原価・利益（上の「全案件／進行中のみ」の切り替えに合わせる）
@@ -118,10 +118,10 @@ export default function PjbHomePage() {
       const sell = list.reduce((s, c) => s + c.bnsSell, 0)
       const cost = list.reduce((s, c) => s + c.bnsCost, 0)
       const profit = list.reduce((s, c) => s + c.grossProfit, 0)
-      const ratedList = list.filter(c => c.totalBudget > 0)
+      const ratedList = list.filter(c => hasBudgetKpi(c.business) && c.totalBudget > 0)
       const budget = ratedList.reduce((s, c) => s + c.totalBudget, 0)
       const gap = ratedList.reduce((s, c) => s + c.budgetGap, 0)
-      return { name, count: list.length, sell, cost, profit, margin: sell > 0 ? profit / sell : 0, budget, rate: budget > 0 ? gap / budget : 0 }
+      return { name, count: list.length, sell, cost, profit, margin: sell > 0 ? profit / sell : 0, budget, rate: budget > 0 ? gap / budget : 0, kpi: name === BUDGET_KPI_BUSINESS }
     })
     .filter(b => b.count > 0 || b.name !== UNCLASSIFIED)
   const rateTone = agg.totalBudget <= 0 ? 'default' : Math.abs(agg.rate) <= BUDGET_KPI_RATE ? 'good' : agg.rate < 0 ? 'danger' : 'warning'
@@ -177,7 +177,7 @@ export default function PjbHomePage() {
               <h2 className="text-[16px] font-bold text-slate-900 flex items-center gap-2"><span className="w-1 h-4 rounded-sm bg-blue-600" />全案件サマリー</h2>
               {!showAgg && (
                 <span className="text-[13px] text-slate-500 ml-2">
-                  予実差率 <b className={rateTone === 'good' ? 'text-emerald-700' : rateTone === 'danger' ? 'text-rose-700' : rateTone === 'warning' ? 'text-amber-700' : 'text-slate-500'}>{agg.totalBudget > 0 ? formatPercent(agg.rate, 2) : '—'}</b>（目標±1%以内）／BNS粗利益 <b>{formatYen(agg.profit)}</b>
+                  予実差率 <b className={rateTone === 'good' ? 'text-emerald-700' : rateTone === 'danger' ? 'text-rose-700' : rateTone === 'warning' ? 'text-amber-700' : 'text-slate-500'}>{agg.totalBudget > 0 ? formatPercent(agg.rate, 2) : '—'}</b>（illi・目標±1%以内）／BNS粗利益 <b>{formatYen(agg.profit)}</b>
                 </span>
               )}
             </button>
@@ -192,6 +192,7 @@ export default function PjbHomePage() {
           </div>
           {showAgg && (
             <>
+            <div className="text-[12.5px] text-slate-500 mb-2">予実管理（±1%）は、{BUDGET_KPI_BUSINESS} の案件だけが対象です</div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
               <KpiCard label="PJ総予算（合計・手入力）" value={formatYen(agg.totalBudget)} sub={`入力済 ${agg.ratedCount}案件${agg.unsetCount > 0 ? `／未入力 ${agg.unsetCount}案件（除く）` : ''}`} />
               <KpiCard label="実行費用（合計・自動）" value={formatYen(agg.execution)} sub="BNS外実行費用 ＋ BNS原価 ＋ 利益 ＋ 社内設計" />
@@ -229,7 +230,7 @@ export default function PjbHomePage() {
                     <th className="px-3 py-2 font-medium text-right">原価</th>
                     <th className="px-3 py-2 font-medium text-right">利益</th>
                     <th className="px-3 py-2 font-medium text-right">利益率</th>
-                    <th className="px-3 py-2 font-medium text-right">総予算</th>
+                    <th className="px-3 py-2 font-medium text-right">総予算（illi）</th>
                     <th className="px-4 py-2 font-medium text-right">予実差率</th>
                   </tr>
                 </thead>
@@ -243,8 +244,8 @@ export default function PjbHomePage() {
                       <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(b.cost)}</td>
                       <td className={`px-3 py-2.5 text-right tabular-nums font-semibold ${b.profit < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{formatSignedYen(b.profit)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{b.sell > 0 ? formatPercent(b.margin, 1) : '—'}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(b.budget)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{b.budget > 0 ? formatPercent(b.rate, 2) : '—'}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{b.kpi ? formatYen(b.budget) : '—'}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{b.kpi && b.budget > 0 ? formatPercent(b.rate, 2) : '—'}</td>
                     </tr>
                   ))}
                   <tr className="bg-slate-50 font-semibold">
@@ -383,7 +384,8 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
   const over = data.remaining < 0
   const warn = !over && data.consumptionRate >= 0.9
   const tone = over ? 'border-rose-300' : warn ? 'border-amber-300' : 'border-slate-200'
-  const gapStatus = budgetGapStatus(data.totalBudget, data.budgetGap)
+  const kpi = hasBudgetKpi(data.business)
+  const gapStatus = kpi ? budgetGapStatus(data.totalBudget, data.budgetGap) : 'unset'
 
   return (
     <Link href={`/pjb/${project.id}`} className={`block rounded-xl border bg-white p-4 hover:shadow-sm transition-shadow ${tone}`}>
@@ -418,13 +420,15 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
           <div className="text-slate-400 text-[12px]">実行費用</div>
           <div className="font-medium tabular-nums">{formatYen(data.executionBudget)}</div>
         </div>
-        <div>
-          <div className="text-slate-400 text-[12px]">予実の差</div>
-          <div className={`font-medium tabular-nums ${gapStatus === 'ok' ? 'text-emerald-600' : gapStatus === 'over' ? 'text-rose-600' : gapStatus === 'under' ? 'text-amber-700' : 'text-slate-300'}`}>
-            {gapStatus === 'unset' ? '—' : formatSignedYen(data.budgetGap)}
-            {gapStatus !== 'unset' && <span className="ml-1 text-[12px] font-normal text-slate-500">({formatPercent(data.budgetGap / data.totalBudget, 2)})</span>}
+        {kpi && (
+          <div>
+            <div className="text-slate-400 text-[12px]">予実の差</div>
+            <div className={`font-medium tabular-nums ${gapStatus === 'ok' ? 'text-emerald-600' : gapStatus === 'over' ? 'text-rose-600' : gapStatus === 'under' ? 'text-amber-700' : 'text-slate-300'}`}>
+              {gapStatus === 'unset' ? '—' : formatSignedYen(data.budgetGap)}
+              {gapStatus !== 'unset' && <span className="ml-1 text-[12px] font-normal text-slate-500">({formatPercent(data.budgetGap / data.totalBudget, 2)})</span>}
+            </div>
           </div>
-        </div>
+        )}
         <div>
           <div className="text-slate-400 text-[12px]">BNS粗利益</div>
           <div className="font-medium tabular-nums">{formatYen(data.grossProfit)}　{formatPercent(data.grossMargin)}</div>

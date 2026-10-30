@@ -2,6 +2,7 @@ import type {
   BudgetCategory, Order, AdditionalWork, VeItem, CategorySummary, Alert, Project, SalesItem,
 } from './types'
 import { daysUntil, formatYen } from './format'
+import { normalizeBusiness } from './constants'
 
 const ORDERED_STATUSES = new Set(['発注済', '完了', '請求書待ち', '支払待ち', '支払済'])
 const PLANNED_STATUSES = new Set(['見積依頼中', '見積受領', '発注待ち'])
@@ -83,6 +84,11 @@ export function categorySales(category: BudgetCategory, salesItems: SalesItem[] 
 
 // 予実管理のKPI：PJ総予算（手入力）と実行費用（自動）の差が、総予算の±1%以内
 export const BUDGET_KPI_RATE = 0.01
+// この予実KPIの対象は illi Stays & Hotels の案件だけ（Kyo Residence・Setup Office などでは出さない）
+export const BUDGET_KPI_BUSINESS = 'illi Stays & Hotels'
+export function hasBudgetKpi(business: string | null | undefined): boolean {
+  return normalizeBusiness(business) === BUDGET_KPI_BUSINESS
+}
 export type BudgetGapStatus = 'unset' | 'ok' | 'over' | 'under'
 export function budgetGapStatus(totalBudget: number, gap: number): BudgetGapStatus {
   if (!(totalBudget > 0)) return 'unset'
