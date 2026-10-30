@@ -48,17 +48,6 @@ export type SalesItem = {
   updated_at: string
 }
 
-// BNSキャッシュ持ち出し：売上にならず、BNSが補填する費用。売上・原価・利益には含めない
-export type CashOut = {
-  id: string
-  project_id: string
-  occurred_on: string
-  content: string
-  amount: number
-  notes: string | null
-  created_at: string
-}
-
 export type PjbDocument = {
   id: string
   project_id: string

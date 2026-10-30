@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import Shell from '../../components/Shell'
-import CashOutPanel from '../../components/CashOutPanel'
 import PjBudgetKpis from '../../components/PjBudgetKpis'
 import { KpiCard, StatePill, SectionTitle, EmptyState, InlineAmount, InlineText, MoneyInput, isCommitEnter } from '../../components/ui'
 import { useProjectData, findOrCreateVendor } from '@/lib/pjb/useProjectData'
@@ -34,7 +33,7 @@ const zeroMute = (v: number, tone: string) => (v === 0 ? 'text-slate-300' : tone
 
 export default function BudgetPage() {
   const { id } = useParams<{ id: string }>()
-  const { project, categories, orders, additionalWorks, veItems, vendors, salesItems, cashOutTotal, loading, notFound, reload } = useProjectData(id)
+  const { project, categories, orders, additionalWorks, veItems, vendors, salesItems, loading, notFound, reload } = useProjectData(id)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const toggleExpand = (categoryId: string) => {
@@ -49,7 +48,7 @@ export default function BudgetPage() {
     () => categories.map(c => summarizeCategory(c, orders, additionalWorks, veItems)),
     [categories, orders, additionalWorks, veItems]
   )
-  const totals = useMemo(() => project ? summarizeProject(project, categories, summaries, salesItems, cashOutTotal) : null, [project, categories, summaries, salesItems, cashOutTotal])
+  const totals = useMemo(() => project ? summarizeProject(project, categories, summaries, salesItems) : null, [project, categories, summaries, salesItems])
 
   if (notFound) return <div className="p-8 text-center text-slate-400 text-[14px]">プロジェクトが見つかりません</div>
   if (loading || !project || !totals) {
@@ -224,7 +223,6 @@ export default function BudgetPage() {
         </div>
       ))}
 
-      <CashOutPanel projectId={id} onChanged={reload} />
 
     </Shell>
   )

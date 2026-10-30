@@ -99,9 +99,8 @@ export default function PjbHomePage() {
     const remaining = pool.reduce((s, c) => s + c.remaining, 0)
     const sell = pool.reduce((s, c) => s + c.bnsSell, 0)
     const profit = pool.reduce((s, c) => s + c.grossProfit, 0)
-    const cashOut = pool.reduce((s, c) => s + c.cashOut, 0)
     return {
-      totalBudget, execution, gap, landing, remaining, sell, profit, cashOut,
+      totalBudget, execution, gap, landing, remaining, sell, profit,
       rate: totalBudget > 0 ? gap / totalBudget : 0,
       margin: sell > 0 ? profit / sell : 0,
       achieved: rated.filter(c => budgetGapStatus(c.totalBudget, c.budgetGap) === 'ok').length,
@@ -119,8 +118,7 @@ export default function PjbHomePage() {
       const ratedList = list.filter(c => c.totalBudget > 0)
       const budget = ratedList.reduce((s, c) => s + c.totalBudget, 0)
       const gap = ratedList.reduce((s, c) => s + c.budgetGap, 0)
-      const cashOut = list.reduce((s, c) => s + c.cashOut, 0)
-      return { name, count: list.length, sell, cost, profit, cashOut, margin: sell > 0 ? profit / sell : 0, budget, rate: budget > 0 ? gap / budget : 0 }
+      return { name, count: list.length, sell, cost, profit, margin: sell > 0 ? profit / sell : 0, budget, rate: budget > 0 ? gap / budget : 0 }
     })
     .filter(b => b.count > 0 || b.name !== UNCLASSIFIED)
   const rateTone = agg.totalBudget <= 0 ? 'default' : Math.abs(agg.rate) <= BUDGET_KPI_RATE ? 'good' : agg.rate < 0 ? 'danger' : 'warning'
@@ -193,7 +191,7 @@ export default function PjbHomePage() {
             <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
               <KpiCard label="PJ総予算（合計・手入力）" value={formatYen(agg.totalBudget)} sub={`入力済 ${agg.ratedCount}案件${agg.unsetCount > 0 ? `／未入力 ${agg.unsetCount}案件（除く）` : ''}`} />
-              <KpiCard label="実行費用（合計・自動）" value={formatYen(agg.execution)} sub="BNS外実行費用 ＋ BNS原価 ＋ 利益 ＋ 社内設計 ＋ 持ち出し" />
+              <KpiCard label="実行費用（合計・自動）" value={formatYen(agg.execution)} sub="BNS外実行費用 ＋ BNS原価 ＋ 利益 ＋ 社内設計" />
               <KpiCard label="予実の差額（総予算−実行費用）" value={agg.ratedCount > 0 ? formatSignedYen(agg.gap) : '—'} tone={rateTone} />
               <KpiCard
                 label="予実の差率（対総予算）"
@@ -212,8 +210,6 @@ export default function PjbHomePage() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
               <KpiCard label="着地見込（合計）" value={formatYen(agg.landing)} />
               <KpiCard label="残予算（実行費用−着地見込）" value={formatSignedYen(agg.remaining)} tone={agg.remaining < 0 ? 'danger' : 'good'} />
-              <KpiCard label="BNSキャッシュ持ち出し（合計）" value={formatYen(agg.cashOut)} tone={agg.cashOut > 0 ? 'warning' : 'default'} sub="売上にならず、BNSが補填した費用" />
-              <KpiCard label="粗利益 − 持ち出し" value={formatSignedYen(agg.profit - agg.cashOut)} tone={agg.profit - agg.cashOut < 0 ? 'danger' : 'good'} sub="BNS粗利益（合計）から持ち出しを引いた額" />
             </div>
 
             {/* 事業別の分析 */}
@@ -221,7 +217,7 @@ export default function PjbHomePage() {
               <div className="px-4 py-2.5 border-b border-slate-100 text-[14px] font-semibold text-slate-900">
                 事業別の分析 <span className="text-[12px] font-normal text-slate-400 ml-1">（行を押すと、その事業の案件だけを一覧に出します）</span>
               </div>
-              <table className="w-full min-w-[840px] text-[13.5px]">
+              <table className="w-full min-w-[760px] text-[13.5px]">
                 <thead>
                   <tr className="text-left text-slate-500 text-[12.5px] bg-slate-50 border-b border-slate-100">
                     <th className="px-4 py-2 font-medium">事業</th>
@@ -230,7 +226,6 @@ export default function PjbHomePage() {
                     <th className="px-3 py-2 font-medium text-right">原価</th>
                     <th className="px-3 py-2 font-medium text-right">利益</th>
                     <th className="px-3 py-2 font-medium text-right">利益率</th>
-                    <th className="px-3 py-2 font-medium text-right">持ち出し</th>
                     <th className="px-3 py-2 font-medium text-right">総予算</th>
                     <th className="px-4 py-2 font-medium text-right">予実差率</th>
                   </tr>
@@ -245,7 +240,6 @@ export default function PjbHomePage() {
                       <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(b.cost)}</td>
                       <td className={`px-3 py-2.5 text-right tabular-nums font-semibold ${b.profit < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{formatSignedYen(b.profit)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{b.sell > 0 ? formatPercent(b.margin, 1) : '—'}</td>
-                      <td className={`px-3 py-2.5 text-right tabular-nums ${b.cashOut === 0 ? 'text-slate-300' : 'text-amber-700'}`}>{formatYen(b.cashOut)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(b.budget)}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">{b.budget > 0 ? formatPercent(b.rate, 2) : '—'}</td>
                     </tr>
@@ -257,7 +251,6 @@ export default function PjbHomePage() {
                     <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(pool.reduce((s, c) => s + c.bnsCost, 0))}</td>
                     <td className={`px-3 py-2.5 text-right tabular-nums ${agg.profit < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{formatSignedYen(agg.profit)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{agg.sell > 0 ? formatPercent(agg.margin, 1) : '—'}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(agg.cashOut)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{formatYen(agg.totalBudget)}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{agg.totalBudget > 0 ? formatPercent(agg.rate, 2) : '—'}</td>
                   </tr>
@@ -435,9 +428,6 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
         </div>
       </div>
 
-      {data.cashOut > 0 && (
-        <div className="text-[12px] text-amber-700 mb-2">BNSキャッシュ持ち出し {formatYen(data.cashOut)}</div>
-      )}
       {(project.pm_name || project.qa_name) && (
         <div className="text-[12px] text-slate-500 mb-2">
           {project.pm_name && <span className="mr-3">進行 {project.pm_name}</span>}

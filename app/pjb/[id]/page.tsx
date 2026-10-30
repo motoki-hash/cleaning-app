@@ -16,14 +16,14 @@ const PURE_CONSTRUCTION = ['解体工事', '内装工事', '追加工事', '分�
 
 export default function DashboardPage() {
   const { id } = useParams<{ id: string }>()
-  const { project, categories, orders, additionalWorks, veItems, salesItems, cashOutTotal, loading, notFound, reload } = useProjectData(id)
+  const { project, categories, orders, additionalWorks, veItems, salesItems, loading, notFound, reload } = useProjectData(id)
   const [showDelete, setShowDelete] = useState(false)
 
   const summaries = useMemo(
     () => categories.map(c => summarizeCategory(c, orders, additionalWorks, veItems)),
     [categories, orders, additionalWorks, veItems]
   )
-  const totals = useMemo(() => project ? summarizeProject(project, categories, summaries, salesItems, cashOutTotal) : null, [project, categories, summaries, salesItems, cashOutTotal])
+  const totals = useMemo(() => project ? summarizeProject(project, categories, summaries, salesItems) : null, [project, categories, summaries, salesItems])
   const alerts = useMemo(
     () => buildAlerts(categories, summaries, orders, additionalWorks, veItems, `/pjb/${id}`),
     [categories, summaries, orders, additionalWorks, veItems, id]

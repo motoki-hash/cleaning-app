@@ -20,7 +20,7 @@ const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 export default function FyPage() {
   const now = currentFiscal()
   const [fy, setFy] = useState(now.year)
-  const { cards, cashOuts, loading } = useProjectCards(true)
+  const { cards, loading } = useProjectCards(true)
   const [plans, setPlans] = useState<Plan[]>([])
   const [planError, setPlanError] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -87,9 +87,7 @@ export default function FyPage() {
     const cost = a.done.cost + a.fc.cost
     return { planS, planP: planS - planC, sales, profit: sales - cost, doneSales: a.done.sales, doneProfit: a.done.sales - a.done.cost }
   })
-  // BNSキャッシュ持ち出し（持ち出した日で、年度・月に振り分ける。売上・利益には入らない別枠）
-  const cashByMonth = MONTHS.map(i => sum(cashOuts.filter(x => fiscalYearOf(x.occurred_on) === fy && fiscalMonthIndex(x.occurred_on) === i).map(x => Number(x.amount) || 0)))
-  const all = series(null).map((r, i) => ({ ...r, cash: cashByMonth[i], profitAfterCash: r.profit - cashByMonth[i] }))
+  const all = series(null)
   const isCur = fy === now.year
   const upTo = isCur ? now.month : fy < now.year ? 12 : 0
   const tot = (key: keyof typeof all[number], to = 12) => sum(all.slice(0, to).map(r => r[key]))
@@ -97,7 +95,6 @@ export default function FyPage() {
   const kpi = {
     ytdPlanS: tot('planS', upTo), ytdS: tot('sales', upTo), ytdPlanP: tot('planP', upTo), ytdP: tot('profit', upTo),
     fyPlanS: tot('planS'), fyS: tot('sales'), fyPlanP: tot('planP'), fyP: tot('profit'),
-    fyCash: tot('cash'), fyPAfter: tot('profitAfterCash'),
   }
   const rate = (a: number, b: number) => (b ? a / b : 0)
 
@@ -130,8 +127,6 @@ export default function FyPage() {
               <Tile label="通期の利益達成（見込）" value={formatPercent(rate(kpi.fyP, kpi.fyPlanP), 1)} sub={`${formatYen(kpi.fyP)} / 計画 ${formatYen(kpi.fyPlanP)}`} />
               <Tile label="通期の利益率（見込）" value={formatPercent(rate(kpi.fyP, kpi.fyS), 1)} sub={`計画 ${formatPercent(rate(kpi.fyPlanP, kpi.fyPlanS), 1)}`} />
               <Tile label="利益差額（通期・計画比）" value={formatYen(kpi.fyP - kpi.fyPlanP)} sub="見込 − 計画" tone={kpi.fyP - kpi.fyPlanP < 0 ? 'bad' : 'good'} />
-              <Tile label="BNSキャッシュ持ち出し（通期）" value={formatYen(kpi.fyCash)} sub="売上にならず、BNSが補填した費用" tone={kpi.fyCash > 0 ? 'bad' : undefined} />
-              <Tile label="利益 − 持ち出し（通期・見込）" value={formatYen(kpi.fyPAfter)} sub={`利益 ${formatYen(kpi.fyP)} − 持ち出し ${formatYen(kpi.fyCash)}`} tone={kpi.fyPAfter < 0 ? 'bad' : 'good'} />
               <Tile label="今期売上の案件" value={`${cards.filter(c => fiscalYearOf(c.project.sales_month) === fy).length}件`} sub={`うち完了 ${cards.filter(c => fiscalYearOf(c.project.sales_month) === fy && c.project.status === '完了').length}件`} />
               <Tile label="売上計上月が未設定" value={`${cards.filter(c => !c.project.sales_month && c.project.status === '進行中').length}件`} sub="進行中の案件のうち" />
             </div>
@@ -150,7 +145,7 @@ export default function FyPage() {
                 </thead>
                 <tbody>
                   {([
-                    ['売上計画', 'planS'], ['売上 実績/見込', 'sales'], ['利益計画', 'planP'], ['利益 実績/見込', 'profit'], ['BNSキャッシュ持ち出し', 'cash'], ['利益 − 持ち出し', 'profitAfterCash'],
+                    ['売上計画', 'planS'], ['売上 実績/見込', 'sales'], ['利益計画', 'planP'], ['利益 実績/見込', 'profit'],
                   ] as const).map(([label, key]) => (
                     <tr key={key} className="border-t border-slate-100">
                       <td className="py-1.5 pr-2 text-slate-700">{label}</td>
