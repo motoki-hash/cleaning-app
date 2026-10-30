@@ -1,5 +1,6 @@
 'use client'
 
+import { periodName } from '@/lib/pjb/periods'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { AssigneeEditor } from '../components/AssigneeEditor'
@@ -27,7 +28,7 @@ export default function AssignView({
           return (
             <section key={p.id} className="bg-white rounded-xl border border-slate-200 p-4">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
-                <Link href={`/pjb/${p.id}`} className="text-[15px] font-semibold text-slate-900 hover:underline">{p.name}</Link>
+                <Link href={`/pjb/${p.id}`} className="text-[15px] font-semibold text-slate-900 hover:underline">{periodName(p.name, p.period_label)}</Link>
                 <span className="text-[12px] text-slate-500">{p.status}</span>
                 {p.status === '進行中' && (tl.ok
                   ? <span className="text-[12px] text-emerald-700">日程OK</span>

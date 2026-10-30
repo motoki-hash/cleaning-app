@@ -11,6 +11,7 @@ import { fiscalYearOf, currentFiscal, monthInputToDate } from '@/lib/pjb/fiscal'
 import { useProjectCards, type ProjectCardData } from '@/lib/pjb/useProjectCards'
 import { formatYen, formatSignedYen, formatPercent } from '@/lib/pjb/format'
 import { BUDGET_KPI_RATE, BUDGET_KPI_BUSINESS, budgetGapStatus, hasBudgetKpi } from '@/lib/pjb/calc'
+import { periodLabelOf } from '@/lib/pjb/periods'
 import { MoneyInput, KpiCard } from './components/ui'
 import TopShell from './components/TopShell'
 import type { Project } from '@/lib/pjb/types'
@@ -76,6 +77,22 @@ export default function PjbHomePage() {
     }
     return list.sort(cmp[sortKey])
   }, [cards, query, filter, businessFilter, sortKey])
+
+  // 期のある案件（group_idが同じ）は、1枚のカードにまとめる。絞り込みに合う期が1つでもあれば表示し、合計は全期で出す
+  const units = (() => {
+    const seen = new Set<string>()
+    const out: Array<{ key: string; members: ProjectCardData[] }> = []
+    for (const c of filtered) {
+      const gid = c.project.group_id
+      if (!gid) { out.push({ key: c.project.id, members: [c] }); continue }
+      if (seen.has(gid)) continue
+      seen.add(gid)
+      out.push({ key: gid, members: cards.filter(x => x.project.group_id === gid).sort((a, b) => (a.project.period_no ?? 99) - (b.project.period_no ?? 99)) })
+    }
+    return out
+  })()
+  const renderUnit = (u: { key: string; members: ProjectCardData[] }) =>
+    u.members.length > 1 || u.members[0].project.group_id ? <GroupCard key={u.key} members={u.members} /> : <ProjectCard key={u.key} data={u.members[0]} />
 
   // 事業の並び（登録している事業 → 未分類）。案件がある事業だけ、絞り込みの候補に出す
   const businessNames = [...BUSINESSES, UNCLASSIFIED]
@@ -267,7 +284,7 @@ export default function PjbHomePage() {
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
           <h2 className="text-[16px] font-semibold text-slate-900 sm:mr-3">
-            案件一覧 <span className="text-[13px] font-normal text-slate-400">{filtered.length}件</span>
+            案件一覧 <span className="text-[13px] font-normal text-slate-400">{units.length}件</span>
           </h2>
           <input
             value={query}
@@ -324,18 +341,19 @@ export default function PjbHomePage() {
         {filtered.length > 0 && groupByBusiness && (
           <div className="grid gap-6">
             {businessNames.map(name => {
-              const list = filtered.filter(c => c.business === name)
-              if (list.length === 0) return null
+              const us = units.filter(u => u.members[0].business === name)
+              if (us.length === 0) return null
+              const list = us.flatMap(u => u.members)
               const sell = list.reduce((s, c) => s + c.bnsSell, 0)
               const profit = list.reduce((s, c) => s + c.grossProfit, 0)
               return (
                 <section key={name}>
                   <div className="flex items-baseline gap-3 mb-2">
                     <h3 className="text-[15px] font-bold text-slate-900">{name}</h3>
-                    <span className="text-[12.5px] text-slate-500">{list.length}件　売上 {formatYen(sell)}　利益 {formatSignedYen(profit)}</span>
+                    <span className="text-[12.5px] text-slate-500">{us.length}件　売上 {formatYen(sell)}　利益 {formatSignedYen(profit)}</span>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {list.map(c => <ProjectCard key={c.project.id} data={c} />)}
+                    {us.map(renderUnit)}
                   </div>
                 </section>
               )
@@ -344,7 +362,7 @@ export default function PjbHomePage() {
         )}
         {filtered.length > 0 && !groupByBusiness && (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {filtered.map(c => <ProjectCard key={c.project.id} data={c} />)}
+            {units.map(renderUnit)}
           </div>
         )}
       </main>
@@ -449,6 +467,73 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
       </div>
       <div className="text-[12px] text-slate-400 mt-1">着地見込 {formatYen(data.landingForecast)}　残予算 {formatSignedYen(data.remaining)}　消化率 {formatPercent(data.consumptionRate)}</div>
     </Link>
+  )
+}
+
+// 期のある案件のカード：全期の合計と、期ごとの行（期を押すと、その期の案件ページへ）
+function GroupCard({ members }: { members: ProjectCardData[] }) {
+  const first = members[0]
+  const sum = (f: (c: ProjectCardData) => number) => members.reduce((s, c) => s + f(c), 0)
+  const remaining = sum(c => c.remaining)
+  const over = members.some(c => c.remaining < 0)
+  const alerts = sum(c => c.alertCount)
+  const nowFy = currentFiscal().year
+  const kpi = hasBudgetKpi(first.business)
+
+  return (
+    <div className={`rounded-xl border bg-white p-4 ${over ? 'border-rose-300' : 'border-slate-200'}`}>
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="min-w-0">
+          <div className="text-[15px] font-semibold text-slate-900 truncate">{first.project.name}</div>
+          <span className="inline-block mt-1 text-[12px] px-2 py-0.5 rounded-full border border-slate-200 bg-white text-slate-600">{first.business}</span>
+          <span className="inline-block mt-1 ml-1.5 text-[12px] px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-600">{members.length}期</span>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {over && <Badge tone="danger">超過</Badge>}
+          {alerts > 0 && <Badge tone="info">要対応 {alerts}件</Badge>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 text-[13.5px] mb-3">
+        <div>
+          <div className="text-slate-400 text-[12px]">PJ総予算（全期）</div>
+          <div className="font-medium tabular-nums">{sum(c => c.totalBudget) > 0 ? formatYen(sum(c => c.totalBudget)) : <span className="text-slate-300">未入力</span>}</div>
+        </div>
+        <div>
+          <div className="text-slate-400 text-[12px]">実行費用（全期）</div>
+          <div className="font-medium tabular-nums">{formatYen(sum(c => c.executionBudget))}</div>
+        </div>
+        <div>
+          <div className="text-slate-400 text-[12px]">BNS粗利益（全期）</div>
+          <div className="font-medium tabular-nums">{formatYen(sum(c => c.grossProfit))}</div>
+        </div>
+        <div>
+          <div className="text-slate-400 text-[12px]">残予算（全期）</div>
+          <div className={`font-medium tabular-nums ${remaining < 0 ? 'text-rose-600' : ''}`}>{formatSignedYen(remaining)}</div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-100 divide-y divide-slate-100">
+        {members.map(c => {
+          const st = kpi ? budgetGapStatus(c.totalBudget, c.budgetGap) : 'unset'
+          const fy = fiscalYearOf(c.project.sales_month)
+          return (
+            <Link key={c.project.id} href={`/pjb/${c.project.id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 hover:bg-slate-50 text-[13px]">
+              <span className="font-semibold text-slate-900 w-9">{periodLabelOf(c.project) || '—'}</span>
+              <span className={`text-[11.5px] px-1.5 py-0.5 rounded-full border font-medium ${STATUS_PILL[c.project.status]}`}>{c.project.status}</span>
+              <span className="text-slate-500">
+                {c.project.sales_month ? `売上 ${c.project.sales_month.slice(0, 7).replace('-', '年')}月` : '売上月 未設定'}
+              </span>
+              {fy === nowFy && <span className="text-[11.5px] text-emerald-700 font-medium">今期売上</span>}
+              <span className="ml-auto tabular-nums text-slate-700">{formatYen(c.executionBudget)}</span>
+              {st === 'ok' && <Badge tone="good">予実1%以内</Badge>}
+              {(st === 'over' || st === 'under') && <Badge tone={st === 'over' ? 'danger' : 'warning'}>予実1%超</Badge>}
+              {c.remaining < 0 && <Badge tone="danger">超過</Badge>}
+            </Link>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 

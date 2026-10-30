@@ -88,6 +88,13 @@ export default function ProjectInfoPanel({ project, onChanged }: { project: Proj
           hint={fy !== null ? `${fy}年度${fy === nowFy ? '（今期売上）' : ''}` : undefined} hintTone={fy === nowFy ? 'accent' : undefined}
           onSave={v => save({ sales_month: monthInputToDate(v) }, '売上計上月', project.sales_month, monthInputToDate(v))}
         />
+        {project.group_id && (
+          <Field
+            label="期の名前（例：2期）" value={project.period_label ?? ''}
+            hint="売上計上月・予算・発注・スケジュールは、期ごとに別々です"
+            onSave={v => save({ period_label: v.trim() || null }, '期の名前', project.period_label, v.trim())}
+          />
+        )}
         {STAFF_FIELDS.filter(f => f.key !== 'pm_name' && f.key !== 'qa_name').map(f => staffField(f))}
       </div>
 

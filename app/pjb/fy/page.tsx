@@ -1,5 +1,6 @@
 'use client'
 
+import { periodName } from '@/lib/pjb/periods'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import TopShell from '../components/TopShell'
 import { InlineAmount, SectionTitle } from '../components/ui'
@@ -235,7 +236,7 @@ export default function FyPage() {
                     <li key={c.project.id}>
                       <a href={`/pjb/${c.project.id}`} className="grid grid-cols-[4rem_1fr_auto] gap-2 py-2 text-[13px] hover:bg-slate-50">
                         <span className="text-slate-500">{FY_MONTH_LABELS[(fiscalMonthIndex(c.project.sales_month) || 1) - 1]}</span>
-                        <span className="truncate text-slate-900">{c.project.name} <span className="text-slate-400">{c.business}／{c.project.status}</span></span>
+                        <span className="truncate text-slate-900">{periodName(c.project.name, c.project.period_label)} <span className="text-slate-400">{c.business}／{c.project.status}</span></span>
                         <span className="tabular-nums text-slate-700">売上 {formatYen(c.bnsSell)}／利益 {formatYen(c.grossProfit)}</span>
                       </a>
                     </li>

@@ -1,5 +1,6 @@
 'use client'
 
+import { periodName } from '@/lib/pjb/periods'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import {
@@ -241,7 +242,7 @@ export default function LoadView({
                   <ul className="grid gap-1">
                     {comp.unscheduled.map(p => (
                       <li key={p.id} className="flex flex-wrap gap-x-2">
-                        <Link href={`/pjb/${p.id}/schedule`} className="text-blue-700 hover:underline">{p.name}</Link>
+                        <Link href={`/pjb/${p.id}/schedule`} className="text-blue-700 hover:underline">{periodName(p.name, p.period_label)}</Link>
                         <span className="text-slate-500">{comp.timelines.get(p.id)!.reasons.join('／')}</span>
                       </li>
                     ))}
@@ -254,7 +255,7 @@ export default function LoadView({
                   <ul className="grid gap-1">
                     {comp.unassigned.map(u => (
                       <li key={u.project.id} className="flex flex-wrap gap-x-2">
-                        <Link href={`/pjb/${u.project.id}`} className="text-blue-700 hover:underline">{u.project.name}</Link>
+                        <Link href={`/pjb/${u.project.id}`} className="text-blue-700 hover:underline">{periodName(u.project.name, u.project.period_label)}</Link>
                         <span className="text-slate-500">{u.roles.join('・')}</span>
                       </li>
                     ))}
@@ -390,7 +391,7 @@ function Gantt({ projects, timelines, months }: { projects: ProjectRow[]; timeli
             const tl = timelines.get(p.id)!
             return (
               <tr key={p.id}>
-                <td className="sticky left-0 bg-white z-10 px-2 py-0.5 whitespace-nowrap max-w-[16rem] truncate"><Link href={`/pjb/${p.id}/schedule`} className="text-slate-800 hover:underline">{p.name}</Link></td>
+                <td className="sticky left-0 bg-white z-10 px-2 py-0.5 whitespace-nowrap max-w-[16rem] truncate"><Link href={`/pjb/${p.id}/schedule`} className="text-slate-800 hover:underline">{periodName(p.name, p.period_label)}</Link></td>
                 {tl.ok ? months.map((m, i) => {
                   const ph = dominant(tl, m)
                   return <td key={i} className="p-0"><div className={`h-5 rounded-sm ${ph ? PHASE_COLOR[ph] : ''}`} title={ph ? PHASE_SHORT[ph] : ''} /></td>

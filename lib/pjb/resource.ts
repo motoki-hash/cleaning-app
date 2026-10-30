@@ -60,6 +60,7 @@ export type ProjectRow = {
   id: string; name: string; status: string
   schedule_base_date?: string | null; schedule_open_week?: number | null; open_date?: string | null
   load_factor?: number | null; stay_start?: string | null; stay_end?: string | null
+  period_label?: string | null
 }
 export type RoughBar = { project_id: string; category: string; color: string; start_week: number | null; length_weeks: number | null }
 

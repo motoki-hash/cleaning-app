@@ -1,5 +1,6 @@
 'use client'
 
+import { periodName } from '@/lib/pjb/periods'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useProjectCards } from '@/lib/pjb/useProjectCards'
@@ -89,7 +90,7 @@ export default function HoldingsView() {
                     {g.list.map(c => (
                       <li key={c.project.id} className="border-b border-slate-100 last:border-b-0">
                         <Link href={`/pjb/${c.project.id}`} className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 px-4 py-2.5 hover:bg-slate-50">
-                          <span className="text-[14px] font-medium text-slate-900 truncate">{c.project.name}</span>
+                          <span className="text-[14px] font-medium text-slate-900 truncate">{periodName(c.project.name, c.project.period_label)}</span>
                           <span className="text-[13px] text-slate-600 text-right">{c.project.room_count || 0}室</span>
                           <span className="text-[12px] text-slate-500 truncate">
                             {c.business}／{c.project.status}

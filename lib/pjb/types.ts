@@ -23,6 +23,9 @@ export type Project = {
   load_factor?: number | null
   stay_start?: string | null
   stay_end?: string | null
+  group_id?: string | null       // 同じ案件の「期」をまとめるID（期なし＝空）
+  period_no?: number | null
+  period_label?: string | null
   operator_name?: string | null
   address?: string | null
   schedule_base_date?: string | null

@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase'
 import type { ProjectStatus } from '@/lib/pjb/types'
 import { logActivity } from '@/lib/pjb/activity'
 import QuickAddSheet from './QuickAddSheet'
+import PeriodSwitcher from './PeriodSwitcher'
+import { renameGroup } from '@/lib/pjb/periods'
 import { InlineText } from './ui'
 import { authState } from '@/lib/pjb/authState'
 import { getUndoHandlers, useUndoHandlers } from '@/lib/pjb/undo'
@@ -104,10 +106,10 @@ export default function Shell({
   const renameProject = async (next: string) => {
     const prev = name
     setName(next)
-    const { error } = await supabase.from('pjb_projects').update({ name: next, updated_at: new Date().toISOString() }).eq('id', projectId)
-    if (error) {
+    const message = await renameGroup(projectId, next)   // 期がある案件は、全ての期の名前をそろえる
+    if (message) {
       setName(prev)
-      alert(`物件名の変更に失敗しました：${error.message}`)
+      alert(`物件名の変更に失敗しました：${message}`)
       return
     }
     await logActivity({ projectId, action: 'update', entityType: 'project', entityLabel: '物件名', before: prev, after: next })
@@ -144,6 +146,8 @@ export default function Shell({
     })
   }, [router, pathname])
 
+  const activeHref = TABS.find(t => t.key === active)?.href ?? ''
+
   if (!checked) {
     return <div className="min-h-screen flex items-center justify-center text-sm text-slate-400">読み込み中…</div>
   }
@@ -172,6 +176,7 @@ export default function Shell({
             {name && <span className="text-[12px] font-normal text-emerald-100/50 mt-0.5 whitespace-nowrap">✎ 編集</span>}
           </div>
           <div className="mt-2">{statusSelect}</div>
+          <PeriodSwitcher projectId={projectId} pageHref={activeHref} variant="side" />
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-3">
           {NAV_GROUPS.map(group => (
@@ -219,6 +224,7 @@ export default function Shell({
           <button onClick={() => undoH?.redo()} disabled={!undoH?.canRedo} aria-label="やり直す" className="px-1.5 text-[17px] text-slate-500 disabled:opacity-25">↷</button>
           {statusSelect}
         </div>
+        <PeriodSwitcher projectId={projectId} pageHref={activeHref} variant="top" />
         <nav className="flex gap-1.5 px-3 pb-2 overflow-x-auto no-scrollbar">
           {TABS.map(t => (
             <Link
