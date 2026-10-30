@@ -8,7 +8,7 @@ import { addPeriod, loadPeriods, periodLabelOf, type PeriodInfo } from '@/lib/pj
 const cache = new Map<string, { list: PeriodInfo[]; ready: boolean }>()
 
 // 案件の「期」の切り替え（1期・2期…）と、期の追加。いま開いているページ（予実管理・発注など）のまま期だけ切り替える
-export default function PeriodSwitcher({ projectId, pageHref, variant }: { projectId: string; pageHref: string; variant: 'side' | 'top' }) {
+export default function PeriodSwitcher({ projectId, pageHref, isAll, variant }: { projectId: string; pageHref: string; isAll: boolean; variant: 'side' | 'top' }) {
   const router = useRouter()
   const [state, setState] = useState(cache.get(projectId) ?? null)
   const [adding, setAdding] = useState(false)
@@ -30,8 +30,11 @@ export default function PeriodSwitcher({ projectId, pageHref, variant }: { proje
   return (
     <>
       <div className={side ? 'mt-3 flex flex-wrap items-center gap-1.5' : 'flex gap-1.5 px-3 pb-2 overflow-x-auto no-scrollbar items-center'}>
+        {grouped && (
+          <button onClick={() => { if (!isAll) router.push(`/pjb/${projectId}/all`) }} className={chip(isAll)} title="全期の合計ダッシュボード">全期</button>
+        )}
         {grouped && state.list.map(p => (
-          <button key={p.id} onClick={() => { if (p.id !== projectId) router.push(`/pjb/${p.id}${pageHref}`) }} className={chip(p.id === projectId)}
+          <button key={p.id} onClick={() => { if (isAll || p.id !== projectId) router.push(`/pjb/${p.id}${isAll ? '' : pageHref}`) }} className={chip(!isAll && p.id === projectId)}
             title={p.sales_month ? `売上計上月 ${p.sales_month.slice(0, 7).replace('-', '年')}月` : '売上計上月は未設定'}>
             {periodLabelOf(p) || '期'}
           </button>

@@ -484,9 +484,10 @@ function GroupCard({ members }: { members: ProjectCardData[] }) {
     <div className={`rounded-xl border bg-white p-4 ${over ? 'border-rose-300' : 'border-slate-200'}`}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
-          <div className="text-[15px] font-semibold text-slate-900 truncate">{first.project.name}</div>
+          <Link href={`/pjb/${first.project.id}/all`} className="block text-[15px] font-semibold text-slate-900 truncate hover:underline">{first.project.name}</Link>
           <span className="inline-block mt-1 text-[12px] px-2 py-0.5 rounded-full border border-slate-200 bg-white text-slate-600">{first.business}</span>
           <span className="inline-block mt-1 ml-1.5 text-[12px] px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-600">{members.length}期</span>
+          <Link href={`/pjb/${first.project.id}/all`} className="inline-block mt-1 ml-1.5 text-[12px] text-blue-700 hover:underline">全期のダッシュボード ›</Link>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {over && <Badge tone="danger">超過</Badge>}

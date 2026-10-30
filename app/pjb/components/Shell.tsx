@@ -69,7 +69,7 @@ export default function Shell({
   projectId: string
   projectName?: string
   projectStatus?: ProjectStatus
-  active: typeof TABS[number]['key']
+  active: typeof TABS[number]['key'] | 'all'   // 'all' は全期の合計ダッシュボード
   wide?: boolean
   children: React.ReactNode
   onQuickAdded?: () => void
@@ -147,6 +147,7 @@ export default function Shell({
   }, [router, pathname])
 
   const activeHref = TABS.find(t => t.key === active)?.href ?? ''
+  const isAll = active === 'all'
 
   if (!checked) {
     return <div className="min-h-screen flex items-center justify-center text-sm text-slate-400">読み込み中…</div>
@@ -176,7 +177,7 @@ export default function Shell({
             {name && <span className="text-[12px] font-normal text-emerald-100/50 mt-0.5 whitespace-nowrap">✎ 編集</span>}
           </div>
           <div className="mt-2">{statusSelect}</div>
-          <PeriodSwitcher projectId={projectId} pageHref={activeHref} variant="side" />
+          <PeriodSwitcher projectId={projectId} pageHref={activeHref} isAll={isAll} variant="side" />
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-3">
           {NAV_GROUPS.map(group => (
@@ -224,7 +225,7 @@ export default function Shell({
           <button onClick={() => undoH?.redo()} disabled={!undoH?.canRedo} aria-label="やり直す" className="px-1.5 text-[17px] text-slate-500 disabled:opacity-25">↷</button>
           {statusSelect}
         </div>
-        <PeriodSwitcher projectId={projectId} pageHref={activeHref} variant="top" />
+        <PeriodSwitcher projectId={projectId} pageHref={activeHref} isAll={isAll} variant="top" />
         <nav className="flex gap-1.5 px-3 pb-2 overflow-x-auto no-scrollbar">
           {TABS.map(t => (
             <Link
