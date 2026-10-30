@@ -8,7 +8,7 @@ import Shell from '../../components/Shell'
 import PjBudgetKpis from '../../components/PjBudgetKpis'
 import { KpiCard, StatePill, SectionTitle, EmptyState, InlineAmount, InlineText, MoneyInput, isCommitEnter } from '../../components/ui'
 import { useProjectData, findOrCreateVendor } from '@/lib/pjb/useProjectData'
-import { summarizeCategory, summarizeProject, categorySales } from '@/lib/pjb/calc'
+import { summarizeCategory, summarizeProject, categorySales, orderProgress } from '@/lib/pjb/calc'
 import { logActivity } from '@/lib/pjb/activity'
 import { formatYen, formatSignedYen, formatPercent, formatDate } from '@/lib/pjb/format'
 import { createOrder, updateOrderAmount, updateOrderStatus, updateOrderTitle, updateOrderVendor, markOrderPlaced, updateOrderPaymentSchedule, markOrderPaid, deleteOrder } from '@/lib/pjb/orders'
@@ -30,6 +30,21 @@ type EditableField = 'original_budget'
 
 // 0円はうすく表示して、値のある行が目立つようにする
 const zeroMute = (v: number, tone: string) => (v === 0 ? 'text-slate-300' : tone)
+
+// 当初予算との差額（実行費用 − 当初予算）。実行費用が未入力（0）の項目は、減ったように見えないよう「—」にする
+const diffFromOriginal = (s: CategorySummary): number | null => (s.effectiveBudget === 0 ? null : s.effectiveBudget - s.category.original_budget)
+const diffTone = (d: number) => (d > 0 ? 'text-rose-600' : d < 0 ? 'text-emerald-600' : 'text-slate-400')
+
+// 発注のマーク：✓ 発注済／◐ 一部発注／○ 未発注（金額は、行を開いた中と発注管理で見る）
+function OrderMark({ orders }: { orders: Order[] }) {
+  const p = orderProgress(orders)
+  const cfg = {
+    done: { mark: '✓', label: '発注済', cls: 'text-emerald-700' },
+    partial: { mark: '◐', label: '一部発注', cls: 'text-amber-700' },
+    none: { mark: '○', label: '未発注', cls: 'text-slate-400' },
+  }[p]
+  return <span className={`inline-flex items-center gap-1 whitespace-nowrap ${cfg.cls}`}><span className="text-[14px] leading-none">{cfg.mark}</span><span className="text-[13px]">{cfg.label}</span></span>
+}
 
 export default function BudgetPage() {
   const { id } = useParams<{ id: string }>()
@@ -135,11 +150,8 @@ export default function BudgetPage() {
                   <Row label="当初予算合計" value={formatYen(list.reduce((s, c) => s + c.category.original_budget, 0))} />
                   <Row label="実行費用合計" value={formatYen(list.reduce((s, c) => s + c.effectiveBudget, 0))} />
                   <Row
-                    label="当初予算からの増減"
-                    value={formatSignedYen(
-                      list.reduce((s, c) => s + c.effectiveBudget, 0)
-                      - list.reduce((s, c) => s + c.category.original_budget, 0)
-                    )}
+                    label="当初予算との差額（実行費用が未入力の項目を除く）"
+                    value={formatSignedYen(list.reduce((t, c) => t + (diffFromOriginal(c) ?? 0), 0))}
                     strong
                   />
                 </div>
@@ -152,10 +164,8 @@ export default function BudgetPage() {
                       <th className="px-3 py-2.5 font-semibold whitespace-nowrap">項目</th>
                       <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">当初予算</th>
                       <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">実行費用</th>
-                      <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">発注済</th>
-                      <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">未発注予定</th>
-                      <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">着地見込</th>
-                      <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">残予算</th>
+                      <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">当初との差額</th>
+                      <th className="px-3 py-2.5 font-semibold whitespace-nowrap">発注</th>
                       <th className="px-3 py-2.5 font-semibold whitespace-nowrap">状態</th>
                     </tr>
                   </thead>
@@ -175,15 +185,18 @@ export default function BudgetPage() {
                           <td className={`px-3 py-3 text-right tabular-nums font-bold ${zeroMute(s.effectiveBudget, 'text-slate-900')}`}>
                             {formatYen(s.effectiveBudget)}
                           </td>
-                          <td className={`px-3 py-3 text-right tabular-nums ${zeroMute(s.orderedAmount, 'text-slate-800')}`}>{formatYen(s.orderedAmount)}</td>
-                          <td className={`px-3 py-3 text-right tabular-nums ${zeroMute(s.unorderedPlanned, 'text-slate-600')}`}>{formatYen(s.unorderedPlanned)}</td>
-                          <td className={`px-3 py-3 text-right tabular-nums font-semibold ${zeroMute(s.landingForecast, 'text-slate-900')}`}>{formatYen(s.landingForecast)}</td>
-                          <td className={`px-3 py-3 text-right tabular-nums font-semibold ${s.variance < 0 ? 'text-rose-600' : zeroMute(s.variance, 'text-emerald-600')}`}>{formatSignedYen(s.variance)}</td>
-                          <td className="px-3 py-3"><StatePill state={s.state} /></td>
+                          <td className="px-3 py-3 text-right tabular-nums font-semibold">
+                            {(() => { const d = diffFromOriginal(s); return d === null ? <span className="text-slate-300" title="実行費用が未入力です">—</span> : <span className={diffTone(d)}>{formatSignedYen(d)}</span> })()}
+                          </td>
+                          <td className="px-3 py-3"><OrderMark orders={orders.filter(o => o.category_id === s.category.id)} /></td>
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            <StatePill state={s.state} />
+                            {s.variance < 0 && <span className="ml-2 text-[12px] font-semibold text-rose-600 tabular-nums" title="着地見込が実行費用を超えている金額">{formatSignedYen(s.variance)}</span>}
+                          </td>
                         </tr>
                         {expanded.has(s.category.id) && (
                           <tr className="border-b border-slate-100">
-                            <td colSpan={8} className="bg-slate-50/60 px-6 py-4">
+                            <td colSpan={6} className="bg-slate-50/60 px-6 py-4">
                               <CategoryBreakdown
                                 orders={orders.filter(o => o.category_id === s.category.id)}
                                 vendors={vendors}
@@ -207,13 +220,11 @@ export default function BudgetPage() {
                       <td className="px-3 py-3 text-right tabular-nums font-bold text-slate-900">
                         {formatYen(list.reduce((s, c) => s + c.effectiveBudget, 0))}
                       </td>
-                      <td colSpan={3}></td>
-                      <td className="px-3 py-3 text-right tabular-nums font-bold text-blue-700 whitespace-nowrap" colSpan={2}>
-                        当初予算からの増減 {formatSignedYen(
-                          list.reduce((s, c) => s + c.effectiveBudget, 0)
-                          - list.reduce((s, c) => s + c.category.original_budget, 0)
-                        )}
+                      <td className="px-3 py-3 text-right tabular-nums font-bold whitespace-nowrap" title="実行費用が未入力の項目は除いた合計">
+                        {formatSignedYen(list.reduce((t, c) => t + (diffFromOriginal(c) ?? 0), 0))}
+                        <div className="text-[11px] font-normal text-slate-400">実行費用が未入力の項目を除く</div>
                       </td>
+                      <td colSpan={2}></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -506,12 +517,12 @@ function MobileCard({
       </div>
       <EditableRow label="当初予算" value={s.category.original_budget} onCommit={v => onCommit(s.category, 'original_budget', v)} />
       <Row label="実行費用" value={formatYen(s.effectiveBudget)} strong />
-      <Row label="発注済" value={formatYen(s.orderedAmount)} />
-      <Row label="未発注予定" value={formatYen(s.unorderedPlanned)} muted />
-      <div className="h-px bg-slate-100 my-1.5" />
-      <Row label="着地見込" value={formatYen(s.landingForecast)} strong />
-      <Row label="残予算" value={formatSignedYen(s.variance)} tone={s.variance < 0 ? 'danger' : 'good'} strong />
-      <div className="text-[12px] text-slate-400 mt-1">消化率 {formatPercent(s.consumptionRate)}</div>
+      {(() => { const d = diffFromOriginal(s); return <Row label="当初との差額" value={d === null ? '—' : formatSignedYen(d)} muted={d === null} /> })()}
+      <div className="flex items-center justify-between py-0.5 text-[13.5px]">
+        <span className="text-slate-500">発注</span>
+        <OrderMark orders={orders} />
+      </div>
+      {s.variance < 0 && <Row label="予算超過（着地見込−実行費用）" value={formatSignedYen(s.variance)} tone="danger" strong />}
       {expanded && (
         <div className="mt-3 pt-3 border-t border-slate-100">
           <CategoryBreakdown

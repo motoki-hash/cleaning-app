@@ -9,6 +9,14 @@ const PLANNED_STATUSES = new Set(['見積依頼中', '見積受領', '発注待�
 const APPROVED_ADDITIONAL_STATUSES = new Set(['承認済', '発注済', '完了'])
 const PENDING_ADDITIONAL_STATUSES = new Set(['検討中', '見積待ち', '承認待ち'])
 
+// 項目の発注の進み具合：発注が1件もない／全部が見積段階 → none、発注済と未発注が混ざる → partial、すべて発注済以降 → done
+export type OrderProgress = 'none' | 'partial' | 'done'
+export function orderProgress(orders: Order[]): OrderProgress {
+  const ordered = orders.filter(o => ORDERED_STATUSES.has(o.status)).length
+  if (ordered === 0) return 'none'
+  return ordered === orders.length ? 'done' : 'partial'
+}
+
 // 着地見込 = 発注済 + 未発注予定 + 追加工事(承認済以降) − 確定VE
 export function summarizeCategory(
   category: BudgetCategory,
