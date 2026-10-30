@@ -6,6 +6,7 @@ import { BUSINESSES, STAFF_FIELDS, normalizeBusiness, type StaffKey } from '@/li
 import { fiscalYearOf, currentFiscal, dateToMonthInput, monthInputToDate } from '@/lib/pjb/fiscal'
 import { logActivity } from '@/lib/pjb/activity'
 import { isCommitEnter } from './ui'
+import { ProjectAssignees } from './AssigneeEditor'
 import type { Project } from '@/lib/pjb/types'
 
 // 案件の基本情報：事業・売上計上月・担当者（進行管理／品質管理／設計会社／施工会社／クライアント）。すべて任意で、いつでも編集できる
@@ -46,13 +47,21 @@ export default function ProjectInfoPanel({ project, onChanged }: { project: Proj
 
   const save = async (patch: Partial<Project>, label: string, before: unknown, after: unknown) => {
     const { error } = await supabase.from('pjb_projects').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', project.id)
-    if (error) { alert(`保存に失敗しました：${error.message}（SQLパッチ017・018を実行していない場合は、先に実行してください）`); return }
+    if (error) { alert(`保存に失敗しました：${error.message}（SQLパッチ017・018・021を実行していない場合は、先に実行してください）`); return }
     await logActivity({ projectId: project.id, action: 'update', entityType: 'project', entityLabel: label, before: String(before ?? ''), after: String(after ?? '') })
     onChanged()
   }
 
   const fy = fiscalYearOf(project.sales_month)
   const nowFy = currentFiscal().year
+
+  const staffField = (f: typeof STAFF_FIELDS[number]) => (
+    <Field
+      key={f.key} label={f.label} value={(project[f.key as StaffKey] as string | null | undefined) ?? ''}
+      list={f.kind === 'person' ? 'pjb-people' : 'pjb-companies'}
+      onSave={v => save({ [f.key]: v.trim() || null } as Partial<Project>, f.label, project[f.key as StaffKey], v.trim())}
+    />
+  )
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 mb-5">
@@ -79,13 +88,37 @@ export default function ProjectInfoPanel({ project, onChanged }: { project: Proj
           hint={fy !== null ? `${fy}年度${fy === nowFy ? '（今期売上）' : ''}` : undefined} hintTone={fy === nowFy ? 'accent' : undefined}
           onSave={v => save({ sales_month: monthInputToDate(v) }, '売上計上月', project.sales_month, monthInputToDate(v))}
         />
-        {STAFF_FIELDS.map(f => (
+        {STAFF_FIELDS.filter(f => f.key !== 'pm_name' && f.key !== 'qa_name').map(f => staffField(f))}
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-slate-100">
+        <div className="text-[13px] font-semibold text-slate-700 mb-2">社内の担当者 <span className="font-normal text-slate-400">（役割ごとに複数名OK。リソース管理の負荷計算に使います）</span></div>
+        <ProjectAssignees
+          project={project} onChanged={onChanged}
+          fallback={<div className="grid gap-3 sm:grid-cols-2">{STAFF_FIELDS.filter(f => f.key === 'pm_name' || f.key === 'qa_name').map(f => staffField(f))}</div>}
+        />
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-slate-100">
+        <div className="text-[13px] font-semibold text-slate-700 mb-2">リソース管理用 <span className="font-normal text-slate-400">（任意。工程・OPEN日はスケジュールから自動で取ります）</span></div>
+        <div className="grid gap-3 sm:grid-cols-3">
           <Field
-            key={f.key} label={f.label} value={(project[f.key as StaffKey] as string | null | undefined) ?? ''}
-            list={f.kind === 'person' ? 'pjb-people' : 'pjb-companies'}
-            onSave={v => save({ [f.key]: v.trim() || null } as Partial<Project>, f.label, project[f.key as StaffKey], v.trim())}
+            label="ステイ期間の開始月" type="month" value={dateToMonthInput(project.stay_start)}
+            onSave={v => save({ stay_start: monthInputToDate(v) }, 'ステイ期間の開始月', project.stay_start, monthInputToDate(v))}
           />
-        ))}
+          <Field
+            label="ステイ期間の終了月" type="month" value={dateToMonthInput(project.stay_end)}
+            onSave={v => save({ stay_end: monthInputToDate(v) }, 'ステイ期間の終了月', project.stay_end, monthInputToDate(v))}
+          />
+          <Field
+            label="案件別調整係数（空欄＝1.0）" value={project.load_factor == null ? '' : String(project.load_factor)}
+            onSave={v => {
+              const t = v.trim()
+              if (t !== '' && (isNaN(Number(t)) || Number(t) < 0)) { alert('0以上の数字で入力してください（例：1.2）'); return }
+              save({ load_factor: t === '' ? null : Number(t) }, '案件別調整係数', project.load_factor, t)
+            }}
+          />
+        </div>
       </div>
     </div>
   )

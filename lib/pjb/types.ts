@@ -20,6 +20,9 @@ export type Project = {
   contractor_company?: string | null
   sales_month?: string | null
   client_name?: string | null
+  load_factor?: number | null
+  stay_start?: string | null
+  stay_end?: string | null
   operator_name?: string | null
   address?: string | null
   schedule_base_date?: string | null

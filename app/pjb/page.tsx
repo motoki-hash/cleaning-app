@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { authState } from '@/lib/pjb/authState'
+import { syncAssignmentsFromNames } from '@/lib/pjb/staff'
 import { DEFAULT_CATEGORIES, BUSINESSES, UNCLASSIFIED, STAFF_FIELDS } from '@/lib/pjb/constants'
 import { fiscalYearOf, currentFiscal, monthInputToDate } from '@/lib/pjb/fiscal'
 import { useProjectCards, type ProjectCardData } from '@/lib/pjb/useProjectCards'
@@ -488,6 +489,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
       DEFAULT_CATEGORIES.map(c => ({ project_id: data.id, ...c }))
     )
     if (catErr) { setError(`カテゴリー作成に失敗しました：${catErr.message}`); setSaving(false); return }
+    await syncAssignmentsFromNames(data.id, { 進行管理: staff.pm_name, 品質管理: staff.qa_name })
     onCreated(data.id)
   }
 
