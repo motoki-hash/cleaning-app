@@ -130,10 +130,13 @@ export function summarizeProject(
   const bnsGrossProfit = bnsSell - bnsCost
   const grossMargin = bnsSell > 0 ? bnsGrossProfit / bnsSell : 0
 
-  // 実行費用（自動）= BNS外予算の当初予算の合計 + BNS予算の売上の合計 + BNSキャッシュ持ち出し
-  //   （持ち出しは売上・利益にはならないが、BNSが出す分として加える）
-  const externalBudget = categories.filter(c => c.group_name === 'BNS外予算').reduce((s, c) => s + (c.original_budget || 0), 0)
-  const executionBudget = externalBudget + bnsSell + cashOutTotal
+  // 実行費用（自動）= BNS外予算の実行費用の合計 + BNS予算の原価の合計 + BNS利益 + 設計デザイン費用(社内) + BNSキャッシュ持ち出し
+  //   BNS利益・設計デザイン費用(社内)は、原価に含めない項目なので、その項目の売上（＝そのまま利益になる額）を使う
+  const externalExecution = summaries.filter(c => c.category.group_name === 'BNS外予算').reduce((s, c) => s + c.effectiveBudget, 0)
+  const bnsSalesOf = (name: string) => bnsCategories.filter(c => c.name === name).reduce((s, c) => s + categorySales(c, salesItems), 0)
+  const bnsProfitItem = bnsSalesOf('BNS利益')
+  const inHouseDesign = bnsSalesOf('設計デザイン費用(社内)')
+  const executionBudget = externalExecution + bnsCost + bnsProfitItem + inHouseDesign + cashOutTotal
   // PJ総予算は手入力（最初に決まった予算）。実行費用との差が±1%以内かを予実管理で見る
   const totalBudget = project.total_budget || 0
   const budgetGap = totalBudget - executionBudget

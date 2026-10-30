@@ -31,7 +31,7 @@ export default function PjBudgetKpis({ project, totals, onChanged }: { project: 
         label="PJ総予算（手入力）" value={totals.totalBudget} onCommit={save} formulaKey={`project:${project.id}:total`}
         sub="最初に決まった予算を入力します（タップして編集）"
       />
-      <KpiCard label="実行費用（自動）" value={formatYen(totals.executionBudget)} sub="BNS外予算の当初予算合計 ＋ BNS予算の売上合計 ＋ BNSキャッシュ持ち出し" />
+      <KpiCard label="実行費用（自動）" value={formatYen(totals.executionBudget)} sub="BNS外予算の実行費用 ＋ BNS予算の原価 ＋ BNS利益 ＋ 設計デザイン費用(社内) ＋ 持ち出し" />
       <KpiCard label="予実の差額（総予算−実行費用）" value={status === 'unset' ? '—' : formatSignedYen(totals.budgetGap)} tone={tone} />
       <KpiCard label="予実の差率（目標 ±1%以内）" value={totals.budgetGapRate === null ? '—' : formatPercent(totals.budgetGapRate, 2)} tone={tone} sub={verdict} />
     </>

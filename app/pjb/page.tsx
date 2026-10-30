@@ -193,7 +193,7 @@ export default function PjbHomePage() {
             <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
               <KpiCard label="PJ総予算（合計・手入力）" value={formatYen(agg.totalBudget)} sub={`入力済 ${agg.ratedCount}案件${agg.unsetCount > 0 ? `／未入力 ${agg.unsetCount}案件（除く）` : ''}`} />
-              <KpiCard label="実行費用（合計・自動）" value={formatYen(agg.execution)} sub="BNS外予算 ＋ BNS売上 ＋ 持ち出し" />
+              <KpiCard label="実行費用（合計・自動）" value={formatYen(agg.execution)} sub="BNS外実行費用 ＋ BNS原価 ＋ 利益 ＋ 社内設計 ＋ 持ち出し" />
               <KpiCard label="予実の差額（総予算−実行費用）" value={agg.ratedCount > 0 ? formatSignedYen(agg.gap) : '—'} tone={rateTone} />
               <KpiCard
                 label="予実の差率（対総予算）"
