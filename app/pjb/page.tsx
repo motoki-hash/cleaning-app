@@ -55,13 +55,23 @@ export default function PjbHomePage() {
     })
   }, [router])
 
+  // 予算超過の判定。期のある案件は、期ごとではなく全期を合計して（PJ全体で）超過しているかで見る
+  const isOver = useMemo(() => {
+    const groupRemaining = new Map<string, number>()
+    for (const c of cards) {
+      const g = c.project.group_id
+      if (g) groupRemaining.set(g, (groupRemaining.get(g) ?? 0) + c.remaining)
+    }
+    return (c: ProjectCardData) => (c.project.group_id ? (groupRemaining.get(c.project.group_id) ?? 0) : c.remaining) < 0
+  }, [cards])
+
   const filtered = useMemo(() => {
     const list = cards.filter(c => {
       if (businessFilter !== 'すべて' && c.business !== businessFilter) return false
       if (query && !c.project.name.includes(query)) return false
       if (filter === '進行中') return c.project.status === '進行中'
       if (filter === '完了') return c.project.status === '完了'
-      if (filter === '予算超過') return c.remaining < 0
+      if (filter === '予算超過') return isOver(c)
       if (filter === '要対応あり') return c.alertCount > 0
       if (filter === '今期売上') return fiscalYearOf(c.project.sales_month) === currentFiscal().year
       return true
@@ -76,7 +86,7 @@ export default function PjbHomePage() {
       margin: (a, b) => margin(b) - margin(a),
     }
     return list.sort(cmp[sortKey])
-  }, [cards, query, filter, businessFilter, sortKey])
+  }, [cards, isOver, query, filter, businessFilter, sortKey])
 
   // 期のある案件（group_idが同じ）は、1枚のカードにまとめる。絞り込みに合う期が1つでもあれば表示し、合計は全期で出す
   const units = (() => {
@@ -104,7 +114,8 @@ export default function PjbHomePage() {
     active: cards.filter(c => c.project.status === '進行中').length,
     budget: cards.filter(c => c.project.status === '進行中').reduce((s, c) => s + c.totalBudget, 0),
     alert: openCards.filter(c => c.alertCount > 0).length,
-    over: openCards.filter(c => c.remaining < 0).length,
+    // 期のある案件は、全期で1件と数える
+    over: new Set(openCards.filter(isOver).map(c => c.project.group_id || c.project.id)).size,
     done: cards.filter(c => c.project.status === '完了').length,
   }
   // 全案件（または進行中のみ）の集計。予実管理のKPIは「PJ総予算（手入力）と実行費用（自動）の差が、総予算の±1%以内」
@@ -179,7 +190,7 @@ export default function PjbHomePage() {
             />
             <SummaryTile
               label="予算超過" value={`${summary.over}件`} tone={summary.over > 0 ? 'danger' : 'default'}
-              sub="実行費用がPJ総予算を超えている案件" selected={filter === '予算超過'} onClick={() => toggleFilter('予算超過')}
+              sub="実行費用がPJ総予算を超えている案件（期のある案件は全期の合計）" selected={filter === '予算超過'} onClick={() => toggleFilter('予算超過')}
             />
             <SummaryTile
               label="完了" value={`${summary.done}件`} sub="完了にした案件"
@@ -480,7 +491,7 @@ function GroupCard({ members }: { members: ProjectCardData[] }) {
   const first = members[0]
   const sum = (f: (c: ProjectCardData) => number) => members.reduce((s, c) => s + f(c), 0)
   const remaining = sum(c => c.remaining)
-  const over = members.some(c => c.remaining < 0)
+  const over = remaining < 0
   const alerts = sum(c => c.alertCount)
   const nowFy = currentFiscal().year
   const kpi = hasBudgetKpi(first.business)
@@ -534,7 +545,6 @@ function GroupCard({ members }: { members: ProjectCardData[] }) {
               <span className="ml-auto tabular-nums text-slate-700">{formatYen(c.executionBudget)}</span>
               {st === 'ok' && <Badge tone="good">予実1%以内</Badge>}
               {(st === 'over' || st === 'under') && <Badge tone={st === 'over' ? 'danger' : 'warning'}>予実1%超</Badge>}
-              {c.remaining < 0 && <Badge tone="danger">超過</Badge>}
             </Link>
           )
         })}
