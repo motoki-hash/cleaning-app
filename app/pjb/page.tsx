@@ -35,7 +35,7 @@ export default function PjbHomePage() {
   const [businessFilter, setBusinessFilter] = useState<string>('すべて')
   const [sortKey, setSortKey] = useState<SortKey>('newest')
   const [groupByBusiness, setGroupByBusiness] = useState(false)
-  const [scope, setScope] = useState<'all' | 'active'>('all')
+  const [scope, setScope] = useState<'all' | 'active' | 'fy'>('fy')
   const [showAgg, setShowAgg] = useState(true)
   useEffect(() => {
     try { if (localStorage.getItem('pjb_home_agg') === 'closed') setShowAgg(false) } catch {}
@@ -109,7 +109,11 @@ export default function PjbHomePage() {
   }
   // 全案件（または進行中のみ）の集計。予実管理のKPIは「PJ総予算（手入力）と実行費用（自動）の差が、総予算の±1%以内」
   // 対象は illi Stays & Hotels の案件だけ。総予算が未入力（0）の案件は、判定の対象にしない
-  const pool = scope === 'active' ? cards.filter(c => c.project.status === '進行中') : cards
+  // 今期売上＝売上計上月が今期（4月始まり）の案件。期ごとに売上月が違うので、期（1期・2期…）単位で判定する
+  const nowFy = currentFiscal().year
+  const pool = scope === 'active' ? cards.filter(c => c.project.status === '進行中')
+    : scope === 'fy' ? cards.filter(c => fiscalYearOf(c.project.sales_month) === nowFy) : cards
+  const noSalesMonth = cards.filter(c => !c.project.sales_month).length
   const agg = (() => {
     const rated = pool.filter(c => hasBudgetKpi(c.business) && c.totalBudget > 0)
     const totalBudget = rated.reduce((s, c) => s + c.totalBudget, 0)
@@ -128,7 +132,7 @@ export default function PjbHomePage() {
       unsetCount: pool.filter(c => hasBudgetKpi(c.business)).length - rated.length,
     }
   })()
-  // 事業別の売上・原価・利益（上の「全案件／進行中のみ」の切り替えに合わせる）
+  // 事業別の売上・原価・利益（上の「今期売上／進行中のみ／全案件」の切り替えに合わせる）
   const bizStats = businessNames
     .map(name => {
       const list = pool.filter(c => c.business === name)
@@ -191,7 +195,7 @@ export default function PjbHomePage() {
           <div className="flex items-center justify-between mb-2 gap-2">
             <button onClick={toggleAgg} className="flex items-center gap-2 text-left" aria-expanded={showAgg}>
               <span className={`text-slate-400 text-[11px] transition-transform ${showAgg ? 'rotate-90' : ''}`}>▶</span>
-              <h2 className="text-[16px] font-bold text-slate-900 flex items-center gap-2"><span className="w-1 h-4 rounded-sm bg-blue-600" />全案件サマリー</h2>
+              <h2 className="text-[16px] font-bold text-slate-900 flex items-center gap-2"><span className="w-1 h-4 rounded-sm bg-blue-600" />{scope === 'fy' ? `今期（${nowFy}年度）サマリー` : scope === 'active' ? '進行中サマリー' : '全案件サマリー'}</h2>
               {!showAgg && (
                 <span className="text-[13px] text-slate-500 ml-2">
                   予実差率 <b className={rateTone === 'good' ? 'text-emerald-700' : rateTone === 'danger' ? 'text-rose-700' : rateTone === 'warning' ? 'text-amber-700' : 'text-slate-500'}>{agg.totalBudget > 0 ? formatPercent(agg.rate, 2) : '—'}</b>（illi・目標±1%以内）／BNS粗利益 <b>{formatYen(agg.profit)}</b>
@@ -200,7 +204,7 @@ export default function PjbHomePage() {
             </button>
             {showAgg && (
               <div className="flex gap-0.5 rounded-lg bg-slate-200 p-0.5 text-[13px]">
-                {([['all', '全案件'], ['active', '進行中のみ']] as const).map(([k, label]) => (
+                {([['fy', '今期売上'], ['active', '進行中のみ'], ['all', '全案件']] as const).map(([k, label]) => (
                   <button key={k} onClick={() => setScope(k)}
                     className={`px-3 py-1 rounded-md ${scope === k ? 'bg-white text-blue-700 shadow-sm font-medium' : 'text-slate-600'}`}>{label}</button>
                 ))}
@@ -209,7 +213,10 @@ export default function PjbHomePage() {
           </div>
           {showAgg && (
             <>
-            <div className="text-[12.5px] text-slate-500 mb-2">予実管理（±1%）は、{BUDGET_KPI_BUSINESS} の案件だけが対象です</div>
+            <div className="text-[12.5px] text-slate-500 mb-2">
+              {scope === 'fy' && <>売上計上月が{nowFy}年4月〜{nowFy + 1}年3月の案件（期ごと）の集計です。{noSalesMonth > 0 && <>売上計上月が未設定の{noSalesMonth}件は含まれません。</>}<br /></>}
+              予実管理（±1%）は、{BUDGET_KPI_BUSINESS} の案件だけが対象です
+            </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
               <KpiCard label="PJ総予算（合計・手入力）" value={formatYen(agg.totalBudget)} sub={`入力済 ${agg.ratedCount}案件${agg.unsetCount > 0 ? `／未入力 ${agg.unsetCount}案件（除く）` : ''}`} />
               <KpiCard label="実行費用（合計・自動）" value={formatYen(agg.execution)} sub="BNS外実行費用 ＋ BNS原価 ＋ 利益 ＋ 社内設計" />
