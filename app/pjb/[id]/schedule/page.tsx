@@ -361,7 +361,12 @@ export default function SchedulePage() {
       if (error || !created) throw new Error(error?.message || 'コピーに失敗しました')
       const dayShift = kind === 'preopen' && project.open_date && target.open_date
         ? diffDays(parseYmd(project.open_date), parseYmd(target.open_date)) : 0
-      await copyContent(kindTasks, kindBars, { projectId: targetId, scheduleId: created.id, dayShift })
+      try {
+        await copyContent(kindTasks, kindBars, { projectId: targetId, scheduleId: created.id, dayShift })
+      } catch (err) {
+        await supabase.from('pjb_schedules').delete().eq('id', created.id)
+        throw err
+      }
       alert(`「${periodName(target.name, periodLabelOf(target))}」に、「${name}」としてコピーしました。`)
     } catch (e) {
       alert(e instanceof Error ? e.message : 'コピーに失敗しました')
@@ -380,7 +385,13 @@ export default function SchedulePage() {
       const nextOrder = ((existing || []).reduce((m: number, r: { sort_order: number }) => Math.max(m, r.sort_order), -1)) + 1
       const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind: toKind, name, sort_order: nextOrder }).select('id').single()
       if (error || !created) throw new Error(error?.message || 'コピーに失敗しました')
-      await copyContent(kindTasks, kindBars, { projectId: id, scheduleId: created.id, dayShift: 0, kind: toKind, mapWeeks: convertBarWeeks(pos) })
+      try {
+        await copyContent(kindTasks, kindBars, { projectId: id, scheduleId: created.id, dayShift: 0, kind: toKind, mapWeeks: convertBarWeeks(pos) })
+      } catch (err) {
+        // 途中で失敗したら、できかけの空の版を残さない
+        await supabase.from('pjb_schedules').delete().eq('id', created.id)
+        throw err
+      }
       // OPEN予定の週は、コピー先が未設定のときだけ、換算して入れる
       const fromOpen = kind === 'rough' ? project.schedule_open_week : project.zero_open_week
       const toOpen = toKind === 'rough' ? project.schedule_open_week : project.zero_open_week
