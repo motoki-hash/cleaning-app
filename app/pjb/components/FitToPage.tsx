@@ -1,13 +1,21 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 // A3横（余白10mm）の印字可能な大きさ（96dpi換算）。幅は1512px、高さは1047px（少し余裕を見る）
 const PAGE_W = 1512
 const PAGE_H = 1020
+// 画面のプレビュー用：A3横の用紙そのもの（420×297mm）と余白10mm（96dpi換算）
+export const PAPER_W = 1587
+export const PAPER_H = 1123
+const MARGIN = 38
+
+// true のとき、画面に見える用紙（余白つき）として描く。印刷用の（画面外に置く）描画は、そのまま残る
+export const PrintPreviewContext = createContext(false)
 
 // 画面では見えない位置に置いて高さを測り、印刷時は縮尺（CSS zoom）をかけて必ず1ページに収める。
 export default function FitToPage({ children }: { children: React.ReactNode }) {
+  const preview = useContext(PrintPreviewContext)
   const ref = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
 
@@ -33,6 +41,20 @@ export default function FitToPage({ children }: { children: React.ReactNode }) {
     }, 400)
     return () => clearTimeout(t)
   }, [children])
+
+  // プレビュー：高さの測定用（画面外）と、印刷と同じ縮尺をかけた用紙を並べる
+  if (preview) {
+    return (
+      <>
+        <div aria-hidden className="absolute -left-[9999px] top-0 invisible" style={{ width: PAGE_W }}>
+          <div ref={ref} className="text-slate-900">{children}</div>
+        </div>
+        <div className="bg-white text-slate-900 shadow-lg ring-1 ring-slate-300 overflow-hidden" style={{ width: PAPER_W, height: PAPER_H, padding: MARGIN }}>
+          <div style={{ width: PAGE_W / scale, transform: `scale(${scale})`, transformOrigin: '0 0' }}>{children}</div>
+        </div>
+      </>
+    )
+  }
 
   return (
     <div

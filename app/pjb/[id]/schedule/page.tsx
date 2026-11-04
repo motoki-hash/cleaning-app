@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import Shell from '../../components/Shell'
 import RoughPrintSheet from './RoughPrintSheet'
 import PreopenPrintSheet from './PreopenPrintSheet'
+import PrintPreviewModal from '../../components/PrintPreviewModal'
 import Gantt, { type GanttBar, type GanttCol } from '../../components/Gantt'
 import { isCommitEnter } from '../../components/ui'
 import { periodName, periodLabelOf } from '@/lib/pjb/periods'
@@ -62,6 +63,7 @@ export default function SchedulePage() {
   const [schedules, setSchedules] = useState<ScheduleSet[]>([])
   const [schedulesReady, setSchedulesReady] = useState(false)   // SQLパッチ010が済んでいるときだけ true
   const [activeIds, setActiveIds] = useState<Partial<Record<ScheduleKind, string>>>({})
+  const [showPreview, setShowPreview] = useState(false)
   const [schedDialog, setSchedDialog] = useState<'add' | 'rename' | 'copyTo' | null>(null)
   useEffect(() => {
     try { const raw = localStorage.getItem(`pjb_sched_active_${id}`); if (raw) setActiveIds(JSON.parse(raw)) } catch {}
@@ -737,6 +739,10 @@ export default function SchedulePage() {
     if (bar) setBarEdit({ mode: 'edit', bar })
   }
 
+  const sheet = kind !== 'preopen'
+    ? <RoughPrintSheet mode={kind} project={project} tasks={kindTasks} bars={kindBars} scheduleName={printName} />
+    : <PreopenPrintSheet project={project} tasks={kindTasks} bars={kindBars} start={previewStart} cols={preopenCols} scheduleName={printName} />
+
   return (
     <Shell projectId={id} projectName={project.name} projectStatus={project.status} active="schedule" wide onQuickAdded={reload}>
       <style>{`@media print { @page { size: A3 landscape; margin: 10mm; } body { background: #fff !important; } }`}</style>
@@ -759,6 +765,7 @@ export default function SchedulePage() {
             ))}
           </div>
         </div>
+        <button onClick={() => setShowPreview(true)} className="hidden sm:block text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">大きくプレビュー</button>
         <button onClick={() => window.print()} className="hidden sm:block text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">印刷／PDF</button>
       </div>
 
@@ -789,9 +796,8 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {kind !== 'preopen'
-        ? <RoughPrintSheet mode={kind} project={project} tasks={kindTasks} bars={kindBars} scheduleName={printName} />
-        : <PreopenPrintSheet project={project} tasks={kindTasks} bars={kindBars} start={previewStart} cols={preopenCols} scheduleName={printName} />}
+      {sheet}
+      {showPreview && <PrintPreviewModal onClose={() => setShowPreview(false)}>{sheet}</PrintPreviewModal>}
       <div className="print:hidden">
 
       {rawNeedsPatch && (
