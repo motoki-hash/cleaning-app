@@ -30,6 +30,7 @@ export type Project = {
   address?: string | null
   schedule_base_date?: string | null
   schedule_open_week?: number | null
+  schedule_open_label?: string | null   // OPEN予定の列に出す文言（空＝OPEN）
   open_date?: string | null
   preopen_start_date?: string | null
   schedule_notes?: string | null

@@ -16,6 +16,11 @@ export const CATEGORY_COLOR: Record<string, string> = {
   '企画・設計': 'blue', '予算・契約': 'blue', '工事': 'green', '是正': 'darkgreen',
   'OPEN準備': 'pink', '検査': 'red', '搬入': 'pink', '撮影': 'pink', '営業': 'pink', '運営': 'pink', 'インフラ': 'blue', '清掃': 'pink',
 }
+// OPEN予定の列に出す文言の候補（空のときは OPEN）
+export const OPEN_LABEL_DEFAULT = 'OPEN'
+export const OPEN_LABEL_PRESETS = ['OPEN', 'グランドオープン', 'プレオープン', 'オープン', '開業', '竣工', '引渡し', '内覧会']
+export const openLabelOf = (p: { schedule_open_label?: string | null }) => (p.schedule_open_label || '').trim() || OPEN_LABEL_DEFAULT
+
 export const CATEGORY_OPTIONS = ['企画・設計', '予算・契約', '工事', 'OPEN準備', 'インフラ', '搬入', '検査', '清掃', '運営', '撮影', '営業', '是正', 'OPEN']
 export const colorForCategory = (c: string) => CATEGORY_COLOR[c] || 'gray'
 

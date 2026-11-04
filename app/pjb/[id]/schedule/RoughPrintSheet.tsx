@@ -1,4 +1,4 @@
-import { BAR_COLORS, DEFAULT_MONTHS, zeroCols, WEEKS_PER_MONTH, roughWeekRange, roughGroups, roughWeekNumbers, fmtMd, barText, WEEKS_PER_MONTH_ZERO, WEEKS_PER_MONTH_CALENDAR, roughBarWeeksExcludingBreaks } from '@/lib/pjb/schedule'
+import { BAR_COLORS, DEFAULT_MONTHS, zeroCols, WEEKS_PER_MONTH, roughWeekRange, roughGroups, roughWeekNumbers, fmtMd, barText, WEEKS_PER_MONTH_ZERO, WEEKS_PER_MONTH_CALENDAR, roughBarWeeksExcludingBreaks, openLabelOf } from '@/lib/pjb/schedule'
 import { weekBreakInfo } from '@/lib/pjb/holidays'
 import FitToPage from '../../components/FitToPage'
 import type { Project, ScheduleBar, ScheduleKind, ScheduleTask } from '@/lib/pjb/types'
@@ -152,7 +152,7 @@ export default function RoughPrintSheet({
                     position: 'absolute', top: 0, bottom: 0, left: `${((openWeek! - h0) * 100) / HALF_WEEKS}%`, width: `${100 / HALF_WEEKS}%`,
                     background: '#22d3ee', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 10, lineHeight: 1.25, fontWeight: 700, zIndex: 1,
                   }}>
-                    {['O', 'P', 'E', 'N'].map(c => <span key={c}>{c}</span>)}
+                    <span style={{ writingMode: 'vertical-rl', textOrientation: 'upright', letterSpacing: '0.05em' }}>{openLabelOf(project)}</span>
                   </div>
                 )}
               </div>

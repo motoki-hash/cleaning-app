@@ -13,7 +13,7 @@ import { periodName, periodLabelOf } from '@/lib/pjb/periods'
 import { setUndoHandlers, clearUndoHandlers } from '@/lib/pjb/undo'
 import { useProjectData } from '@/lib/pjb/useProjectData'
 import {
-  BAR_COLORS, CATEGORY_OPTIONS, colorForCategory, DEFAULT_MONTHS, MONTH_OPTIONS, roughCols, zeroCols, ROUGH_TEMPLATE, PREOPEN_TEMPLATE, DEFAULT_OPEN_WEEK,
+  BAR_COLORS, CATEGORY_OPTIONS, OPEN_LABEL_PRESETS, openLabelOf, colorForCategory, DEFAULT_MONTHS, MONTH_OPTIONS, roughCols, zeroCols, ROUGH_TEMPLATE, PREOPEN_TEMPLATE, DEFAULT_OPEN_WEEK,
   roughWeekRange, roughGroups, roughWeekNumbers, fmtMd, fmtYmdJp, parseYmd, toYmd, addDays, diffDays, kindLabel, zeroWeekLabel, WEEKS_PER_MONTH, barText, stripDuration, WEEKS_PER_MONTH_ZERO, WEEKS_PER_MONTH_CALENDAR, roughBarWeeksExcludingBreaks, daysExcludingBreaks,
 } from '@/lib/pjb/schedule'
 import { breakInRange, weekBreakInfo } from '@/lib/pjb/holidays'
@@ -545,6 +545,7 @@ export default function SchedulePage() {
       const openWeek = project?.zero_open_week ?? null
       const cols: GanttCol[] = Array.from({ length: zeroColCount }, (_, i) => ({
         top: `第${(i % WEEKS_PER_MONTH) + 1}週`,
+        tag: openWeek === i && project ? openLabelOf(project) : undefined,
         shade: openWeek === i ? 'open' : undefined,
       }))
       const groups = Array.from({ length: months }, (_, m) => ({ label: `${m + 1}ヶ月目`, span: WEEKS_PER_MONTH }))
@@ -562,7 +563,7 @@ export default function SchedulePage() {
         return {
           top: `${weekNos[i]}週`,
           sub: `(${fmtMd(ws)})`,
-          tag: info && openWeek !== i ? info.brk.short : undefined,
+          tag: openWeek === i && project ? openLabelOf(project) : info && openWeek !== i ? info.brk.short : undefined,
           note: `${fmtYmdJp(ws)}〜${fmtMd(we)}${info ? `｜${info.brk.name}` : ''}`,
           shade: openWeek === i ? 'open' : info ? 'break' : undefined,
           partial: info ? [info.from, info.to] : undefined,
@@ -834,6 +835,7 @@ export default function SchedulePage() {
           </label>
         )}
         {kind === 'zero' ? (
+          <>
           <div className="grid gap-1">
             <span className="text-[12px] text-slate-500">OPEN予定（ゼロ工程）</span>
             <select
@@ -845,6 +847,8 @@ export default function SchedulePage() {
               {Array.from({ length: zeroColCount }, (_, i) => <option key={i} value={i}>{zeroWeekLabel(i)}</option>)}
             </select>
           </div>
+          <OpenLabelField project={project} onSave={v => updateProject({ schedule_open_label: v })} />
+          </>
         ) : kind === 'rough' ? (
           <>
             <Field label="1ヶ月目の開始日（基準日）" value={project.schedule_base_date || ''} type="date" onSave={v => updateProject({ schedule_base_date: v || null })} />
@@ -863,6 +867,7 @@ export default function SchedulePage() {
                 </select>
               </div>
             </div>
+            <OpenLabelField project={project} onSave={v => updateProject({ schedule_open_label: v })} />
           </>
         ) : (
           <>
@@ -1073,6 +1078,53 @@ function ScheduleDialog({
         </button>
       </div>
     </Modal>
+  )
+}
+
+// OPEN予定の列に出す文言。候補から選ぶか、「自由入力」で好きな文言にできる（空＝OPEN）
+function OpenLabelField({ project, onSave }: { project: Project; onSave: (v: string | null) => void }) {
+  const current = (project.schedule_open_label || '').trim()
+  const isPreset = current === '' || OPEN_LABEL_PRESETS.includes(current)
+  const [custom, setCustom] = useState(!isPreset)
+  // パッチ023（列の追加）がまだのときは、案内だけ出す
+  if (!('schedule_open_label' in project)) {
+    return (
+      <div className="grid gap-1">
+        <span className="text-[12px] text-slate-500">OPENの列に出す文言</span>
+        <span className="text-[12px] text-amber-700">選べるようにするには、supabase-pj-budget-patch-023.sql を実行してください</span>
+      </div>
+    )
+  }
+  const selectValue = custom ? '__custom' : current || 'OPEN'
+  return (
+    <div className="grid gap-1">
+      <span className="text-[12px] text-slate-500">OPENの列に出す文言</span>
+      <div className="flex items-center gap-1.5">
+        <select
+          value={selectValue}
+          onChange={e => {
+            const v = e.target.value
+            if (v === '__custom') { setCustom(true); return }
+            setCustom(false)
+            onSave(v === 'OPEN' ? null : v)
+          }}
+          className="border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px] bg-white"
+        >
+          {OPEN_LABEL_PRESETS.map(l => <option key={l} value={l}>{l}</option>)}
+          <option value="__custom">自由入力…</option>
+        </select>
+        {custom && (
+          <input
+            defaultValue={isPreset ? '' : current}
+            maxLength={10}
+            placeholder="例）FC内覧"
+            onBlur={e => { const v = e.target.value.trim(); if (v !== current) onSave(v || null) }}
+            onKeyDown={e => { if (isCommitEnter(e)) (e.target as HTMLInputElement).blur() }}
+            className="w-full min-w-0 border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px] bg-white"
+          />
+        )}
+      </div>
+    </div>
   )
 }
 
