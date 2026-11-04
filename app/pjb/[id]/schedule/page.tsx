@@ -14,7 +14,7 @@ import { setUndoHandlers, clearUndoHandlers } from '@/lib/pjb/undo'
 import { useProjectData } from '@/lib/pjb/useProjectData'
 import {
   BAR_COLORS, CATEGORY_OPTIONS, OPEN_LABEL_PRESETS, openLabelOf, colorForCategory, DEFAULT_MONTHS, MONTH_OPTIONS, roughCols, zeroCols, ROUGH_TEMPLATE, PREOPEN_TEMPLATE, DEFAULT_OPEN_WEEK,
-  roughWeekRange, roughGroups, roughWeekNumbers, fmtMd, fmtYmdJp, parseYmd, toYmd, addDays, diffDays, kindLabel, zeroWeekLabel, WEEKS_PER_MONTH, barText, stripDuration, WEEKS_PER_MONTH_ZERO, WEEKS_PER_MONTH_CALENDAR, roughBarWeeksExcludingBreaks, daysExcludingBreaks,
+  roughWeekRange, roughGroups, roughWeekNumbers, roughToZeroPosition, zeroToRoughPosition, convertBarWeeks, fmtMd, fmtYmdJp, parseYmd, toYmd, addDays, diffDays, kindLabel, zeroWeekLabel, WEEKS_PER_MONTH, barText, stripDuration, WEEKS_PER_MONTH_ZERO, WEEKS_PER_MONTH_CALENDAR, roughBarWeeksExcludingBreaks, daysExcludingBreaks,
 } from '@/lib/pjb/schedule'
 import { breakInRange, weekBreakInfo } from '@/lib/pjb/holidays'
 import type { Project, ScheduleBar, ScheduleKind, ScheduleSet, ScheduleTask } from '@/lib/pjb/types'
@@ -64,7 +64,7 @@ export default function SchedulePage() {
   const [schedulesReady, setSchedulesReady] = useState(false)   // SQLパッチ010が済んでいるときだけ true
   const [activeIds, setActiveIds] = useState<Partial<Record<ScheduleKind, string>>>({})
   const [showPreview, setShowPreview] = useState(false)
-  const [schedDialog, setSchedDialog] = useState<'add' | 'rename' | 'copyTo' | null>(null)
+  const [schedDialog, setSchedDialog] = useState<'add' | 'rename' | 'copyTo' | 'copyKind' | null>(null)
   useEffect(() => {
     try { const raw = localStorage.getItem(`pjb_sched_active_${id}`); if (raw) setActiveIds(JSON.parse(raw)) } catch {}
   }, [id])
@@ -284,12 +284,13 @@ export default function SchedulePage() {
   // ---- 版（社内用・投資家用など）の管理 ----
   const copyContent = async (
     srcTasks: ScheduleTask[], srcBars: ScheduleBar[],
-    target: { projectId: string; scheduleId: string; dayShift: number },
+    target: { projectId: string; scheduleId: string; dayShift: number; kind?: ScheduleKind; mapWeeks?: (start: number, len: number) => [number, number] },
   ) => {
     if (srcTasks.length === 0) return
+    const toKind = target.kind ?? kind
     const { data, error } = await supabase.from('pjb_schedule_tasks').insert(
       srcTasks.map((t, i) => ({
-        project_id: target.projectId, kind, schedule_id: target.scheduleId, sort_order: i + 1,
+        project_id: target.projectId, kind: toKind, schedule_id: target.scheduleId, sort_order: i + 1,
         category: t.category, name: t.name, assignee: t.assignee,
       }))
     ).select('id, sort_order')
@@ -297,8 +298,12 @@ export default function SchedulePage() {
     const byOrder = new Map(data.map((r: { id: string; sort_order: number }) => [r.sort_order, r.id]))
     const shift = (d: string | null) => (d ? toYmd(addDays(parseYmd(d), target.dayShift)) : null)
     const rows = srcTasks.flatMap((t, i) => srcBars.filter(b => b.task_id === t.id).map(b => ({
-      task_id: byOrder.get(i + 1), project_id: target.projectId, kind, schedule_id: target.scheduleId,
-      start_week: b.start_week, length_weeks: b.length_weeks, start_date: shift(b.start_date), end_date: shift(b.end_date),
+      task_id: byOrder.get(i + 1), project_id: target.projectId, kind: toKind, schedule_id: target.scheduleId,
+      ...(() => {
+        if (!target.mapWeeks || b.start_week == null || b.length_weeks == null) return { start_week: b.start_week, length_weeks: b.length_weeks }
+        const [s, l] = target.mapWeeks(b.start_week, b.length_weeks)
+        return { start_week: s, length_weeks: l }
+      })(), start_date: shift(b.start_date), end_date: shift(b.end_date),
       label: b.label, color: b.color,
     })))
     if (rows.length) {
@@ -358,6 +363,35 @@ export default function SchedulePage() {
         ? diffDays(parseYmd(project.open_date), parseYmd(target.open_date)) : 0
       await copyContent(kindTasks, kindBars, { projectId: targetId, scheduleId: created.id, dayShift })
       alert(`「${periodName(target.name, periodLabelOf(target))}」に、「${name}」としてコピーしました。`)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'コピーに失敗しました')
+    }
+    setBusy(false)
+  }
+
+  // 同じ案件の、概算スケジュール ⇄ ゼロ工程表 に、今の版をコピーする（新しい版として追加。週の位置は月ごとに換算）
+  const copyToOtherKind = async (name: string) => {
+    if (!project || (kind !== 'rough' && kind !== 'zero')) return
+    const toKind: ScheduleKind = kind === 'rough' ? 'zero' : 'rough'
+    setBusy(true)
+    try {
+      const pos = kind === 'rough' ? roughToZeroPosition(roughBase, months) : zeroToRoughPosition(roughBase, months)
+      const { data: existing } = await supabase.from('pjb_schedules').select('sort_order').eq('project_id', id).eq('kind', toKind)
+      const nextOrder = ((existing || []).reduce((m: number, r: { sort_order: number }) => Math.max(m, r.sort_order), -1)) + 1
+      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind: toKind, name, sort_order: nextOrder }).select('id').single()
+      if (error || !created) throw new Error(error?.message || 'コピーに失敗しました')
+      await copyContent(kindTasks, kindBars, { projectId: id, scheduleId: created.id, dayShift: 0, kind: toKind, mapWeeks: convertBarWeeks(pos) })
+      // OPEN予定の週は、コピー先が未設定のときだけ、換算して入れる
+      const fromOpen = kind === 'rough' ? project.schedule_open_week : project.zero_open_week
+      const toOpen = toKind === 'rough' ? project.schedule_open_week : project.zero_open_week
+      if (fromOpen != null && toOpen == null) {
+        await supabase.from('pjb_projects').update(toKind === 'rough' ? { schedule_open_week: pos(fromOpen) } : { zero_open_week: pos(fromOpen) }).eq('id', id)
+      }
+      pickSchedule(toKind, created.id)
+      setKind(toKind)
+      await loadSchedule()
+      reload()
+      alert(`${kindLabel[toKind]}に、「${name}」としてコピーしました。週の位置は、月ごとに合わせて換算しています。`)
     } catch (e) {
       alert(e instanceof Error ? e.message : 'コピーに失敗しました')
     }
@@ -791,6 +825,9 @@ export default function SchedulePage() {
               <button onClick={() => setSchedDialog('rename')} className="hover:text-slate-700">名前を変更</button>
               <button onClick={() => createSchedule(`${activeSchedule.name}（コピー）`, true)} disabled={busy} className="hover:text-slate-700">複製</button>
               <button onClick={() => setSchedDialog('copyTo')} className="hover:text-slate-700">別の案件にコピー</button>
+              {(kind === 'rough' || kind === 'zero') && (
+                <button onClick={() => setSchedDialog('copyKind')} className="hover:text-slate-700">{kind === 'rough' ? 'ゼロ工程表にコピー' : '概算スケジュールにコピー'}</button>
+              )}
               <button onClick={deleteSchedule} className="hover:text-rose-600">削除</button>
             </span>
           )}
@@ -964,6 +1001,7 @@ export default function SchedulePage() {
       {schedDialog && (
         <ScheduleDialog
           mode={schedDialog}
+          otherKindLabel={kind === 'rough' ? kindLabel.zero : kindLabel.rough}
           activeName={activeSchedule?.name ?? ''}
           hasActive={!!activeSchedule}
           currentProjectId={id}
@@ -973,6 +1011,7 @@ export default function SchedulePage() {
             setSchedDialog(null)
             if (schedDialog === 'add') await createSchedule(v.name, v.copy)
             else if (schedDialog === 'rename') await renameSchedule(v.name)
+            else if (schedDialog === 'copyKind') await copyToOtherKind(v.name)
             else await copyToProject(v.targetId, v.name)
           }}
         />
@@ -1017,13 +1056,13 @@ export default function SchedulePage() {
 }
 
 function ScheduleDialog({
-  mode, activeName, hasActive, currentProjectId, busy, onClose, onSubmit,
+  mode, otherKindLabel, activeName, hasActive, currentProjectId, busy, onClose, onSubmit,
 }: {
-  mode: 'add' | 'rename' | 'copyTo'; activeName: string; hasActive: boolean; currentProjectId: string; busy: boolean
+  mode: 'add' | 'rename' | 'copyTo' | 'copyKind'; otherKindLabel: string; activeName: string; hasActive: boolean; currentProjectId: string; busy: boolean
   onClose: () => void
   onSubmit: (v: { name: string; copy: boolean; targetId: string }) => void
 }) {
-  const [name, setName] = useState(mode === 'rename' ? activeName : mode === 'copyTo' ? activeName : '')
+  const [name, setName] = useState(mode === 'add' ? '' : activeName)
   const [copy, setCopy] = useState(hasActive)
   const [targetId, setTargetId] = useState('')
   const [projectOptions, setProjectOptions] = useState<Array<{ id: string; name: string }>>([])
@@ -1042,14 +1081,14 @@ function ScheduleDialog({
     })
   }, [mode])
 
-  const title = mode === 'add' ? '版を追加' : mode === 'rename' ? '版の名前を変更' : '別の案件にコピー'
+  const title = mode === 'add' ? '版を追加' : mode === 'rename' ? '版の名前を変更' : mode === 'copyKind' ? `${otherKindLabel}にコピー` : '別の案件にコピー'
   const canSubmit = name.trim() !== '' && (mode !== 'copyTo' || targetId !== '')
 
   return (
     <Modal title={title} onClose={onClose}>
       <div className="grid gap-3">
         <label className="grid gap-1">
-          <span className="text-[13px] text-slate-500">{mode === 'copyTo' ? 'コピー先での版の名前' : '版の名前'}</span>
+          <span className="text-[13px] text-slate-500">{mode === 'copyTo' || mode === 'copyKind' ? 'コピー先での版の名前' : '版の名前'}</span>
           <input value={name} onChange={e => setName(e.target.value)} autoFocus placeholder="例）社内用 / 投資家用"
             className="border border-slate-200 rounded-lg px-3 py-2 text-[15px]" />
         </label>
@@ -1058,6 +1097,9 @@ function ScheduleDialog({
             <label className="flex items-center gap-2"><input type="radio" checked={copy} onChange={() => setCopy(true)} />今の版（{activeName}）をコピーして作る</label>
             <label className="flex items-center gap-2"><input type="radio" checked={!copy} onChange={() => setCopy(false)} />空の版として作る</label>
           </div>
+        )}
+        {mode === 'copyKind' && (
+          <p className="text-[12.5px] text-slate-500 leading-relaxed">この案件の{otherKindLabel}に、新しい版として追加されます（元の版は、そのまま残ります）。ゼロ工程表は1ヶ月＝4週、概算は暦の週なので、バーの位置は月ごとに合わせて換算します。OPEN予定の週は、コピー先が未設定のときだけ入ります。</p>
         )}
         {mode === 'copyTo' && (
           <label className="grid gap-1">
@@ -1074,7 +1116,7 @@ function ScheduleDialog({
         <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-[14px] text-slate-600">キャンセル</button>
         <button onClick={() => canSubmit && onSubmit({ name: name.trim(), copy: mode === 'add' ? copy : false, targetId })} disabled={busy || !canSubmit}
           className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-[14px] font-medium disabled:opacity-50">
-          {mode === 'copyTo' ? 'コピーする' : mode === 'rename' ? '変更する' : '追加する'}
+          {mode === 'copyTo' || mode === 'copyKind' ? 'コピーする' : mode === 'rename' ? '変更する' : '追加する'}
         </button>
       </div>
     </Modal>

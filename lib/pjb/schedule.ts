@@ -136,6 +136,33 @@ export function roughWeekNumbers(base: Date, months: number = DEFAULT_MONTHS): n
   for (const g of roughGroups(base, months)) for (let k = 0; k < g.span; k++) nums.push(k + 1)
   return nums
 }
+// ---- 概算（暦の週）⇄ ゼロ工程表（1ヶ月＝4週）の位置の換算 ----
+// 各月の中での位置を、週数の比で対応させる（5週の月は、4週の月に縮める）。返すのは「境界」の位置で、
+// バーは 開始の境界〜終了の境界 の差を長さにする
+export function roughToZeroPosition(base: Date, months: number): (i: number) => number {
+  const groups = roughGroups(base, months)
+  const total = groups.reduce((s, g) => s + g.span, 0)
+  return i => {
+    if (i >= total) return months * WEEKS_PER_MONTH
+    const g = groups.find(x => i >= x.start && i < x.start + x.span) ?? groups[0]
+    return (g.n - 1) * WEEKS_PER_MONTH + Math.round(((i - g.start) * WEEKS_PER_MONTH) / g.span)
+  }
+}
+export function zeroToRoughPosition(base: Date, months: number): (j: number) => number {
+  const groups = roughGroups(base, months)
+  const total = groups.reduce((s, g) => s + g.span, 0)
+  return j => {
+    if (j >= months * WEEKS_PER_MONTH) return total
+    const g = groups[Math.floor(j / WEEKS_PER_MONTH)]
+    return g.start + Math.round(((j % WEEKS_PER_MONTH) * g.span) / WEEKS_PER_MONTH)
+  }
+}
+// バーの（開始, 長さ）を、換算した（開始, 長さ）にする。長さは最低1週
+export const convertBarWeeks = (pos: (i: number) => number) => (start: number, len: number): [number, number] => {
+  const s = pos(start)
+  return [s, Math.max(1, pos(start + len) - s)]
+}
+
 export const fmtYmdJp = (d: Date) => `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
 
 // ---- バーのラベルに、期間（○週間／○ヶ月／○日間）を自動で付ける ----
