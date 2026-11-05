@@ -21,12 +21,12 @@ const fmtDate = (d?: string | null) => {
 //  ゼロ工程表: 1ヶ月＝4週×12ヶ月の固定グリッド（日付・祝日なし）
 //  概算スケジュール: 日曜始まりの暦の週×52週（週の開始日・大型連休つき）
 export default function RoughPrintSheet({
-  mode, project, tasks, bars, scheduleName, months: monthsProp, bands, notes,
-}: { mode: Exclude<ScheduleKind, 'preopen'>; project: Project; tasks: ScheduleTask[]; bars: ScheduleBar[]; scheduleName?: string; months?: number; bands?: ScheduleBand[]; notes?: string }) {
+  mode, project, tasks, bars, scheduleName, months: monthsProp, bands, notes, openWeek: openWeekProp, openLabel,
+}: { mode: Exclude<ScheduleKind, 'preopen'>; project: Project; tasks: ScheduleTask[]; bars: ScheduleBar[]; scheduleName?: string; months?: number; bands?: ScheduleBand[]; notes?: string; openWeek?: number | null; openLabel?: string }) {
   const isZero = mode === 'zero'
   const months = monthsProp ?? project.schedule_months ?? DEFAULT_MONTHS
   const roughBars = bars.filter(b => b.kind === mode && b.start_week != null && b.length_weeks != null)
-  const openWeek = (isZero ? project.zero_open_week : project.schedule_open_week) ?? null
+  const openWeek = (openWeekProp !== undefined ? openWeekProp : isZero ? project.zero_open_week : project.schedule_open_week) ?? null
   const base = project.schedule_base_date
     ? new Date(project.schedule_base_date + 'T00:00:00')
     : new Date(new Date().getFullYear(), new Date().getMonth(), 1)
@@ -166,7 +166,7 @@ export default function RoughPrintSheet({
                     position: 'absolute', top: 0, bottom: 0, left: `${((openWeek! - h0) * 100) / HALF_WEEKS}%`, width: `${100 / HALF_WEEKS}%`,
                     background: '#22d3ee', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 10, lineHeight: 1.25, fontWeight: 700, zIndex: 1,
                   }}>
-                    <span style={{ writingMode: 'vertical-rl', textOrientation: 'upright', letterSpacing: '0.05em' }}>{openLabelOf(project)}</span>
+                    <span style={{ writingMode: 'vertical-rl', textOrientation: 'upright', letterSpacing: '0.05em' }}>{openLabel ?? openLabelOf(project)}</span>
                   </div>
                 )}
               </div>

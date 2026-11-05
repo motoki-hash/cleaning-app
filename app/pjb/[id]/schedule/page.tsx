@@ -251,6 +251,8 @@ export default function SchedulePage() {
         if (e2) throw new Error(e2.message)
       }
       const openWeek = savedTasks && saved?.data?.open_week != null ? saved.data.open_week : DEFAULT_OPEN_WEEK
+      // 版にもOPEN予定を入れる（パッチ027の前は、列がないので何も起きない）
+      if (sid && kind !== 'preopen') await supabase.from('pjb_schedules').update({ open_week: openWeek }).eq('id', sid).is('open_week', null)
       if (project && kind === 'rough' && project.schedule_open_week == null) await updateProject({ schedule_open_week: openWeek })
       if (project && kind === 'zero' && project.zero_open_week == null) await updateProject({ zero_open_week: openWeek })
       await loadSchedule()
@@ -274,7 +276,7 @@ export default function SchedulePage() {
     setBusy(true)
     const { error } = await supabase.from('pjb_schedule_templates').upsert({
       kind,
-      data: { tasks: tasksData, open_week: kind === 'zero' ? project.zero_open_week ?? null : kind === 'rough' ? project.schedule_open_week ?? null : null },
+      data: { tasks: tasksData, open_week: kind === 'preopen' ? null : openWeekNow },
       anchor: kind === 'preopen' ? (openDate ? 'open' : 'start') : null,
       source_project_name: project.name,
       updated_at: new Date().toISOString(),
@@ -343,7 +345,7 @@ export default function SchedulePage() {
     setBusy(true)
     try {
       const nextOrder = (kindSchedules.reduce((m, sc) => Math.max(m, sc.sort_order), -1)) + 1
-      const { data, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...(copy ? bandsPayload() : {}), ...(copy && versionNotes ? { notes } : {}) }).select('id').single()
+      const { data, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...(copy ? bandsPayload() : {}), ...(copy && versionNotes ? { notes } : {}), ...(copy ? openPayload() : {}) }).select('id').single()
       if (error || !data) throw new Error(error?.message || '作成できませんでした')
       if (copy) await copyContent(kindTasks, kindBars, { projectId: id, scheduleId: data.id, dayShift: 0 })
       pickSchedule(kind, data.id)
@@ -383,7 +385,7 @@ export default function SchedulePage() {
       if (te || !target) throw new Error(te?.message || 'コピー先の案件が見つかりません')
       const { data: existing } = await supabase.from('pjb_schedules').select('sort_order').eq('project_id', targetId).eq('kind', kind)
       const nextOrder = ((existing || []).reduce((m: number, r: { sort_order: number }) => Math.max(m, r.sort_order), -1)) + 1
-      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: targetId, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...bandsPayload(), ...(versionNotes ? { notes } : {}) }).select('id').single()
+      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: targetId, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...bandsPayload(), ...(versionNotes ? { notes } : {}), ...openPayload() }).select('id').single()
       if (error || !created) throw new Error(error?.message || 'コピーに失敗しました')
       const dayShift = kind === 'preopen' && project.open_date && target.open_date
         ? diffDays(parseYmd(project.open_date), parseYmd(target.open_date)) : 0
@@ -409,7 +411,7 @@ export default function SchedulePage() {
       const pos = kind === 'rough' ? roughToZeroPosition(roughBase, months) : zeroToRoughPosition(roughBase, months)
       const { data: existing } = await supabase.from('pjb_schedules').select('sort_order').eq('project_id', id).eq('kind', toKind)
       const nextOrder = ((existing || []).reduce((m: number, r: { sort_order: number }) => Math.max(m, r.sort_order), -1)) + 1
-      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind: toKind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...bandsPayload(convertBarWeeks(pos)) }).select('id').single()
+      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind: toKind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...bandsPayload(convertBarWeeks(pos)), ...openPayload(pos) }).select('id').single()
       if (error || !created) throw new Error(error?.message || 'コピーに失敗しました')
       try {
         await copyContent(kindTasks, kindBars, { projectId: id, scheduleId: created.id, dayShift: 0, kind: toKind, mapWeeks: convertBarWeeks(pos) })
@@ -417,12 +419,6 @@ export default function SchedulePage() {
         // 途中で失敗したら、できかけの空の版を残さない
         await supabase.from('pjb_schedules').delete().eq('id', created.id)
         throw err
-      }
-      // OPEN予定の週は、コピー先が未設定のときだけ、換算して入れる
-      const fromOpen = kind === 'rough' ? project.schedule_open_week : project.zero_open_week
-      const toOpen = toKind === 'rough' ? project.schedule_open_week : project.zero_open_week
-      if (fromOpen != null && toOpen == null) {
-        await supabase.from('pjb_projects').update(toKind === 'rough' ? { schedule_open_week: pos(fromOpen) } : { zero_open_week: pos(fromOpen) }).eq('id', id)
       }
       pickSchedule(toKind, created.id)
       setKind(toKind)
@@ -594,6 +590,9 @@ export default function SchedulePage() {
   const bands: ScheduleBand[] = bandsReady ? (activeSchedule!.bands ?? []) : []
   const bandsPayload = (map?: (start: number, len: number) => [number, number]) =>
     bandsReady ? { bands: bands.map(b => { if (!map) return b; const [start, len] = map(b.start, b.len); return { ...b, start, len } }) } : {}
+  // 版のコピー先に引き継ぐOPEN予定（週の位置を換算するときは pos を渡す）
+  const openPayload = (pos?: (i: number) => number) =>
+    openVersion ? { open_week: openWeekNow == null ? null : pos ? pos(openWeekNow) : openWeekNow, open_label: openVersion.open_label ?? null } : {}
   const saveBands = async (next: ScheduleBand[]) => {
     if (!activeSchedule) return
     const { error } = await supabase.from('pjb_schedules').update({ bands: next }).eq('id', activeSchedule.id)
@@ -610,6 +609,32 @@ export default function SchedulePage() {
       if (error) { alert(`保存に失敗しました：${error.message}`); return }
       await loadSchedule()
     } else await updateProject(kind === 'zero' ? { zero_notes: v } : { schedule_notes: v })
+  }
+  // OPEN予定の週・OPENの列の文言は版ごと（パッチ027の前は、案件で1つ）
+  const openVersion = activeSchedule && 'open_week' in activeSchedule && kind !== 'preopen' ? activeSchedule : null
+  const projectOpenWeek = (kind === 'zero' ? project?.zero_open_week : project?.schedule_open_week) ?? null
+  const openWeekNow = openVersion ? (openVersion.open_week ?? null) : projectOpenWeek
+  const openLabelNow = openVersion ? openVersion.open_label : project?.schedule_open_label
+  const openLabelReady = !!openVersion || (!!project && 'schedule_open_label' in project)
+  const openLabelText = openLabelOf({ schedule_open_label: openLabelNow })
+  const saveOpenWeek = async (w: number | null) => {
+    if (openVersion && activeSchedule) {
+      const { error } = await supabase.from('pjb_schedules').update({ open_week: w }).eq('id', activeSchedule.id)
+      if (error) { alert(`保存に失敗しました：${error.message}`); return }
+      // 人員の負荷予測などは案件のOPEN予定を使うので、先頭（左端）の版を変えたときだけ、案件側にも入れる
+      if (kindSchedules[0]?.id === activeSchedule.id) {
+        await supabase.from('pjb_projects').update(kind === 'zero' ? { zero_open_week: w } : { schedule_open_week: w }).eq('id', id)
+      }
+      await loadSchedule()
+      reload()
+    } else await updateProject(kind === 'zero' ? { zero_open_week: w } : { schedule_open_week: w })
+  }
+  const saveOpenLabel = async (v: string | null) => {
+    if (openVersion && activeSchedule) {
+      const { error } = await supabase.from('pjb_schedules').update({ open_label: v }).eq('id', activeSchedule.id)
+      if (error) { alert(`保存に失敗しました：${error.message}`); return }
+      await loadSchedule()
+    } else await updateProject({ schedule_open_label: v })
   }
   const changeMonths = async (m: number) => {
     if (versionMonths && activeSchedule) {
@@ -644,10 +669,10 @@ export default function SchedulePage() {
   const gantt = useMemo(() => {
     if (kind === 'zero') {
       // ゼロ工程表: 日付・祝日は考慮しない（1ヶ月＝4週×12ヶ月）
-      const openWeek = project?.zero_open_week ?? null
+      const openWeek = openWeekNow
       const cols: GanttCol[] = Array.from({ length: zeroColCount }, (_, i) => ({
         top: `第${(i % WEEKS_PER_MONTH) + 1}週`,
-        tag: openWeek === i && project ? openLabelOf(project) : undefined,
+        tag: openWeek === i ? openLabelText : undefined,
         shade: openWeek === i ? 'open' : undefined,
       }))
       const groups = Array.from({ length: months }, (_, m) => ({ label: `${m + 1}ヶ月目`, span: WEEKS_PER_MONTH }))
@@ -657,7 +682,7 @@ export default function SchedulePage() {
       return { cols, groups, ganttBars, baseCw: 40 }
     }
     if (kind === 'rough') {
-      const openWeek = project?.schedule_open_week ?? null
+      const openWeek = openWeekNow
       const weekNos = roughWeekNumbers(roughBase, months)
       const cols: GanttCol[] = Array.from({ length: roughColCount }, (_, i) => {
         const [ws, we] = roughWeekRange(roughBase, i)
@@ -665,7 +690,7 @@ export default function SchedulePage() {
         return {
           top: `${weekNos[i]}週`,
           sub: `(${fmtMd(ws)})`,
-          tag: openWeek === i && project ? openLabelOf(project) : info && openWeek !== i ? info.brk.short : undefined,
+          tag: openWeek === i ? openLabelText : info && openWeek !== i ? info.brk.short : undefined,
           note: `${fmtYmdJp(ws)}〜${fmtMd(we)}${info ? `｜${info.brk.name}` : ''}`,
           shade: openWeek === i ? 'open' : info ? 'break' : undefined,
           partial: info ? [info.from, info.to] : undefined,
@@ -707,7 +732,7 @@ export default function SchedulePage() {
       })
     return { cols, groups, ganttBars, baseCw: 40 }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, kindBars, preopenCols, previewStart, project?.schedule_open_week, project?.zero_open_week, roughBase, project?.open_date, months, roughColCount, zeroColCount])
+  }, [kind, kindBars, preopenCols, previewStart, openWeekNow, openLabelText, roughBase, project?.open_date, months, roughColCount, zeroColCount])
 
   // ---- バーの選択・コピー・貼り付け・削除（⌘C / ⌘V / Delete）----
   const [selBarIds, setSelBarIds] = useState<string[]>([])
@@ -843,7 +868,7 @@ export default function SchedulePage() {
   }
 
   const sheet = kind !== 'preopen'
-    ? <RoughPrintSheet mode={kind} project={project} tasks={kindTasks} bars={kindBars} scheduleName={printName} months={months} bands={bands} notes={versionNotes ? notes : undefined} />
+    ? <RoughPrintSheet mode={kind} project={project} tasks={kindTasks} bars={kindBars} scheduleName={printName} months={months} bands={bands} notes={versionNotes ? notes : undefined} openWeek={openWeekNow} openLabel={openLabelText} />
     : <PreopenPrintSheet project={project} tasks={kindTasks} bars={kindBars} start={previewStart} cols={preopenCols} scheduleName={printName} />
 
   return (
@@ -950,15 +975,15 @@ export default function SchedulePage() {
           <div className="grid gap-1">
             <span className="text-[12px] text-slate-500">OPEN予定（ゼロ工程）</span>
             <select
-              value={project.zero_open_week == null ? '' : String(project.zero_open_week)}
-              onChange={e => updateProject({ zero_open_week: e.target.value === '' ? null : Number(e.target.value) })}
+              value={openWeekNow == null ? '' : String(openWeekNow)}
+              onChange={e => saveOpenWeek(e.target.value === '' ? null : Number(e.target.value))}
               className="border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px] bg-white"
             >
               <option value="">未設定</option>
               {Array.from({ length: zeroColCount }, (_, i) => <option key={i} value={i}>{zeroWeekLabel(i)}</option>)}
             </select>
           </div>
-          <OpenLabelField project={project} onSave={v => updateProject({ schedule_open_label: v })} />
+          <OpenLabelField key={activeSchedule?.id ?? kind} label={openLabelNow} ready={openLabelReady} onSave={saveOpenLabel} />
           </>
         ) : kind === 'rough' ? (
           <>
@@ -967,8 +992,8 @@ export default function SchedulePage() {
               <span className="text-[12px] text-slate-500">OPEN予定（概算）</span>
               <div className="flex items-center gap-1.5">
                 <select
-                  value={project.schedule_open_week == null ? '' : String(project.schedule_open_week)}
-                  onChange={e => updateProject({ schedule_open_week: e.target.value === '' ? null : Number(e.target.value) })}
+                  value={openWeekNow == null ? '' : String(openWeekNow)}
+                  onChange={e => saveOpenWeek(e.target.value === '' ? null : Number(e.target.value))}
                   className="border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px] bg-white"
                 >
                   <option value="">未設定</option>
@@ -978,7 +1003,7 @@ export default function SchedulePage() {
                 </select>
               </div>
             </div>
-            <OpenLabelField project={project} onSave={v => updateProject({ schedule_open_label: v })} />
+            <OpenLabelField key={activeSchedule?.id ?? kind} label={openLabelNow} ready={openLabelReady} onSave={saveOpenLabel} />
           </>
         ) : (
           <>
@@ -1237,12 +1262,12 @@ function ScheduleDialog({
 }
 
 // OPEN予定の列に出す文言。候補から選ぶか、「自由入力」で好きな文言にできる（空＝OPEN）
-function OpenLabelField({ project, onSave }: { project: Project; onSave: (v: string | null) => void }) {
-  const current = (project.schedule_open_label || '').trim()
+function OpenLabelField({ label, ready, onSave }: { label: string | null | undefined; ready: boolean; onSave: (v: string | null) => void }) {
+  const current = (label || '').trim()
   const isPreset = current === '' || OPEN_LABEL_PRESETS.includes(current)
   const [custom, setCustom] = useState(!isPreset)
   // パッチ023（列の追加）がまだのときは、案内だけ出す
-  if (!('schedule_open_label' in project)) {
+  if (!ready) {
     return (
       <div className="grid gap-1">
         <span className="text-[12px] text-slate-500">OPENの列に出す文言</span>

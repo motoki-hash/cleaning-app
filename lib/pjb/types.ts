@@ -82,6 +82,8 @@ export type ScheduleSet = {
   months?: number | null   // 版の表示期間（ヶ月）。空＝案件の設定を使う
   bands?: ScheduleBand[] | null   // 範囲の塗りつぶし
   notes?: string | null           // 版の備考欄。空＝案件の備考欄を使う
+  open_week?: number | null       // 版のOPEN予定の週（0始まり）
+  open_label?: string | null      // 版のOPENの列に出す文言（空＝OPEN）
 }
 
 export type ScheduleTask = {
