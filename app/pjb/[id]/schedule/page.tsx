@@ -1310,13 +1310,30 @@ function Field({
 function NotesField({ value, onSave }: { value: string; onSave: (v: string) => void }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => { setDraft(value) }, [value])
+  // 行数に合わせて、縦の長さを自動で伸ばす（画面の幅が変わったときも合わせ直す）
+  const ref = useRef<HTMLTextAreaElement>(null)
+  const fit = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight + 2}px`
+  }, [])
+  useEffect(() => { fit() }, [draft, fit])
+  useEffect(() => {
+    const box = ref.current?.parentElement
+    if (!box) return
+    const ro = new ResizeObserver(fit)
+    ro.observe(box)
+    return () => ro.disconnect()
+  }, [fit])
   return (
     <textarea
+      ref={ref}
       value={draft}
       onChange={e => setDraft(e.target.value)}
       onBlur={() => { if (draft !== value) onSave(draft) }}
       rows={3}
-      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13.5px] bg-white leading-relaxed"
+      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13.5px] bg-white leading-relaxed resize-none overflow-hidden"
     />
   )
 }
