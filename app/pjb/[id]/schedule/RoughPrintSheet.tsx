@@ -21,8 +21,8 @@ const fmtDate = (d?: string | null) => {
 //  ゼロ工程表: 1ヶ月＝4週×12ヶ月の固定グリッド（日付・祝日なし）
 //  概算スケジュール: 日曜始まりの暦の週×52週（週の開始日・大型連休つき）
 export default function RoughPrintSheet({
-  mode, project, tasks, bars, scheduleName, months: monthsProp, bands,
-}: { mode: Exclude<ScheduleKind, 'preopen'>; project: Project; tasks: ScheduleTask[]; bars: ScheduleBar[]; scheduleName?: string; months?: number; bands?: ScheduleBand[] }) {
+  mode, project, tasks, bars, scheduleName, months: monthsProp, bands, notes,
+}: { mode: Exclude<ScheduleKind, 'preopen'>; project: Project; tasks: ScheduleTask[]; bars: ScheduleBar[]; scheduleName?: string; months?: number; bands?: ScheduleBand[]; notes?: string }) {
   const isZero = mode === 'zero'
   const months = monthsProp ?? project.schedule_months ?? DEFAULT_MONTHS
   const roughBars = bars.filter(b => b.kind === mode && b.start_week != null && b.length_weeks != null)
@@ -211,7 +211,7 @@ export default function RoughPrintSheet({
 
       <div style={{ marginTop: 6, border: '1px solid #cbd5e1', background: '#f1f5f9' }}>
         <div style={{ padding: '6px 12px', fontSize: 11, fontWeight: 700, color: '#475569' }}>備考欄</div>
-        <div style={{ padding: '8px 12px 12px', fontSize: 10.5, whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{(isZero ? project.zero_notes : project.schedule_notes) || ''}</div>
+        <div style={{ padding: '8px 12px 12px', fontSize: 10.5, whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{notes ?? ((isZero ? project.zero_notes : project.schedule_notes) || '')}</div>
       </div>
     </FitToPage>
   )

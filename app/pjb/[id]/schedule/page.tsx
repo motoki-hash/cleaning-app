@@ -343,7 +343,7 @@ export default function SchedulePage() {
     setBusy(true)
     try {
       const nextOrder = (kindSchedules.reduce((m, sc) => Math.max(m, sc.sort_order), -1)) + 1
-      const { data, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...(copy ? bandsPayload() : {}) }).select('id').single()
+      const { data, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...(copy ? bandsPayload() : {}), ...(copy && versionNotes ? { notes } : {}) }).select('id').single()
       if (error || !data) throw new Error(error?.message || '作成できませんでした')
       if (copy) await copyContent(kindTasks, kindBars, { projectId: id, scheduleId: data.id, dayShift: 0 })
       pickSchedule(kind, data.id)
@@ -383,7 +383,7 @@ export default function SchedulePage() {
       if (te || !target) throw new Error(te?.message || 'コピー先の案件が見つかりません')
       const { data: existing } = await supabase.from('pjb_schedules').select('sort_order').eq('project_id', targetId).eq('kind', kind)
       const nextOrder = ((existing || []).reduce((m: number, r: { sort_order: number }) => Math.max(m, r.sort_order), -1)) + 1
-      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: targetId, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...bandsPayload() }).select('id').single()
+      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: targetId, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...bandsPayload(), ...(versionNotes ? { notes } : {}) }).select('id').single()
       if (error || !created) throw new Error(error?.message || 'コピーに失敗しました')
       const dayShift = kind === 'preopen' && project.open_date && target.open_date
         ? diffDays(parseYmd(project.open_date), parseYmd(target.open_date)) : 0
@@ -599,6 +599,17 @@ export default function SchedulePage() {
     const { error } = await supabase.from('pjb_schedules').update({ bands: next }).eq('id', activeSchedule.id)
     if (error) { alert(`保存に失敗しました：${error.message}`); return }
     await loadSchedule()
+  }
+  // 備考欄は版ごと（パッチ026の前は、案件で1つ）
+  const versionNotes = activeSchedule && 'notes' in activeSchedule && kind !== 'preopen' ? activeSchedule : null
+  const projectNotes = (kind === 'zero' ? project?.zero_notes : project?.schedule_notes) || ''
+  const notes = versionNotes ? (versionNotes.notes ?? projectNotes) : projectNotes
+  const saveNotes = async (v: string) => {
+    if (versionNotes && activeSchedule) {
+      const { error } = await supabase.from('pjb_schedules').update({ notes: v }).eq('id', activeSchedule.id)
+      if (error) { alert(`保存に失敗しました：${error.message}`); return }
+      await loadSchedule()
+    } else await updateProject(kind === 'zero' ? { zero_notes: v } : { schedule_notes: v })
   }
   const changeMonths = async (m: number) => {
     if (versionMonths && activeSchedule) {
@@ -832,7 +843,7 @@ export default function SchedulePage() {
   }
 
   const sheet = kind !== 'preopen'
-    ? <RoughPrintSheet mode={kind} project={project} tasks={kindTasks} bars={kindBars} scheduleName={printName} months={months} bands={bands} />
+    ? <RoughPrintSheet mode={kind} project={project} tasks={kindTasks} bars={kindBars} scheduleName={printName} months={months} bands={bands} notes={versionNotes ? notes : undefined} />
     : <PreopenPrintSheet project={project} tasks={kindTasks} bars={kindBars} start={previewStart} cols={preopenCols} scheduleName={printName} />
 
   return (
@@ -1076,10 +1087,7 @@ export default function SchedulePage() {
       {kind !== 'preopen' && (
         <div className="mt-6">
           <div className="text-[13px] font-semibold text-slate-600 mb-1.5">備考欄</div>
-          <NotesField
-            value={(kind === 'zero' ? project.zero_notes : project.schedule_notes) || ''}
-            onSave={v => updateProject(kind === 'zero' ? { zero_notes: v } : { schedule_notes: v })}
-          />
+          <NotesField key={activeSchedule?.id ?? kind} value={notes} onSave={saveNotes} />
         </div>
       )}
 
