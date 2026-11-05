@@ -1014,7 +1014,7 @@ export default function SchedulePage() {
       </div>
 
       <p className="text-[12.5px] text-slate-500 mb-2 print:hidden">
-        空いているマスをドラッグすると新しいバーを作成、バーは、1回クリックで選択（Shiftを押しながらクリックで複数選択。選んだバーは、1つを掴んで横にドラッグすると、まとめて動きます。⌘Cでコピー、Deleteで削除）、ダブルクリックで内容を編集、横にドラッグで日付の移動・両端でリサイズ、上下にドラッグで行の入れ替えができます。空きマスは、1回クリックして選んで⌘Vで貼り付け、ダブルクリックで新しいバーを作成、ドラッグでも作成できます。Alt(Option)キーを押しながらドラッグすると複製できます。左の工程名をクリックすると行を編集、左端の「⋮⋮」を掴んで上下にドラッグすると行を並べ替えできます。
+        空いているマスをドラッグすると新しいバーを作成、バーは、1回クリックで選択（Shiftを押しながらクリックで複数選択。選んだバーは、1つを掴んで横にドラッグすると、まとめて動きます。⌘Cでコピー、Deleteで削除）、ダブルクリックで内容を編集、横にドラッグで日付の移動・両端でリサイズ、上下にドラッグで行の入れ替えができます。空きマスから縦（別の行）へドラッグ、または⌘／Ctrlを押しながらドラッグすると、囲んだバーをまとめて選択できます。空きマスは、1回クリックして選んで⌘Vで貼り付け、ダブルクリックで新しいバーを作成、ドラッグでも作成できます。Alt(Option)キーを押しながらドラッグすると複製できます。左の工程名をクリックすると行を編集、左端の「⋮⋮」を掴んで上下にドラッグすると行を並べ替えできます。
         {kind === 'zero'
           ? 'ゼロ工程表は日付・祝日を考慮しません（1ヶ月＝4週）。設定した期間（初期値12ヶ月）の工期の目安を、週単位で組みます。'
           : kind === 'rough'
@@ -1052,6 +1052,7 @@ export default function SchedulePage() {
             selectedBarIds={selBarIds}
             selectedCell={selCell}
             onSelectCell={(rowId, col) => { setSelCell({ rowId, col }); setSelBarIds([]) }}
+            onSelectBars={ids => { setSelBarIds(ids); setSelCell(null) }}
             onBarCopy={duplicateBar}
             onCreate={(taskId, start, len) => setBarEdit({ mode: 'new', taskId, start, len })}
             onRowClick={taskId => setTaskEdit(kindTasks.find(t => t.id === taskId) || null)}

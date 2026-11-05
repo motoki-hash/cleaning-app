@@ -21,6 +21,7 @@ type Props = {
   selectedBarIds?: string[]
   selectedCell?: { rowId: string; col: number } | null   // 空きマスを1回クリック＝選択（貼り付け先）
   onSelectCell: (rowId: string, col: number) => void
+  onSelectBars?: (ids: string[]) => void   // 空きマスから縦にドラッグ（または⌘／Ctrl＋ドラッグ）で囲んだバーを、まとめて選択
   onBarCopy: (id: string, start: number, len: number) => void   // Alt(Option)を押しながらドラッグで複製
   onCreate: (rowId: string, start: number, len: number) => void
   onRowClick: (rowId: string) => void
@@ -40,7 +41,7 @@ const HANDLE_W = 24
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
 // 週/日を1マスとした簡易ガントチャート。バーはドラッグで移動・両端でリサイズ、空きマスのドラッグで新規作成。
-export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBarChange, onBarClick, onBarOpen, onBarsMove, selectedBarIds, selectedCell, onSelectCell, onBarCopy, onCreate, onRowClick, onReorder, onRowDelete, bands, bandMode, onBandSelect }: Props) {
+export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBarChange, onBarClick, onBarOpen, onBarsMove, selectedBarIds, selectedCell, onSelectCell, onSelectBars, onBarCopy, onCreate, onRowClick, onReorder, onRowDelete, bands, bandMode, onBandSelect }: Props) {
   const [drag, setDrag] = useState<{ id: string; start: number; len: number; copy: boolean } | null>(null)
   const rowsRef = useRef<HTMLDivElement>(null)
   const [groupDx, setGroupDx] = useState<number | null>(null)   // 複数選択をまとめて動かしている間の移動量（マス）
@@ -54,6 +55,7 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
   }
   const [rowDrag, setRowDrag] = useState<{ id: string; from: number; to: number } | null>(null)
   const [creating, setCreating] = useState<{ rowId: string; a: number; b: number } | null>(null)
+  const [marquee, setMarquee] = useState<{ r1: number; r2: number; c1: number; c2: number } | null>(null)   // バーを囲んで選んでいる最中の範囲
   const [bandSel, setBandSel] = useState<{ a: number; b: number } | null>(null)   // 塗りつぶしの範囲を選んでいる最中
 
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -188,12 +190,38 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
       window.addEventListener('pointerup', onBUp)
       return
     }
-    setCreating({ rowId, a, b })
-    const onMove = (ev: PointerEvent) => { b = idxAt(ev.clientX); setCreating({ rowId, a, b }) }
+    // 空きマスから縦（別の行）へドラッグ、または⌘／Ctrlを押しながらドラッグ＝範囲で囲んで、バーをまとめて選択
+    const rowsRect = rowsRef.current?.getBoundingClientRect()
+    const startRow = rows.findIndex(r => r.id === rowId)
+    const y0 = e.clientY
+    const rowAt = (y: number) => clamp(Math.floor((y - (rowsRect?.top ?? 0)) / ROW_H), 0, rows.length - 1)
+    let marqueeOn = !!onSelectBars && !!rowsRect && (e.metaKey || e.ctrlKey)
+    let pickedKey = ''
+    const updateMarquee = (ev: PointerEvent) => {
+      const rb = rowAt(ev.clientY)
+      const r1 = Math.min(startRow, rb), r2 = Math.max(startRow, rb)
+      const c1 = Math.min(a, b), c2 = Math.max(a, b)
+      setMarquee({ r1, r2, c1, c2 })
+      const ids = bars.filter(x => {
+        const ri = rows.findIndex(r => r.id === x.rowId)
+        return ri >= r1 && ri <= r2 && x.start <= c2 && x.start + x.len - 1 >= c1
+      }).map(x => x.id)
+      const key = ids.join(',')
+      if (key !== pickedKey) { pickedKey = key; onSelectBars?.(ids) }
+    }
+    if (marqueeOn) { e.preventDefault(); updateMarquee(e.nativeEvent) }
+    else setCreating({ rowId, a, b })
+    const onMove = (ev: PointerEvent) => {
+      b = idxAt(ev.clientX)
+      if (!marqueeOn && onSelectBars && rowsRect && Math.abs(ev.clientY - y0) > 10 && rowAt(ev.clientY) !== startRow) { marqueeOn = true; setCreating(null) }
+      if (marqueeOn) updateMarquee(ev)
+      else setCreating({ rowId, a, b })
+    }
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       setCreating(null)
+      if (marqueeOn) { setMarquee(null); return }
       if (a !== b) { onCreate(rowId, Math.min(a, b), Math.abs(b - a) + 1); return }
       // ドラッグしないでクリックしたとき：1回＝マスを選択（貼り付け先）、ダブルクリック＝その場所に新しいバーを作る
       if (isDouble(`cell:${rowId}:${a}`)) onCreate(rowId, a, 1)
@@ -277,6 +305,10 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
 
         {/* 行 */}
         <div ref={rowsRef} className="relative">
+        {marquee && (
+          <div className="absolute z-[25] rounded-sm border border-blue-500 bg-blue-300/25 pointer-events-none"
+            style={{ left: leftW + marquee.c1 * cw, width: (marquee.c2 - marquee.c1 + 1) * cw, top: marquee.r1 * ROW_H, height: (marquee.r2 - marquee.r1 + 1) * ROW_H }} />
+        )}
         {rowDrag && rowDrag.to !== rowDrag.from && (
           <div className="absolute left-0 right-0 z-30 h-0.5 bg-blue-500 pointer-events-none" style={{ top: (rowDrag.to > rowDrag.from ? rowDrag.to + 1 : rowDrag.to) * ROW_H - 1 }} />
         )}
