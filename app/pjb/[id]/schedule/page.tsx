@@ -880,16 +880,12 @@ export default function SchedulePage() {
         <Field label="室数" value={project.room_count ? String(project.room_count) : ''} type="number" suffix="室"
           onSave={v => updateProject({ room_count: Number(v) || 0 })} />
         {kind !== 'preopen' && (
-          <label className="grid gap-1">
-            <span className="text-[12px] text-slate-500">表示する期間（1ヶ月目から）</span>
-            <select
-              value={months}
-              onChange={e => changeMonths(Number(e.target.value))}
-              className="border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px] bg-white"
-            >
-              {(MONTH_OPTIONS.includes(months) ? MONTH_OPTIONS : [...MONTH_OPTIONS, months].sort((a, b) => a - b)).map(m => <option key={m} value={m}>{m}ヶ月（{Math.floor(m / 12) ? `${Math.floor(m / 12)}年` : ''}{m % 12 ? `${m % 12}ヶ月` : ''}）</option>)}
-            </select>
-          </label>
+          <Field label="表示する期間（1ヶ月目から）" value={String(months)} type="number" suffix="ヶ月"
+            onSave={v => {
+              const m = Math.round(Number(v))
+              if (!Number.isFinite(m) || m < 1 || m > 60) { alert('表示する期間は、1〜60ヶ月で入力してください'); return }
+              if (m !== months) changeMonths(m)
+            }} />
         )}
         {kind === 'zero' ? (
           <>
