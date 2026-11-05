@@ -10,6 +10,9 @@ const LEFT_W = '24.5%'
 const ROW_H = 26
 const MONTH_H = 34
 const WEEK_H = 40
+const PAGE_W = 1512   // FitToPage の紙面幅(px)。ラベルが収まるかの見積もりに使う
+// ラベルの表示幅のめやす（10pxの文字：全角≒10px、半角≒5.5px）
+const textWidth = (t: string) => Array.from(t).reduce((w, ch) => w + (ch.charCodeAt(0) > 255 ? 10 : 5.5), 0)
 
 const fmtDate = (d?: string | null) => {
   if (!d) return '未定'
@@ -187,16 +190,26 @@ export default function RoughPrintSheet({
                       const s = Math.max(b.start_week!, h0)
                       const e = Math.min(b.start_week! + b.length_weeks!, h0 + HALF_WEEKS)
                       const cls = BAR_COLORS[b.color]?.cls || BAR_COLORS.gray.cls
+                      const text = barText(b.label, b.color, isZero ? b.length_weeks! : roughBarWeeksExcludingBreaks(base, b.start_week!, b.length_weeks!), 'week', isZero ? WEEKS_PER_MONTH_ZERO : WEEKS_PER_MONTH_CALENDAR)
+                      // 右が隣のバーや表の右端でふさがって文字が切れるときは、左の空きマスへ向けて右寄せで表示する
+                      const clip = (o: ScheduleBar) => ({ s: Math.max(o.start_week!, h0), e: Math.min(o.start_week! + o.length_weeks!, h0 + HALF_WEEKS) })
+                      const others = rb.filter(o => o.id !== b.id).map(clip)
+                      const nextS = others.filter(o => o.s >= e).reduce((m, o) => Math.min(m, o.s), h0 + HALF_WEEKS)
+                      const prevE = others.filter(o => o.e <= s).reduce((m, o) => Math.max(m, o.e), h0)
+                      const px = (PAGE_W * (1 - 0.245)) / HALF_WEEKS   // 1週あたりの幅(px)
+                      const rightRoom = (nextS - s) * px
+                      const leftRoom = (e - prevE) * px
+                      const flipLeft = textWidth(text) + 10 > rightRoom && leftRoom > rightRoom
                       return (
                         <div
                           key={b.id}
                           className={cls}
                           style={{
                             position: 'absolute', top: 3, bottom: 3, left: `${((s - h0) * 100) / HALF_WEEKS}%`, width: `${((e - s) * 100) / HALF_WEEKS}%`,
-                            display: 'flex', alignItems: 'center', padding: '0 4px', whiteSpace: 'nowrap', fontSize: 10, zIndex: 2,
+                            display: 'flex', alignItems: 'center', justifyContent: flipLeft ? 'flex-end' : 'flex-start', padding: '0 4px', whiteSpace: 'nowrap', fontSize: 10, zIndex: 2,
                           }}
                         >
-                          {barText(b.label, b.color, isZero ? b.length_weeks! : roughBarWeeksExcludingBreaks(base, b.start_week!, b.length_weeks!), 'week', isZero ? WEEKS_PER_MONTH_ZERO : WEEKS_PER_MONTH_CALENDAR)}
+                          {text}
                         </div>
                       )
                     })}
