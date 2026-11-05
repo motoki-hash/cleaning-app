@@ -171,6 +171,13 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
 
   const startCreate = (e: React.PointerEvent<HTMLDivElement>, rowId: string) => {
     if (e.target !== e.currentTarget || e.pointerType !== 'mouse') return
+    // ドラッグ中に、まわりの文字が青く選択されてしまわないようにする（指を離したら元に戻す）
+    const prevSelect = document.body.style.userSelect
+    document.body.style.userSelect = 'none'
+    window.getSelection()?.removeAllRanges()
+    const unlock = () => { document.body.style.userSelect = prevSelect; window.removeEventListener('pointerup', unlock); window.removeEventListener('pointercancel', unlock) }
+    window.addEventListener('pointerup', unlock)
+    window.addEventListener('pointercancel', unlock)
     const rect = e.currentTarget.getBoundingClientRect()
     const idxAt = (x: number) => clamp(Math.floor((x - rect.left) / cw), 0, cols.length - 1)
     const a = idxAt(e.clientX)
