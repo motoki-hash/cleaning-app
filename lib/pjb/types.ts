@@ -76,6 +76,7 @@ export type ScheduleSet = {
   kind: ScheduleKind
   name: string
   sort_order: number
+  months?: number | null   // 版の表示期間（ヶ月）。空＝案件の設定を使う
 }
 
 export type ScheduleTask = {

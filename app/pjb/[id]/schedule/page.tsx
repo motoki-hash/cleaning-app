@@ -317,7 +317,7 @@ export default function SchedulePage() {
     setBusy(true)
     try {
       const nextOrder = (kindSchedules.reduce((m, sc) => Math.max(m, sc.sort_order), -1)) + 1
-      const { data, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind, name, sort_order: nextOrder }).select('id').single()
+      const { data, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}) }).select('id').single()
       if (error || !data) throw new Error(error?.message || '作成できませんでした')
       if (copy) await copyContent(kindTasks, kindBars, { projectId: id, scheduleId: data.id, dayShift: 0 })
       pickSchedule(kind, data.id)
@@ -357,7 +357,7 @@ export default function SchedulePage() {
       if (te || !target) throw new Error(te?.message || 'コピー先の案件が見つかりません')
       const { data: existing } = await supabase.from('pjb_schedules').select('sort_order').eq('project_id', targetId).eq('kind', kind)
       const nextOrder = ((existing || []).reduce((m: number, r: { sort_order: number }) => Math.max(m, r.sort_order), -1)) + 1
-      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: targetId, kind, name, sort_order: nextOrder }).select('id').single()
+      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: targetId, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}) }).select('id').single()
       if (error || !created) throw new Error(error?.message || 'コピーに失敗しました')
       const dayShift = kind === 'preopen' && project.open_date && target.open_date
         ? diffDays(parseYmd(project.open_date), parseYmd(target.open_date)) : 0
@@ -383,7 +383,7 @@ export default function SchedulePage() {
       const pos = kind === 'rough' ? roughToZeroPosition(roughBase, months) : zeroToRoughPosition(roughBase, months)
       const { data: existing } = await supabase.from('pjb_schedules').select('sort_order').eq('project_id', id).eq('kind', toKind)
       const nextOrder = ((existing || []).reduce((m: number, r: { sort_order: number }) => Math.max(m, r.sort_order), -1)) + 1
-      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind: toKind, name, sort_order: nextOrder }).select('id').single()
+      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind: toKind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}) }).select('id').single()
       if (error || !created) throw new Error(error?.message || 'コピーに失敗しました')
       try {
         await copyContent(kindTasks, kindBars, { projectId: id, scheduleId: created.id, dayShift: 0, kind: toKind, mapWeeks: convertBarWeeks(pos) })
@@ -560,7 +560,16 @@ export default function SchedulePage() {
     const t = new Date()
     return new Date(t.getFullYear(), t.getMonth(), 1)
   }, [project?.schedule_base_date])
-  const months = project?.schedule_months ?? DEFAULT_MONTHS
+  // 表示する期間は版ごと（パッチ024の前は、案件で1つ）
+  const versionMonths = activeSchedule && 'months' in activeSchedule ? activeSchedule : null
+  const months = versionMonths?.months ?? project?.schedule_months ?? DEFAULT_MONTHS
+  const changeMonths = async (m: number) => {
+    if (versionMonths && activeSchedule) {
+      const { error } = await supabase.from('pjb_schedules').update({ months: m }).eq('id', activeSchedule.id)
+      if (error) { alert(`保存に失敗しました：${error.message}`); return }
+      await loadSchedule()
+    } else await updateProject({ schedule_months: m })
+  }
   const roughColCount = useMemo(() => roughCols(roughBase, months), [roughBase, months])
   const zeroColCount = zeroCols(months)
   const weekLabel = useCallback((i: number) => {
@@ -786,7 +795,7 @@ export default function SchedulePage() {
   }
 
   const sheet = kind !== 'preopen'
-    ? <RoughPrintSheet mode={kind} project={project} tasks={kindTasks} bars={kindBars} scheduleName={printName} />
+    ? <RoughPrintSheet mode={kind} project={project} tasks={kindTasks} bars={kindBars} scheduleName={printName} months={months} />
     : <PreopenPrintSheet project={project} tasks={kindTasks} bars={kindBars} start={previewStart} cols={preopenCols} scheduleName={printName} />
 
   return (
@@ -875,7 +884,7 @@ export default function SchedulePage() {
             <span className="text-[12px] text-slate-500">表示する期間（1ヶ月目から）</span>
             <select
               value={months}
-              onChange={e => updateProject({ schedule_months: Number(e.target.value) })}
+              onChange={e => changeMonths(Number(e.target.value))}
               className="border border-slate-200 rounded-md px-2 py-1.5 text-[13.5px] bg-white"
             >
               {(MONTH_OPTIONS.includes(months) ? MONTH_OPTIONS : [...MONTH_OPTIONS, months].sort((a, b) => a - b)).map(m => <option key={m} value={m}>{m}ヶ月（{Math.floor(m / 12) ? `${Math.floor(m / 12)}年` : ''}{m % 12 ? `${m % 12}ヶ月` : ''}）</option>)}
