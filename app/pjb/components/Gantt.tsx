@@ -26,6 +26,10 @@ type Props = {
   onRowClick: (rowId: string) => void
   onReorder: (rowId: string, toIndex: number) => void
   onRowDelete: (rowId: string) => void
+  // 範囲の塗りつぶし（上から下まで塗って縦文字を入れる）。塗りつぶしモード、またはShiftを押しながらドラッグで範囲を選ぶ
+  bands?: { id: string; start: number; len: number; label: string; fill: string }[]
+  bandMode?: boolean
+  onBandSelect?: (start: number, len: number) => void
 }
 
 const ROW_H = 40
@@ -36,7 +40,7 @@ const HANDLE_W = 24
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
 // 週/日を1マスとした簡易ガントチャート。バーはドラッグで移動・両端でリサイズ、空きマスのドラッグで新規作成。
-export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBarChange, onBarClick, onBarOpen, onBarsMove, selectedBarIds, selectedCell, onSelectCell, onBarCopy, onCreate, onRowClick, onReorder, onRowDelete }: Props) {
+export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBarChange, onBarClick, onBarOpen, onBarsMove, selectedBarIds, selectedCell, onSelectCell, onBarCopy, onCreate, onRowClick, onReorder, onRowDelete, bands, bandMode, onBandSelect }: Props) {
   const [drag, setDrag] = useState<{ id: string; start: number; len: number; copy: boolean } | null>(null)
   const rowsRef = useRef<HTMLDivElement>(null)
   const [groupDx, setGroupDx] = useState<number | null>(null)   // 複数選択をまとめて動かしている間の移動量（マス）
@@ -50,6 +54,7 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
   }
   const [rowDrag, setRowDrag] = useState<{ id: string; from: number; to: number } | null>(null)
   const [creating, setCreating] = useState<{ rowId: string; a: number; b: number } | null>(null)
+  const [bandSel, setBandSel] = useState<{ a: number; b: number } | null>(null)   // 塗りつぶしの範囲を選んでいる最中
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const [avail, setAvail] = useState(0)
@@ -168,6 +173,21 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
     const idxAt = (x: number) => clamp(Math.floor((x - rect.left) / cw), 0, cols.length - 1)
     const a = idxAt(e.clientX)
     let b = a
+    // 塗りつぶしモード（またはShift＋ドラッグ）：週の範囲を選んで、上から下まで塗る
+    if (onBandSelect && (bandMode || e.shiftKey)) {
+      e.preventDefault()
+      setBandSel({ a, b })
+      const onBMove = (ev: PointerEvent) => { b = idxAt(ev.clientX); setBandSel({ a, b }) }
+      const onBUp = () => {
+        window.removeEventListener('pointermove', onBMove)
+        window.removeEventListener('pointerup', onBUp)
+        setBandSel(null)
+        onBandSelect(Math.min(a, b), Math.abs(b - a) + 1)
+      }
+      window.addEventListener('pointermove', onBMove)
+      window.addEventListener('pointerup', onBUp)
+      return
+    }
     setCreating({ rowId, a, b })
     const onMove = (ev: PointerEvent) => { b = idxAt(ev.clientX); setCreating({ rowId, a, b }) }
     const onUp = () => {
@@ -236,6 +256,16 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
                 : { left: i * cw, width: cw }}
             />
           ))}
+          {(bands ?? []).filter(bd => bd.start < cols.length).map(bd => (
+            <div key={bd.id} className="absolute top-0 bottom-0 flex items-center justify-center text-[13px] font-bold text-slate-800"
+              style={{ left: bd.start * cw, width: Math.min(bd.len, cols.length - bd.start) * cw, background: bd.fill }}>
+              <span style={{ writingMode: 'vertical-rl', textOrientation: 'upright', letterSpacing: '0.08em' }}>{bd.label}</span>
+            </div>
+          ))}
+          {bandSel && (
+            <div className="absolute top-0 bottom-0 bg-blue-300/50 border-x-2 border-blue-500"
+              style={{ left: Math.min(bandSel.a, bandSel.b) * cw, width: (Math.abs(bandSel.b - bandSel.a) + 1) * cw }} />
+          )}
           {(() => {
             let acc = 0
             return groups.slice(0, -1).map((g, i) => {
@@ -282,7 +312,7 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
                 ))}
               </div>
               <div
-                className="relative cursor-crosshair"
+                className={`relative ${bandMode ? 'cursor-cell' : 'cursor-crosshair'}`}
                 style={{ width: trackW, backgroundImage: lines }}
                 onPointerDown={e => startCreate(e, row.id)}
               >

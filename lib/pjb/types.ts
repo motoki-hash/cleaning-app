@@ -70,6 +70,9 @@ export type PjbDocument = {
 
 export type ScheduleKind = 'zero' | 'rough' | 'preopen'
 
+// 範囲の塗りつぶし（選んだ週を上から下まで塗って、縦文字を入れる）
+export type ScheduleBand = { id: string; start: number; len: number; label: string; color: string }
+
 export type ScheduleSet = {
   id: string
   project_id: string
@@ -77,6 +80,7 @@ export type ScheduleSet = {
   name: string
   sort_order: number
   months?: number | null   // 版の表示期間（ヶ月）。空＝案件の設定を使う
+  bands?: ScheduleBand[] | null   // 範囲の塗りつぶし
 }
 
 export type ScheduleTask = {

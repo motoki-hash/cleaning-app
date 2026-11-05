@@ -16,6 +16,17 @@ export const CATEGORY_COLOR: Record<string, string> = {
   '企画・設計': 'blue', '予算・契約': 'blue', '工事': 'green', '是正': 'darkgreen',
   'OPEN準備': 'pink', '検査': 'red', '搬入': 'pink', '撮影': 'pink', '営業': 'pink', '運営': 'pink', 'インフラ': 'blue', '清掃': 'pink',
 }
+// 範囲の塗りつぶしの色（OPENの列と同じ水色が先頭）
+export const BAND_COLORS: Record<string, { label: string; fill: string }> = {
+  cyan:  { label: '水色（OPENと同じ）', fill: '#22d3ee' },
+  sky:   { label: '青',               fill: '#bae6fd' },
+  green: { label: '緑',               fill: '#a7f3d0' },
+  pink:  { label: 'ピンク',           fill: '#fecdd3' },
+  amber: { label: '黄',               fill: '#fde68a' },
+  gray:  { label: 'グレー',           fill: '#cbd5e1' },
+}
+export const bandFill = (c: string) => BAND_COLORS[c]?.fill ?? BAND_COLORS.cyan.fill
+
 // OPEN予定の列に出す文言の候補（空のときは OPEN）
 export const OPEN_LABEL_DEFAULT = 'OPEN'
 export const OPEN_LABEL_PRESETS = ['OPEN', 'グランドオープン', 'プレオープン', 'オープン', '開業', '竣工', '引渡し', '内覧会']

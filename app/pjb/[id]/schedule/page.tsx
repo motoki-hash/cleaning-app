@@ -13,11 +13,11 @@ import { periodName, periodLabelOf } from '@/lib/pjb/periods'
 import { setUndoHandlers, clearUndoHandlers } from '@/lib/pjb/undo'
 import { useProjectData } from '@/lib/pjb/useProjectData'
 import {
-  BAR_COLORS, CATEGORY_OPTIONS, OPEN_LABEL_PRESETS, openLabelOf, colorForCategory, DEFAULT_MONTHS, MONTH_OPTIONS, roughCols, zeroCols, ROUGH_TEMPLATE, PREOPEN_TEMPLATE, DEFAULT_OPEN_WEEK,
+  BAR_COLORS, CATEGORY_OPTIONS, OPEN_LABEL_PRESETS, openLabelOf, BAND_COLORS, bandFill, colorForCategory, DEFAULT_MONTHS, MONTH_OPTIONS, roughCols, zeroCols, ROUGH_TEMPLATE, PREOPEN_TEMPLATE, DEFAULT_OPEN_WEEK,
   roughWeekRange, roughGroups, roughWeekNumbers, roughToZeroPosition, zeroToRoughPosition, convertBarWeeks, fmtMd, fmtYmdJp, parseYmd, toYmd, addDays, diffDays, kindLabel, zeroWeekLabel, WEEKS_PER_MONTH, barText, stripDuration, WEEKS_PER_MONTH_ZERO, WEEKS_PER_MONTH_CALENDAR, roughBarWeeksExcludingBreaks, daysExcludingBreaks,
 } from '@/lib/pjb/schedule'
 import { breakInRange, weekBreakInfo } from '@/lib/pjb/holidays'
-import type { Project, ScheduleBar, ScheduleKind, ScheduleSet, ScheduleTask } from '@/lib/pjb/types'
+import type { Project, ScheduleBand, ScheduleBar, ScheduleKind, ScheduleSet, ScheduleTask } from '@/lib/pjb/types'
 
 const ZOOM = { s: 0.7, m: 1, l: 1.3 } as const
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
@@ -57,6 +57,8 @@ export default function SchedulePage() {
   const [ready, setReady] = useState(false)
   const [setupError, setSetupError] = useState('')
   const [barEdit, setBarEdit] = useState<BarEdit | null>(null)
+  const [bandMode, setBandMode] = useState(false)   // 塗りつぶしモード（ドラッグで週の範囲を選ぶ）
+  const [bandEdit, setBandEdit] = useState<{ band: ScheduleBand; isNew: boolean } | null>(null)
   const [taskEdit, setTaskEdit] = useState<ScheduleTask | 'new' | null>(null)
   const [busy, setBusy] = useState(false)
   // 「版」（例：社内用・投資家用）。種類（ゼロ工程表／概算／OPEN前）ごとに複数持てる
@@ -341,7 +343,7 @@ export default function SchedulePage() {
     setBusy(true)
     try {
       const nextOrder = (kindSchedules.reduce((m, sc) => Math.max(m, sc.sort_order), -1)) + 1
-      const { data, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}) }).select('id').single()
+      const { data, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...(copy ? bandsPayload() : {}) }).select('id').single()
       if (error || !data) throw new Error(error?.message || '作成できませんでした')
       if (copy) await copyContent(kindTasks, kindBars, { projectId: id, scheduleId: data.id, dayShift: 0 })
       pickSchedule(kind, data.id)
@@ -381,7 +383,7 @@ export default function SchedulePage() {
       if (te || !target) throw new Error(te?.message || 'コピー先の案件が見つかりません')
       const { data: existing } = await supabase.from('pjb_schedules').select('sort_order').eq('project_id', targetId).eq('kind', kind)
       const nextOrder = ((existing || []).reduce((m: number, r: { sort_order: number }) => Math.max(m, r.sort_order), -1)) + 1
-      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: targetId, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}) }).select('id').single()
+      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: targetId, kind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...bandsPayload() }).select('id').single()
       if (error || !created) throw new Error(error?.message || 'コピーに失敗しました')
       const dayShift = kind === 'preopen' && project.open_date && target.open_date
         ? diffDays(parseYmd(project.open_date), parseYmd(target.open_date)) : 0
@@ -407,7 +409,7 @@ export default function SchedulePage() {
       const pos = kind === 'rough' ? roughToZeroPosition(roughBase, months) : zeroToRoughPosition(roughBase, months)
       const { data: existing } = await supabase.from('pjb_schedules').select('sort_order').eq('project_id', id).eq('kind', toKind)
       const nextOrder = ((existing || []).reduce((m: number, r: { sort_order: number }) => Math.max(m, r.sort_order), -1)) + 1
-      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind: toKind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}) }).select('id').single()
+      const { data: created, error } = await supabase.from('pjb_schedules').insert({ project_id: id, kind: toKind, name, sort_order: nextOrder, ...(versionMonths ? { months } : {}), ...bandsPayload(convertBarWeeks(pos)) }).select('id').single()
       if (error || !created) throw new Error(error?.message || 'コピーに失敗しました')
       try {
         await copyContent(kindTasks, kindBars, { projectId: id, scheduleId: created.id, dayShift: 0, kind: toKind, mapWeeks: convertBarWeeks(pos) })
@@ -587,6 +589,17 @@ export default function SchedulePage() {
   // 表示する期間は版ごと（パッチ024の前は、案件で1つ）
   const versionMonths = activeSchedule && 'months' in activeSchedule ? activeSchedule : null
   const months = versionMonths?.months ?? project?.schedule_months ?? DEFAULT_MONTHS
+  // 範囲の塗りつぶし（版ごと。パッチ025の前は使えない）
+  const bandsReady = !!activeSchedule && 'bands' in activeSchedule && kind !== 'preopen'
+  const bands: ScheduleBand[] = bandsReady ? (activeSchedule!.bands ?? []) : []
+  const bandsPayload = (map?: (start: number, len: number) => [number, number]) =>
+    bandsReady ? { bands: bands.map(b => { if (!map) return b; const [start, len] = map(b.start, b.len); return { ...b, start, len } }) } : {}
+  const saveBands = async (next: ScheduleBand[]) => {
+    if (!activeSchedule) return
+    const { error } = await supabase.from('pjb_schedules').update({ bands: next }).eq('id', activeSchedule.id)
+    if (error) { alert(`保存に失敗しました：${error.message}`); return }
+    await loadSchedule()
+  }
   const changeMonths = async (m: number) => {
     if (versionMonths && activeSchedule) {
       const { error } = await supabase.from('pjb_schedules').update({ months: m }).eq('id', activeSchedule.id)
@@ -819,7 +832,7 @@ export default function SchedulePage() {
   }
 
   const sheet = kind !== 'preopen'
-    ? <RoughPrintSheet mode={kind} project={project} tasks={kindTasks} bars={kindBars} scheduleName={printName} months={months} />
+    ? <RoughPrintSheet mode={kind} project={project} tasks={kindTasks} bars={kindBars} scheduleName={printName} months={months} bands={bands} />
     : <PreopenPrintSheet project={project} tasks={kindTasks} bars={kindBars} start={previewStart} cols={preopenCols} scheduleName={printName} />
 
   return (
@@ -1007,14 +1020,41 @@ export default function SchedulePage() {
             onCreate={(taskId, start, len) => setBarEdit({ mode: 'new', taskId, start, len })}
             onRowClick={taskId => setTaskEdit(kindTasks.find(t => t.id === taskId) || null)}
             onReorder={reorderTask}
+            bands={bands.map(b => ({ ...b, fill: bandFill(b.color) }))}
+            bandMode={bandMode && kind !== 'preopen'}
+            onBandSelect={kind === 'preopen' ? undefined : (start, len) => {
+              if (!bandsReady) { alert('範囲の塗りつぶしを使うには、SQLパッチ025（supabase-pj-budget-patch-025.sql）を実行してください'); return }
+              setBandEdit({ isNew: true, band: { id: crypto.randomUUID(), start, len, label: '', color: 'cyan' } })
+            }}
             onRowDelete={taskId => {
               const t = kindTasks.find(x => x.id === taskId)
               if (t && confirm(`「${t.name}」の行とバーをすべて削除します。よろしいですか？（⌘Zで元に戻せます）`)) deleteTask(taskId)
             }}
           />
+          {kind !== 'preopen' && bands.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12.5px] text-slate-500 print:hidden">
+              <span>塗りつぶし</span>
+              {bands.map(b => (
+                <button key={b.id} onClick={() => setBandEdit({ band: b, isNew: false })} title="クリックで編集・削除"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-700 hover:border-slate-400">
+                  <span className="w-3 h-3 rounded-sm border border-slate-300" style={{ background: bandFill(b.color) }} />
+                  {b.label || '（文字なし）'}<span className="text-slate-400">{(kind === 'zero' ? zeroWeekLabel : weekLabel)(b.start)}〜 {b.len}週</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="mt-3 flex items-center justify-between print:hidden">
             <div className="flex items-center gap-2">
               <button onClick={() => setTaskEdit('new')} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">＋ 工程を追加</button>
+              {kind !== 'preopen' && (
+                <button
+                  onClick={() => setBandMode(v => !v)}
+                  title="ONにして、表の週をドラッグすると、その週を上から下まで塗りつぶして、縦文字を入れられます（Shiftを押しながらドラッグでも同じ）"
+                  className={`text-[13px] px-3 py-2 rounded-lg border ${bandMode ? 'bg-cyan-100 border-cyan-400 text-cyan-900 font-medium' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+                >
+                  ▮ 塗りつぶしモード{bandMode ? '：ON' : ''}
+                </button>
+              )}
               <button
                 onClick={saveAsTemplate} disabled={busy}
                 title={templates[kind] ? `今の雛形：「${templates[kind]!.source_project_name ?? '不明'}」の内容` : '標準の雛形を使っています'}
@@ -1064,6 +1104,21 @@ export default function SchedulePage() {
             else if (schedDialog === 'copyKind') await copyToOtherKind(v.name)
             else await copyToProject(v.targetId, v.name)
           }}
+        />
+      )}
+      {bandEdit && (
+        <BandDialog
+          key={bandEdit.band.id}
+          edit={bandEdit}
+          weekLabel={kind === 'zero' ? zeroWeekLabel : weekLabel}
+          weekCount={kind === 'zero' ? zeroColCount : roughColCount}
+          onClose={() => setBandEdit(null)}
+          onSave={async v => {
+            const next = bandEdit.isNew ? [...bands, v] : bands.map(b => (b.id === v.id ? v : b))
+            setBandEdit(null)
+            await saveBands(next)
+          }}
+          onDelete={bandEdit.isNew ? undefined : async () => { const id = bandEdit.band.id; setBandEdit(null); await saveBands(bands.filter(b => b.id !== id)) }}
         />
       )}
       {barEdit && (
@@ -1355,6 +1410,60 @@ function BarDialog({
         {onDuplicate && <button onClick={onDuplicate} disabled={busy} className="px-3 py-2.5 rounded-lg border border-slate-200 text-slate-700 text-[14px]">複製</button>}
         <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-[14px] text-slate-600">キャンセル</button>
         <button onClick={submit} disabled={busy} className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-[14px] font-medium disabled:opacity-50">保存</button>
+      </div>
+    </Modal>
+  )
+}
+
+// 範囲の塗りつぶし：文言・色・範囲を決める
+function BandDialog({
+  edit, weekLabel, weekCount, onClose, onSave, onDelete,
+}: {
+  edit: { band: ScheduleBand; isNew: boolean }; weekLabel: (i: number) => string; weekCount: number
+  onClose: () => void
+  onSave: (v: ScheduleBand) => void
+  onDelete?: () => void
+}) {
+  const [label, setLabel] = useState(edit.band.label)
+  const [color, setColor] = useState(edit.band.color)
+  const [start, setStart] = useState(edit.band.start)
+  const [len, setLen] = useState(String(edit.band.len))
+  const l = Math.min(Math.max(1, Math.round(Number(len)) || 1), Math.max(1, weekCount - start))
+  return (
+    <Modal title={edit.isNew ? '範囲を塗りつぶす' : '塗りつぶしの編集'} onClose={onClose}>
+      <div className="grid gap-3">
+        <label className="grid gap-1">
+          <span className="text-[13px] text-slate-500">縦に入れる文字（空のままだと、色だけ塗ります）</span>
+          <input value={label} onChange={e => setLabel(e.target.value)} autoFocus maxLength={12} placeholder="例）工事中断・テナント工事・OPEN" className="border border-slate-200 rounded-lg px-3 py-2 text-[15px]" />
+        </label>
+        <div className="grid grid-cols-[1fr_6.5rem] gap-2">
+          <label className="grid gap-1">
+            <span className="text-[13px] text-slate-500">開始</span>
+            <select value={start} onChange={e => setStart(Number(e.target.value))} className="border border-slate-200 rounded-lg px-2 py-2 text-[15px] bg-white">
+              {Array.from({ length: weekCount }, (_, i) => <option key={i} value={i}>{weekLabel(i)}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1">
+            <span className="text-[13px] text-slate-500">期間（週）</span>
+            <input type="number" min={1} value={len} onChange={e => setLen(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-[15px]" />
+          </label>
+        </div>
+        <div className="grid gap-1">
+          <span className="text-[13px] text-slate-500">色</span>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(BAND_COLORS).map(([k, c]) => (
+              <button key={k} type="button" onClick={() => setColor(k)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12.5px] ${color === k ? 'border-blue-600 ring-1 ring-blue-600' : 'border-slate-200'}`}>
+                <span className="w-3.5 h-3.5 rounded-sm border border-slate-300" style={{ background: c.fill }} />{c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-2 mt-5">
+        {onDelete && <button onClick={onDelete} className="px-3 py-2.5 rounded-lg border border-rose-200 text-rose-600 text-[14px]">削除</button>}
+        <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-[14px] text-slate-600">キャンセル</button>
+        <button onClick={() => onSave({ id: edit.band.id, start, len: l, label: label.trim(), color })} className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-[14px] font-medium">保存</button>
       </div>
     </Modal>
   )

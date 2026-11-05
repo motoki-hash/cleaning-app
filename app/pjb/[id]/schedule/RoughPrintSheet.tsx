@@ -1,8 +1,8 @@
-import { BAR_COLORS, DEFAULT_MONTHS, zeroCols, WEEKS_PER_MONTH, roughWeekRange, roughGroups, roughWeekNumbers, fmtMd, barText, WEEKS_PER_MONTH_ZERO, WEEKS_PER_MONTH_CALENDAR, roughBarWeeksExcludingBreaks, openLabelOf } from '@/lib/pjb/schedule'
+import { BAR_COLORS, DEFAULT_MONTHS, zeroCols, WEEKS_PER_MONTH, roughWeekRange, roughGroups, roughWeekNumbers, fmtMd, barText, WEEKS_PER_MONTH_ZERO, WEEKS_PER_MONTH_CALENDAR, roughBarWeeksExcludingBreaks, openLabelOf, bandFill } from '@/lib/pjb/schedule'
 import { weekBreakInfo } from '@/lib/pjb/holidays'
 import FitToPage from '../../components/FitToPage'
 import { periodName, periodLabelOf } from '@/lib/pjb/periods'
-import type { Project, ScheduleBar, ScheduleKind, ScheduleTask } from '@/lib/pjb/types'
+import type { Project, ScheduleBand, ScheduleBar, ScheduleKind, ScheduleTask } from '@/lib/pjb/types'
 
 const NAVY = '#1b3350'
 const SLATE = '#3d5675'
@@ -21,8 +21,8 @@ const fmtDate = (d?: string | null) => {
 //  ゼロ工程表: 1ヶ月＝4週×12ヶ月の固定グリッド（日付・祝日なし）
 //  概算スケジュール: 日曜始まりの暦の週×52週（週の開始日・大型連休つき）
 export default function RoughPrintSheet({
-  mode, project, tasks, bars, scheduleName, months: monthsProp,
-}: { mode: Exclude<ScheduleKind, 'preopen'>; project: Project; tasks: ScheduleTask[]; bars: ScheduleBar[]; scheduleName?: string; months?: number }) {
+  mode, project, tasks, bars, scheduleName, months: monthsProp, bands,
+}: { mode: Exclude<ScheduleKind, 'preopen'>; project: Project; tasks: ScheduleTask[]; bars: ScheduleBar[]; scheduleName?: string; months?: number; bands?: ScheduleBand[] }) {
   const isZero = mode === 'zero'
   const months = monthsProp ?? project.schedule_months ?? DEFAULT_MONTHS
   const roughBars = bars.filter(b => b.kind === mode && b.start_week != null && b.length_weeks != null)
@@ -150,6 +150,17 @@ export default function RoughPrintSheet({
                 {groups.map(g => (
                   <div key={`l${g.n}-${g.from}`} style={{ position: 'absolute', top: 0, bottom: 0, left: `${(g.from * 100) / HALF_WEEKS}%`, borderLeft: '2px solid #94a3b8' }} />
                 ))}
+                {(bands ?? []).filter(bd => bd.start < h0 + HALF_WEEKS && bd.start + bd.len > h0).map(bd => {
+                  const from = Math.max(bd.start, h0), to = Math.min(bd.start + bd.len, h0 + HALF_WEEKS)
+                  return (
+                    <div key={bd.id} style={{
+                      position: 'absolute', top: 0, bottom: 0, left: `${((from - h0) * 100) / HALF_WEEKS}%`, width: `${((to - from) * 100) / HALF_WEEKS}%`,
+                      background: bandFill(bd.color), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, lineHeight: 1.25, fontWeight: 700,
+                    }}>
+                      <span style={{ writingMode: 'vertical-rl', textOrientation: 'upright', letterSpacing: '0.05em' }}>{bd.label}</span>
+                    </div>
+                  )
+                })}
                 {openIn && (
                   <div style={{
                     position: 'absolute', top: 0, bottom: 0, left: `${((openWeek! - h0) * 100) / HALF_WEEKS}%`, width: `${100 / HALF_WEEKS}%`,
