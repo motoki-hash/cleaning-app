@@ -61,6 +61,8 @@ export default function SchedulePage() {
   const [busy, setBusy] = useState(false)
   // 「版」（例：社内用・投資家用）。種類（ゼロ工程表／概算／OPEN前）ごとに複数持てる
   const [schedules, setSchedules] = useState<ScheduleSet[]>([])
+  const [dragVersion, setDragVersion] = useState<string | null>(null)   // 版の入れ替えでつかんでいる版
+  const [overVersion, setOverVersion] = useState<string | null>(null)
   const [schedulesReady, setSchedulesReady] = useState(false)   // SQLパッチ010が済んでいるときだけ true
   const [activeIds, setActiveIds] = useState<Partial<Record<ScheduleKind, string>>>({})
   const [showPreview, setShowPreview] = useState(false)
@@ -310,6 +312,28 @@ export default function SchedulePage() {
       const { error: e2 } = await supabase.from('pjb_schedule_bars').insert(rows)
       if (e2) throw new Error(e2.message)
     }
+  }
+
+  // 版の並びを入れ替える（つかんだ版を、落とした版の位置へ）
+  const moveVersion = async (fromId: string, toId: string) => {
+    if (fromId === toId) return
+    const list = [...kindSchedules]
+    const from = list.findIndex(x => x.id === fromId), to = list.findIndex(x => x.id === toId)
+    if (from < 0 || to < 0) return
+    const firstId = list[0]?.id
+    const [moved] = list.splice(from, 1)
+    list.splice(to, 0, moved)
+    const orderOf = new Map(list.map((x, i) => [x.id, i]))
+    setSchedules(prev => prev.map(x => orderOf.has(x.id) ? { ...x, sort_order: orderOf.get(x.id)! } : x).sort((a, b) => a.sort_order - b.sort_order))
+    // 版に紐づいていない古い工程は、これまで先頭の版のものとして扱っていたので、先頭が変わる前に今の先頭に紐づけておく
+    if (firstId) {
+      await supabase.from('pjb_schedule_tasks').update({ schedule_id: firstId }).eq('project_id', id).eq('kind', kind).is('schedule_id', null)
+      await supabase.from('pjb_schedule_bars').update({ schedule_id: firstId }).eq('project_id', id).eq('kind', kind).is('schedule_id', null)
+    }
+    const results = await Promise.all(list.map((x, i) => supabase.from('pjb_schedules').update({ sort_order: i }).eq('id', x.id)))
+    const failed = results.find(r => r.error)
+    if (failed?.error) alert(`並び順を保存できませんでした：${failed.error.message}`)
+    await loadSchedule()
   }
 
   const createSchedule = async (name: string, copy: boolean) => {
@@ -831,7 +855,16 @@ export default function SchedulePage() {
           {kindSchedules.map(sc => (
             <button
               key={sc.id} onClick={() => pickSchedule(kind, sc.id)}
-              className={`text-[13.5px] px-3 py-1.5 rounded-full border whitespace-nowrap ${
+              draggable={kindSchedules.length > 1}
+              title={kindSchedules.length > 1 ? 'つかんで左右に動かすと、並びを入れ替えられます' : undefined}
+              onDragStart={e => { setDragVersion(sc.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', sc.id) }}
+              onDragOver={e => { if (dragVersion) { e.preventDefault(); setOverVersion(sc.id) } }}
+              onDragLeave={() => setOverVersion(v => (v === sc.id ? null : v))}
+              onDrop={e => { e.preventDefault(); const from = dragVersion; setDragVersion(null); setOverVersion(null); if (from) moveVersion(from, sc.id) }}
+              onDragEnd={() => { setDragVersion(null); setOverVersion(null) }}
+              className={`text-[13.5px] px-3 py-1.5 rounded-full border whitespace-nowrap ${kindSchedules.length > 1 ? 'cursor-grab active:cursor-grabbing' : ''} ${dragVersion === sc.id ? 'opacity-40' : ''} ${
+                overVersion === sc.id && dragVersion && dragVersion !== sc.id ? 'ring-2 ring-blue-400 ' : ''
+              }${
                 activeSchedule?.id === sc.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
               }`}
             >
