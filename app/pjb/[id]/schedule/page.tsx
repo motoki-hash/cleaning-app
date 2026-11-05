@@ -855,8 +855,9 @@ export default function SchedulePage() {
           {kindSchedules.map(sc => (
             <button
               key={sc.id} onClick={() => pickSchedule(kind, sc.id)}
+              onDoubleClick={() => { pickSchedule(kind, sc.id); setSchedDialog('rename') }}
               draggable={kindSchedules.length > 1}
-              title={kindSchedules.length > 1 ? 'つかんで左右に動かすと、並びを入れ替えられます' : undefined}
+              title={`ダブルクリックで名前を変更${kindSchedules.length > 1 ? '／つかんで左右に動かすと並びを入れ替え' : ''}`}
               onDragStart={e => { setDragVersion(sc.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', sc.id) }}
               onDragOver={e => { if (dragVersion) { e.preventDefault(); setOverVersion(sc.id) } }}
               onDragLeave={() => setOverVersion(v => (v === sc.id ? null : v))}
