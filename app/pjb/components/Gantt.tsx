@@ -38,6 +38,8 @@ const GROUP_H = 40
 const COL_H = 48
 const HEAD_H = GROUP_H + COL_H
 const HANDLE_W = 24
+// ラベルの表示幅のめやす（12pxの文字：全角≒12px、半角≒6.5px）
+const textWidth = (t: string) => Array.from(t).reduce((w, ch) => w + (ch.charCodeAt(0) > 255 ? 12 : 6.5), 0)
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
 // 週/日を1マスとした簡易ガントチャート。バーはドラッグで移動・両端でリサイズ、空きマスのドラッグで新規作成。
@@ -372,6 +374,12 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
                   // 同じ行の次のバーにぶつからない範囲までラベルを表示する（超える分は…で省略）
                   const next = rowBars.filter(o => o.id !== b.id && o.start >= cur.start + cur.len).sort((x, y) => x.start - y.start)[0]
                   const maxLabel = next ? (next.start - cur.start) * cw - 10 : undefined
+                  // 右が隣のバーでふさがって文字が切れるときは、左の空きマスへ向けて右寄せで表示する
+                  const prev = rowBars.filter(o => o.id !== b.id && o.start + o.len <= cur.start).sort((x, y) => (y.start + y.len) - (x.start + x.len))[0]
+                  const leftRoom = (cur.start + cur.len - (prev ? prev.start + prev.len : 0)) * cw - 10
+                  const need = textWidth(b.label) + 4
+                  const flipLeft = maxLabel !== undefined && need > maxLabel && leftRoom > maxLabel
+                  const labelMax = flipLeft ? leftRoom : maxLabel
                   const isCopying = !!drag && drag.id === b.id && drag.copy
                   return (
                     <div key={b.id}>
@@ -381,11 +389,11 @@ export default function Gantt({ leftCols, rows, cols, groups, bars, minCw, onBar
                     <div className="absolute top-1.5 bottom-1.5" style={{ left: cur.start * cw, width: w, touchAction: 'none' }}>
                       <div
                         onPointerDown={e => startBarDrag(e, b, 'move')}
-                        className={`h-full rounded-md ${color} ${selectedBarIds?.includes(b.id) ? 'ring-2 ring-slate-800' : ''} shadow-sm cursor-grab active:cursor-grabbing flex items-center px-1.5 text-[12px] font-medium whitespace-nowrap`}
+                        className={`h-full rounded-md ${color} ${selectedBarIds?.includes(b.id) ? 'ring-2 ring-slate-800' : ''} shadow-sm cursor-grab active:cursor-grabbing flex items-center ${flipLeft ? 'justify-end' : ''} px-1.5 text-[12px] font-medium whitespace-nowrap`}
                         title={b.label}
                       >
                         {/* バーより長いラベルは右側の空きマスにはみ出して表示する */}
-                        <span className="pointer-events-none relative z-[1] block shrink-0 overflow-hidden text-ellipsis" style={{ maxWidth: maxLabel }}>{b.label}</span>
+                        <span className="pointer-events-none relative z-[1] block shrink-0 overflow-hidden text-ellipsis" style={{ maxWidth: labelMax }}>{b.label}</span>
                       </div>
                       <div onPointerDown={e => startBarDrag(e, b, 'l')} className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize" />
                       <div onPointerDown={e => startBarDrag(e, b, 'r')} className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize" />
