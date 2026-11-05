@@ -1,7 +1,6 @@
 import { BAR_COLORS, DEFAULT_MONTHS, zeroCols, WEEKS_PER_MONTH, roughWeekRange, roughGroups, roughWeekNumbers, fmtMd, barText, WEEKS_PER_MONTH_ZERO, WEEKS_PER_MONTH_CALENDAR, roughBarWeeksExcludingBreaks, openLabelOf, bandFill } from '@/lib/pjb/schedule'
 import { weekBreakInfo } from '@/lib/pjb/holidays'
 import FitToPage from '../../components/FitToPage'
-import { periodName, periodLabelOf } from '@/lib/pjb/periods'
 import type { Project, ScheduleBand, ScheduleBar, ScheduleKind, ScheduleTask } from '@/lib/pjb/types'
 
 const NAVY = '#1b3350'
@@ -72,7 +71,7 @@ export default function RoughPrintSheet({
     <FitToPage>
 
       <div style={{ background: NAVY, color: '#fff', padding: '14px 12px', fontSize: 22, fontWeight: 800, letterSpacing: '0.02em' }}>
-        PROJECT SCHEDULE | {periodName(project.name, periodLabelOf(project))}
+        PROJECT SCHEDULE | {project.name}
       </div>
       <div style={{ background: '#e3e9f1', padding: '7px 12px', fontSize: 13, fontWeight: 700 }}>
         {isZero ? 'ゼロ工程表' : '概算スケジュール'}{scheduleName ? `（${scheduleName}）` : ''}｜設計・見積・工事・OPEN準備（全{openMonths}ヶ月）
