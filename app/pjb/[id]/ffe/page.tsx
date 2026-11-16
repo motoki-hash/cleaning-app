@@ -8,7 +8,7 @@ import { formatYen } from '@/lib/pjb/format'
 import { periodName, periodLabelOf } from '@/lib/pjb/periods'
 import { isCommitEnter } from '../../components/ui'
 import {
-  FFE_CATEGORIES, FFE_STATUSES, FFE_ORDERERS, blankItem, counted, lineIncl, exclOf, sumItems, summarize, warningsFor, investorView,
+  FFE_CATEGORIES, FFE_STATUSES, FFE_ORDERERS, blankItem, counted, lineIncl, exclOf, priceGap, sumItems, summarize, warningsFor, investorView,
   internalCsv, investorCsv, downloadText,
   type FfeItem, type FfeSettings, type InvestorMode,
 } from '@/lib/pjb/ffe'
@@ -51,14 +51,33 @@ function Num({ value, onCommit, money }: { value: number; onCommit: (v: number) 
     />
   )
 }
+// 空にもできる金額の入力（サイトで確認した金額など）
+function NumOpt({ value, onCommit }: { value: number | null | undefined; onCommit: (v: number | null) => void }) {
+  const cur = value === null || value === undefined ? null : Number(value)
+  return (
+    <input
+      key={cur ?? ''} defaultValue={cur === null ? '' : cur.toLocaleString('ja-JP')} inputMode="decimal" placeholder="未確認"
+      onFocus={e => e.target.select()}
+      onBlur={e => {
+        const t = e.target.value.replace(/[¥￥,\s]/g, '')
+        if (t === '') { if (cur !== null) onCommit(null); return }
+        const n = Number(t)
+        if (!isFinite(n)) { e.target.value = cur === null ? '' : cur.toLocaleString('ja-JP'); return }
+        if (n !== cur) onCommit(n)
+      }}
+      onKeyDown={e => { if (isCommitEnter(e)) (e.target as HTMLInputElement).blur() }}
+      className={`${INPUT} text-right tabular-nums`}
+    />
+  )
+}
 function DateCell({ value, onCommit }: { value: string | null; onCommit: (v: string | null) => void }) {
   return <input type="date" key={value ?? ''} defaultValue={value ?? ''} onBlur={e => { if ((e.target.value || null) !== value) onCommit(e.target.value || null) }} className={`${INPUT} text-[12.5px]`} />
 }
 
-const COLS: Array<{ k: string; label: string; w: number }> = [
+const COLS_ALL: Array<{ k: string; label: string; w: number }> = [
   { k: 'no', label: 'No', w: 56 }, { k: 'name', label: '商品', w: 240 }, { k: 'status', label: 'ステータス', w: 104 }, { k: 'orderer', label: '発注者', w: 104 },
   { k: 'qty', label: '数量', w: 66 }, { k: 'unit', label: '単価（税込）', w: 108 }, { k: 'incl', label: '合計（税込）', w: 112 },
-  { k: 'spec', label: '規格・カラー', w: 160 }, { k: 'vendor', label: '購入先', w: 116 }, { k: 'note', label: '備考', w: 180 }, { k: 'url', label: 'URL', w: 160 },
+  { k: 'spec', label: '規格・カラー', w: 160 }, { k: 'vendor', label: '購入先', w: 116 }, { k: 'note', label: '備考', w: 180 }, { k: 'url', label: 'URL', w: 160 }, { k: 'cprice', label: 'サイト確認額（税込）', w: 124 }, { k: 'cat', label: '確認日', w: 132 }, { k: 'gap', label: 'サイトとの差', w: 104 },
   { k: 'staff', label: '社内発注担当', w: 96 }, { k: 'ordered_at', label: '発注日', w: 132 }, { k: 'want', label: '希望納品日', w: 132 }, { k: 'fixed', label: '確定納品日', w: 132 },
   { k: 'done', label: '完了', w: 52 }, { k: 'pay_method', label: '支払い方法', w: 108 }, { k: 'pay_month', label: '支払月', w: 90 },
   { k: 'ship_to', label: '商品発送先', w: 128 }, { k: 'invoice_set', label: '請求書セット名', w: 128 }, { k: 'investor', label: '投資家向け', w: 112 }, { k: 'ops', label: '', w: 92 },
@@ -241,6 +260,9 @@ export default function FfePage() {
   if (notFound) return <div className="p-8 text-center text-slate-400 text-[14px]">プロジェクトが見つかりません</div>
   if (loading || !project) return <Shell projectId={id} active="ffe" wide><p className="text-center text-[14px] text-slate-400 py-10">読み込み中…</p></Shell>
   const projName = periodName(project.name, periodLabelOf(project))
+  // サイト確認額の列は、SQLパッチ029が済んでいるときだけ出す
+  const hasCheck = items.length === 0 || 'checked_price' in items[0]
+  const COLS = hasCheck ? COLS_ALL : COLS_ALL.filter(c => !['cprice', 'cat', 'gap'].includes(c.k))
 
   if (needPatch) {
     return (
@@ -329,6 +351,22 @@ export default function FfePage() {
                               {/^https?:\/\//.test(it.url) && <a href={it.url} target="_blank" rel="noreferrer" className="px-1 text-blue-600 shrink-0" title="開く">↗</a>}
                             </div>
                           </td>
+                          {hasCheck && (
+                            <>
+                              <td className={`${bg} border-b border-slate-200`}>
+                                <NumOpt value={it.checked_price} onCommit={v => patch(it.id, { checked_price: v, checked_at: v === null ? null : (it.checked_at ?? new Date().toISOString().slice(0, 10)) })} />
+                              </td>
+                              <td className={`${bg} border-b border-slate-200`}><DateCell value={it.checked_at ?? null} onCommit={v => patch(it.id, { checked_at: v })} /></td>
+                              <td className={`${bg} border-b border-slate-200 px-2 text-right text-[12.5px] tabular-nums whitespace-nowrap`}>
+                                {(() => {
+                                  const gap = priceGap(it)
+                                  if (gap === null) return <span className="text-slate-300">—</span>
+                                  if (gap === 0) return <span className="text-emerald-700">✓ 一致</span>
+                                  return <span className="font-semibold text-rose-600" title={`サイトのほうが ${gap > 0 ? '高い' : '安い'}`}>{gap > 0 ? '+' : '-'}{formatYen(Math.abs(gap))}</span>
+                                })()}
+                              </td>
+                            </>
+                          )}
                           <td className={`${bg} border-b border-slate-200`}><Txt value={it.staff} list="ffe-staff" onCommit={v => patch(it.id, { staff: v })} /></td>
                           <td className={`${bg} border-b border-slate-200`}><DateCell value={it.ordered_at} onCommit={v => patch(it.id, { ordered_at: v })} /></td>
                           <td className={`${bg} border-b border-slate-200`}><DateCell value={it.want_date} onCommit={v => patch(it.id, { want_date: v })} /></td>
@@ -452,6 +490,7 @@ export default function FfePage() {
           <button onClick={() => window.print()} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">印刷／PDF</button>
         </div>
 
+        {!hasCheck && <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[13px] px-3 py-2">「サイト確認額」の欄を使うには、<code className="px-1 bg-white rounded">supabase-pj-budget-patch-029.sql</code> を Supabase で実行してください。</div>}
         {msg && <div className="mb-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[13px] px-3 py-2">{msg}</div>}
         {trash && (
           <div className="mb-3 rounded-lg bg-slate-800 text-white text-[13px] px-3 py-2 flex items-center gap-3">
@@ -558,7 +597,7 @@ export default function FfePage() {
             </div>
           </div>
         ) : view === 'internal' ? renderInternal() : renderInvestor()}
-        <p className="text-[12px] text-slate-400 mt-2">金額は税込の単価を入力します。税別は「合計（税込）÷1.1」を1行ずつ四捨五入、全体の合計は行の合計を足し上げています。キャンセルの品目は合計に入りません。</p>
+        <p className="text-[12px] text-slate-400 mt-2">金額は税込の単価を入力します。税別は「合計（税込）÷1.1」を1行ずつ四捨五入、全体の合計は行の合計を足し上げています。キャンセルの品目は合計に入りません。「サイト確認額」には、URLの先で見た税込の単価を入れます（リストの単価と違うと、差が赤く出ます）。</p>
       </div>
 
       {/* 印刷／PDF */}
