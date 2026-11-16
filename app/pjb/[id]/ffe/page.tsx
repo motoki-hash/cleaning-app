@@ -56,12 +56,21 @@ function DateCell({ value, onCommit }: { value: string | null; onCommit: (v: str
 }
 
 const COLS_ALL: Array<{ k: string; label: string; w: number }> = [
-  { k: 'no', label: 'No', w: 56 }, { k: 'name', label: '商品', w: 240 }, { k: 'status', label: 'ステータス', w: 104 }, { k: 'orderer', label: '発注者', w: 104 },
+  { k: 'no', label: 'No', w: 56 }, { k: 'name', label: '商品', w: 270 }, { k: 'status', label: 'ステータス', w: 104 }, { k: 'orderer', label: '発注者', w: 104 },
   { k: 'qty', label: '数量', w: 66 }, { k: 'unit', label: '単価（税込）', w: 108 }, { k: 'incl', label: '合計（税込）', w: 112 },
   { k: 'spec', label: '規格・カラー', w: 160 }, { k: 'vendor', label: '購入先', w: 116 }, { k: 'note', label: '備考', w: 180 }, { k: 'url', label: 'URL', w: 160 }, { k: 'cat', label: 'URL確認日', w: 132 },
   { k: 'staff', label: '社内発注担当', w: 96 }, { k: 'ordered_at', label: '発注日', w: 132 }, { k: 'want', label: '希望納品日', w: 132 }, { k: 'fixed', label: '確定納品日', w: 132 },
   { k: 'done', label: '完了', w: 52 }, { k: 'pay_method', label: '支払い方法', w: 108 }, { k: 'pay_month', label: '支払月', w: 90 },
-  { k: 'ship_to', label: '商品発送先', w: 128 }, { k: 'invoice_set', label: '請求書セット名', w: 128 }, { k: 'investor', label: '投資家向け', w: 112 }, { k: 'ops', label: '', w: 92 },
+  { k: 'ship_to', label: '商品発送先', w: 128 }, { k: 'invoice_set', label: '請求書セット名', w: 128 }, { k: 'investor', label: '投資家向け', w: 112 }, { k: 'detail', label: '', w: 92 },
+]
+
+// 作業の場面ごとに出す列（「すべての列」は全部）
+type Preset = 'order' | 'delivery' | 'pay' | 'all'
+const PRESETS: Array<{ k: Preset; label: string; keys: string[] | null }> = [
+  { k: 'order', label: '発注作業', keys: ['no', 'name', 'status', 'orderer', 'qty', 'unit', 'incl', 'vendor', 'url', 'detail'] },
+  { k: 'delivery', label: '納品管理', keys: ['no', 'name', 'status', 'qty', 'ordered_at', 'want', 'fixed', 'ship_to', 'done', 'detail'] },
+  { k: 'pay', label: '支払', keys: ['no', 'name', 'status', 'incl', 'pay_method', 'pay_month', 'invoice_set', 'done', 'detail'] },
+  { k: 'all', label: 'すべての列', keys: null },
 ]
 
 // 今日の日付（日本時間の端末の日付）。URLを開いた日として記録する
@@ -78,6 +87,112 @@ const groupByCategory = (list: FfeItem[]) => {
 }
 const isMissingTable = (m: string) => /pjb_ffe_|does not exist|schema cache/i.test(m)
 
+// ---- 右に開く詳細パネル（1つの品目のすべての項目を、グループ分けして編集する）----
+const PIN = '!border-slate-300 bg-white'
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div><div className="text-[12px] text-slate-500 mb-0.5">{label}</div>{children}</div>
+}
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
+  return <div className="mt-5"><div className="text-[12.5px] font-semibold text-slate-700 mb-2 pb-1 border-b border-slate-100">{title}</div><div className="grid grid-cols-2 gap-x-3 gap-y-2.5">{children}</div></div>
+}
+function DetailPanel({ item: it, warns, hasCheck, cats, position, total, onPrev, onNext, onClose, patch, onMove, onRemove }: {
+  item: FfeItem; warns?: string[]; hasCheck: boolean; cats: string[]; position: number; total: number
+  onPrev: () => void; onNext: () => void; onClose: () => void; patch: (p: Partial<FfeItem>) => void; onMove: (d: -1 | 1) => void; onRemove: () => void
+}) {
+  const incl = lineIncl(it)
+  return (
+    <div className="print:hidden fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[440px] bg-white border-l border-slate-200 shadow-2xl overflow-y-auto">
+      <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-2">
+        <button onClick={onPrev} disabled={position <= 0} className="px-2 py-1 rounded border border-slate-200 text-slate-600 disabled:opacity-30" title="前の品目">‹</button>
+        <button onClick={onNext} disabled={position < 0 || position >= total - 1} className="px-2 py-1 rounded border border-slate-200 text-slate-600 disabled:opacity-30" title="次の品目">›</button>
+        <div className="text-[12px] text-slate-400 mr-auto">{position >= 0 ? `${position + 1} / ${total}` : ''}</div>
+        <button onClick={onClose} className="px-2.5 py-1 rounded-lg border border-slate-200 text-[13px] text-slate-600 hover:bg-slate-50">閉じる（Esc）</button>
+      </div>
+      <div className="px-4 pb-8 pt-3">
+        <Txt value={it.name} onCommit={v => patch({ name: v })} placeholder="商品名" className={`${PIN} !text-[16px] !font-semibold`} />
+        <div className="flex items-baseline gap-3 mt-2">
+          <div className="text-[22px] font-bold tabular-nums text-slate-900">{formatYen(incl)}</div>
+          <div className="text-[12.5px] text-slate-500">税込（税別 {formatYen(exclOf(incl))}）</div>
+        </div>
+        {warns && warns.length > 0 && (
+          <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[12.5px] text-amber-900">
+            {warns.map((w, i) => <div key={i}>⚠ {w}</div>)}
+          </div>
+        )}
+
+        <Group title="基本">
+          <Field label="区分">
+            <select value={it.category} onChange={e => patch({ category: e.target.value })} className="w-full border border-slate-300 rounded px-2 py-1.5 text-[13px] bg-white">
+              {cats.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="小見出し"><Txt value={it.section} onCommit={v => patch({ section: v })} className={PIN} /></Field>
+          <Field label="ステータス">
+            <select value={it.status} onChange={e => patch({ status: e.target.value })} className={`w-full text-[13px] rounded px-2 py-1.5 border-0 ${STATUS_CLS[it.status] ?? 'bg-slate-100'}`}>
+              {[...FFE_STATUSES, ...(FFE_STATUSES as readonly string[]).includes(it.status) ? [] : [it.status]].map(s => <option key={s}>{s}</option>)}
+            </select>
+          </Field>
+          <Field label="発注者"><Txt value={it.orderer} list="ffe-orderers" onCommit={v => patch({ orderer: v.trim() })} className={PIN} /></Field>
+          <Field label="社内発注担当"><Txt value={it.staff} list="ffe-staff" onCommit={v => patch({ staff: v })} className={PIN} /></Field>
+          <Field label="購入先"><Txt value={it.vendor} list="ffe-vendors" onCommit={v => patch({ vendor: v })} className={PIN} /></Field>
+          <Field label="規格・仕様"><Txt value={it.spec} onCommit={v => patch({ spec: v })} className={PIN} /></Field>
+          <Field label="カラー"><Txt value={it.color} onCommit={v => patch({ color: v })} className={PIN} /></Field>
+          <Field label="入数"><Txt value={it.pack_qty} onCommit={v => patch({ pack_qty: v })} className={PIN} /></Field>
+        </Group>
+
+        <div className="mt-3">
+          <Field label="URL">
+            <div className="flex items-center gap-1">
+              <Txt value={it.url} onCommit={v => patch({ url: v.trim() })} className={`${PIN} text-blue-700`} />
+              {/^https?:\/\//.test(it.url) && <a href={it.url} target="_blank" rel="noreferrer" onClick={() => { if (hasCheck) patch({ checked_at: todayYmd() }) }} className="px-2 py-1 rounded border border-slate-200 text-blue-600 shrink-0" title="URLを開く（開いた日が「URL確認日」に入ります）">開く ↗</a>}
+            </div>
+          </Field>
+          {hasCheck && <div className="mt-2 w-1/2 pr-1.5"><Field label="URL確認日"><DateCell value={it.checked_at ?? null} onCommit={v => patch({ checked_at: v })} /></Field></div>}
+        </div>
+
+        <Group title="金額（税込）">
+          <Field label="数量"><Num value={it.qty} onCommit={v => patch({ qty: v })} /></Field>
+          <Field label="単価（税込）"><Num money value={it.unit_price} onCommit={v => patch({ unit_price: v })} /></Field>
+        </Group>
+
+        <Group title="発注・納品">
+          <Field label="発注日"><DateCell value={it.ordered_at} onCommit={v => patch({ ordered_at: v })} /></Field>
+          <Field label="商品発送先"><Txt value={it.ship_to} list="ffe-ship" onCommit={v => patch({ ship_to: v })} className={PIN} /></Field>
+          <Field label="希望納品日"><DateCell value={it.want_date} onCommit={v => patch({ want_date: v })} /></Field>
+          <Field label="確定納品日"><DateCell value={it.fixed_date} onCommit={v => patch({ fixed_date: v })} /></Field>
+          <label className="flex items-center gap-2 text-[13px] text-slate-700 col-span-2 mt-1"><input type="checkbox" checked={it.done} onChange={e => patch({ done: e.target.checked })} />完了（納品・確認まで済んだ）</label>
+        </Group>
+
+        <Group title="支払">
+          <Field label="支払い方法"><Txt value={it.pay_method} list="ffe-pay" onCommit={v => patch({ pay_method: v })} className={PIN} /></Field>
+          <Field label="支払月"><Txt value={it.pay_month} onCommit={v => patch({ pay_month: v })} className={PIN} /></Field>
+          <Field label="請求書セット名"><Txt value={it.invoice_set} onCommit={v => patch({ invoice_set: v })} className={PIN} /></Field>
+        </Group>
+
+        <div className="mt-5">
+          <div className="text-[12.5px] font-semibold text-slate-700 mb-2 pb-1 border-b border-slate-100">投資家向け</div>
+          <select value={it.investor_mode} onChange={e => patch({ investor_mode: e.target.value as InvestorMode })} className="w-full border border-slate-300 rounded px-2 py-1.5 text-[13px] bg-white">
+            <option value="show">表示（他の品目の分の上乗せを受ける）</option>
+            <option value="hide">見せない（金額は他の品目の単価に上乗せ）</option>
+            <option value="fixed">表示するが、金額は変えない</option>
+          </select>
+        </div>
+
+        <div className="mt-5">
+          <div className="text-[12.5px] font-semibold text-slate-700 mb-2 pb-1 border-b border-slate-100">備考（社内メモ。投資家用には出ません）</div>
+          <textarea key={it.note} defaultValue={it.note} rows={3} onBlur={e => { if (e.target.value !== it.note) patch({ note: e.target.value }) }} className="w-full border border-slate-300 rounded px-2 py-1.5 text-[13px]" />
+        </div>
+
+        <div className="mt-6 flex items-center gap-2">
+          <button onClick={() => onMove(-1)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-[13px] text-slate-600 hover:bg-slate-50">↑ 上へ</button>
+          <button onClick={() => onMove(1)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-[13px] text-slate-600 hover:bg-slate-50">↓ 下へ</button>
+          <button onClick={onRemove} className="ml-auto px-3 py-1.5 rounded-lg border border-rose-200 text-[13px] text-rose-600 hover:bg-rose-50">この品目を削除</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function FfePage() {
   const { id } = useParams<{ id: string }>()
   const [project, setProject] = useState<ProjectLite | null>(null)
@@ -92,6 +207,18 @@ export default function FfePage() {
   const [statusF, setStatusF] = useState('all')
   const [q, setQ] = useState('')
   const [warnOnly, setWarnOnly] = useState(false)
+  const [hideDone, setHideDone] = useState(false)
+  const [preset, setPresetState] = useState<Preset>('order')
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState<string[]>([])
+  const setPreset = (p: Preset) => { setPresetState(p); try { localStorage.setItem('pjb-ffe-preset', p) } catch { /* 保存できなくても動く */ } }
+  useEffect(() => { try { const v = localStorage.getItem('pjb-ffe-preset'); if (v === 'order' || v === 'delivery' || v === 'pay' || v === 'all') setPresetState(v) } catch { /* 読めなくても動く */ } }, [])
+  useEffect(() => {
+    if (!openId) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpenId(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [openId])
   const [dialog, setDialog] = useState<'import' | 'copy' | null>(null)
   const [trash, setTrash] = useState<FfeItem | null>(null)
   const [msg, setMsg] = useState('')
@@ -130,12 +257,13 @@ export default function FfePage() {
     if (orderer !== 'all' && it.orderer !== orderer) return false
     if (statusF !== 'all' && it.status !== statusF) return false
     if (warnOnly && !warnings.has(it.id)) return false
+    if (hideDone && (it.done || it.status === '納品済' || it.status === 'キャンセル')) return false
     if (q.trim()) {
       const hay = `${it.name} ${it.spec} ${it.vendor} ${it.note} ${it.section}`.toLowerCase()
       if (!hay.includes(q.trim().toLowerCase())) return false
     }
     return true
-  }), [ordered, cat, orderer, statusF, warnOnly, q, warnings])
+  }), [ordered, cat, orderer, statusF, warnOnly, hideDone, q, warnings])
 
   // ---- 保存系 ----
   const patch = async (itemId: string, p: Partial<FfeItem>) => {
@@ -179,13 +307,14 @@ export default function FfePage() {
     if (error) { alert(`保存に失敗しました：${error.message}`); load() }
   }
 
-  const removeItem = async (it: FfeItem) => {
-    if (!confirm(`「${it.name || '（商品名なし）'}」を削除しますか？`)) return
+  const removeItem = async (it: FfeItem): Promise<boolean> => {
+    if (!confirm(`「${it.name || '（商品名なし）'}」を削除しますか？`)) return false
     setItems(prev => prev.filter(i => i.id !== it.id))
     const { error } = await supabase.from('pjb_ffe_items').delete().eq('id', it.id)
-    if (error) { alert(`削除に失敗しました：${error.message}`); load(); return }
+    if (error) { alert(`削除に失敗しました：${error.message}`); load(); return false }
     setTrash(it)
     setTimeout(() => setTrash(cur => (cur?.id === it.id ? null : cur)), 10000)
+    return true
   }
   const undoRemove = async () => {
     if (!trash) return
@@ -245,7 +374,8 @@ export default function FfePage() {
   const projName = periodName(project.name, periodLabelOf(project))
   // URL確認日の列は、SQLパッチ029が済んでいるときだけ出す
   const hasCheck = items.length === 0 || 'checked_at' in items[0]
-  const COLS = hasCheck ? COLS_ALL : COLS_ALL.filter(c => c.k !== 'cat')
+  const presetKeys = PRESETS.find(p => p.k === preset)?.keys ?? COLS_ALL.map(c => c.k)
+  const COLS = COLS_ALL.filter(c => presetKeys.includes(c.k) && (hasCheck || c.k !== 'cat'))
 
   if (needPatch) {
     return (
@@ -262,18 +392,88 @@ export default function FfePage() {
   const cats = Array.from(new Set([...FFE_CATEGORIES, ...items.map(i => i.category)]))
   const warnCount = warnings.size
   const iMap = new Map(iv.lines.map(l => [l.id, l]))
+  const openItem = openId ? items.find(i => i.id === openId) ?? null : null
 
-  // ---- 表（社内用）----
+  // ---- 表（社内用）：場面ごとに出す列を切り替え、詳細は右のパネルで編集 ----
+  const renderCell = (k: string, it: FfeItem, bg: string, warn: string[] | undefined) => {
+    const base = `${bg} border-b border-slate-100`
+    const sub = [it.spec, it.color, preset !== 'all' ? it.note : ''].filter(Boolean).join(' ・ ')
+    switch (k) {
+      case 'no':
+        return <td key={k} onClick={() => setOpenId(it.id)} title={warn?.join('\n')} className={`sticky left-0 z-[1] ${base} px-2 text-center text-[12px] cursor-pointer ${warn ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{warn ? '⚠ ' : ''}{numberOf.get(it.id)}</td>
+      case 'name':
+        return (
+          <td key={k} className={`sticky left-[56px] z-[1] ${base} border-r border-r-slate-100`}>
+            <Txt value={it.name} onCommit={v => patch(it.id, { name: v })} placeholder="商品名" className={`font-medium ${it.status === 'キャンセル' ? 'line-through' : ''}`} />
+            {(preset !== 'all' && sub) || it.investor_mode !== 'show' ? (
+              <div className="px-2 -mt-0.5 pb-1 text-[11.5px] text-slate-400 truncate">
+                {it.investor_mode === 'hide' && <span className="mr-1.5 px-1.5 rounded bg-slate-800 text-white">投資家には非表示</span>}
+                {it.investor_mode === 'fixed' && <span className="mr-1.5 px-1.5 rounded bg-violet-100 text-violet-800">投資家向け：金額固定</span>}
+                {preset !== 'all' ? sub : ''}
+              </div>
+            ) : null}
+          </td>
+        )
+      case 'status':
+        return (
+          <td key={k} className={`${base} px-1`}>
+            <select value={it.status} onChange={e => patch(it.id, { status: e.target.value })} className={`w-full text-[12px] rounded-full px-2 py-1 border-0 ${STATUS_CLS[it.status] ?? 'bg-slate-100 text-slate-700'}`}>
+              {[...FFE_STATUSES, ...(FFE_STATUSES as readonly string[]).includes(it.status) ? [] : [it.status]].map(s => <option key={s}>{s}</option>)}
+            </select>
+          </td>
+        )
+      case 'orderer': return <td key={k} className={base}><Txt value={it.orderer} list="ffe-orderers" onCommit={v => patch(it.id, { orderer: v.trim() })} /></td>
+      case 'qty': return <td key={k} className={`${base} ${Number(it.qty) <= 0 && Number(it.unit_price) > 0 ? '!bg-rose-50' : ''}`}><Num value={it.qty} onCommit={v => patch(it.id, { qty: v })} /></td>
+      case 'unit': return <td key={k} className={base}><Num money value={it.unit_price} onCommit={v => patch(it.id, { unit_price: v })} /></td>
+      case 'incl': return <td key={k} className={`${base} px-2 text-right tabular-nums font-semibold ${it.status === 'キャンセル' ? 'line-through' : ''}`} title={`税別 ${formatYen(exclOf(lineIncl(it)))}`}>{formatYen(lineIncl(it))}</td>
+      case 'spec': return <td key={k} className={base}><Txt value={it.spec} onCommit={v => patch(it.id, { spec: v })} /></td>
+      case 'vendor': return <td key={k} className={base}><Txt value={it.vendor} list="ffe-vendors" onCommit={v => patch(it.id, { vendor: v })} /></td>
+      case 'note': return <td key={k} className={base}><Txt value={it.note} onCommit={v => patch(it.id, { note: v })} /></td>
+      case 'url':
+        return (
+          <td key={k} className={base}>
+            <div className="flex items-center">
+              <Txt value={it.url} onCommit={v => patch(it.id, { url: v.trim() })} className="text-blue-700" />
+              {/^https?:\/\//.test(it.url) && <a href={it.url} target="_blank" rel="noreferrer" onClick={() => { if (hasCheck) patch(it.id, { checked_at: todayYmd() }) }} className="px-1 text-blue-600 shrink-0" title="URLを開く（開いた日が「URL確認日」に入ります）">↗</a>}
+            </div>
+          </td>
+        )
+      case 'cat': return <td key={k} className={base}><DateCell value={it.checked_at ?? null} onCommit={v => patch(it.id, { checked_at: v })} /></td>
+      case 'staff': return <td key={k} className={base}><Txt value={it.staff} list="ffe-staff" onCommit={v => patch(it.id, { staff: v })} /></td>
+      case 'ordered_at': return <td key={k} className={base}><DateCell value={it.ordered_at} onCommit={v => patch(it.id, { ordered_at: v })} /></td>
+      case 'want': return <td key={k} className={base}><DateCell value={it.want_date} onCommit={v => patch(it.id, { want_date: v })} /></td>
+      case 'fixed': return <td key={k} className={base}><DateCell value={it.fixed_date} onCommit={v => patch(it.id, { fixed_date: v })} /></td>
+      case 'done': return <td key={k} className={`${base} text-center`}><input type="checkbox" checked={it.done} onChange={e => patch(it.id, { done: e.target.checked })} /></td>
+      case 'pay_method': return <td key={k} className={base}><Txt value={it.pay_method} list="ffe-pay" onCommit={v => patch(it.id, { pay_method: v })} /></td>
+      case 'pay_month': return <td key={k} className={base}><Txt value={it.pay_month} onCommit={v => patch(it.id, { pay_month: v })} /></td>
+      case 'ship_to': return <td key={k} className={base}><Txt value={it.ship_to} list="ffe-ship" onCommit={v => patch(it.id, { ship_to: v })} /></td>
+      case 'invoice_set': return <td key={k} className={base}><Txt value={it.invoice_set} onCommit={v => patch(it.id, { invoice_set: v })} /></td>
+      case 'investor':
+        return (
+          <td key={k} className={`${base} px-1`}>
+            <select value={it.investor_mode} onChange={e => patch(it.id, { investor_mode: e.target.value as InvestorMode })}
+              title="見せない＝投資家用では表示せず、その金額を他の品目の単価に上乗せします。固定＝表示するが、上乗せは受けません"
+              className={`w-full text-[12px] rounded px-1.5 py-1 border ${it.investor_mode === 'hide' ? 'bg-slate-800 text-white border-slate-800' : it.investor_mode === 'fixed' ? 'bg-violet-50 border-violet-200' : 'border-slate-200 bg-white'}`}>
+              <option value="show">表示</option><option value="hide">見せない</option><option value="fixed">固定</option>
+            </select>
+          </td>
+        )
+      case 'detail':
+        return <td key={k} className={`${base} text-center`}><button onClick={() => setOpenId(it.id)} className="text-[12px] px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 whitespace-nowrap">詳細 ›</button></td>
+      default: return <td key={k} className={base} />
+    }
+  }
+
   const renderInternal = () => {
     const groups = groupByCategory(filtered)
     return (
-      <div className="overflow-auto max-h-[72vh] rounded-xl border border-slate-300 bg-white shadow-sm">
+      <div className="overflow-auto max-h-[72vh] rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="text-[13px] border-separate border-spacing-0" style={{ tableLayout: 'fixed', width: COLS.reduce((s, c) => s + c.w, 0) }}>
           <colgroup>{COLS.map(c => <col key={c.k} style={{ width: c.w }} />)}</colgroup>
           <thead>
             <tr>
               {COLS.map(c => (
-                <th key={c.k} className={`sticky top-0 bg-slate-700 text-white text-[12px] font-semibold text-left px-2 py-2 whitespace-nowrap ${c.k === 'no' ? 'left-0 z-[4]' : c.k === 'name' ? 'left-[56px] z-[4]' : 'z-[3]'}`}>{c.label}</th>
+                <th key={c.k} className={`sticky top-0 bg-slate-50 text-slate-500 text-[12px] font-medium text-left px-2 py-2.5 whitespace-nowrap border-b border-slate-200 ${['qty', 'unit', 'incl'].includes(c.k) ? '!text-right' : ''} ${c.k === 'no' ? 'left-0 z-[4]' : c.k === 'name' ? 'left-[56px] z-[4]' : 'z-[3]'}`}>{c.label}</th>
               ))}
             </tr>
           </thead>
@@ -281,94 +481,51 @@ export default function FfePage() {
             {groups.map(g => {
               const all = ordered.filter(i => i.category === g.category)
               const sub = sumItems(all)
+              const isCollapsed = collapsed.includes(g.category)
               let prevSection: string | null = null
               return (
                 <Fragment key={g.category}>
                   <tr>
-                    <td colSpan={COLS.length} className="bg-amber-500 text-white font-semibold px-2 py-1.5">
+                    <td colSpan={COLS.length} className="bg-slate-100 px-2 py-2 border-b border-slate-200">
                       <div className="sticky left-2 inline-flex items-center gap-3 flex-wrap">
-                        <span className="text-[14px]">{g.category}</span>
-                        <span className="text-[12px] font-normal opacity-90">{all.filter(counted).length}品目 ／ 税込 {formatYen(sub.incl)} ／ 税別 {formatYen(sub.excl)}</span>
-                        <button onClick={() => addSection(g.category)} className="text-[12px] px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 font-normal">＋ 小見出し</button>
+                        <button onClick={() => setCollapsed(c => isCollapsed ? c.filter(x => x !== g.category) : [...c, g.category])} className="text-[14px] font-semibold text-slate-800 hover:text-slate-600" title="開閉">
+                          {isCollapsed ? '▸' : '▾'} {g.category}
+                        </button>
+                        <span className="text-[12px] text-slate-500">{all.filter(counted).length}品目 ／ 税込 {formatYen(sub.incl)} ／ 税別 {formatYen(sub.excl)}</span>
+                        <button onClick={() => addSection(g.category)} className="text-[12px] px-2 py-0.5 rounded border border-slate-300 text-slate-500 hover:bg-white">＋ 小見出し</button>
                       </div>
                     </td>
                   </tr>
-                  {g.items.map(it => {
+                  {!isCollapsed && g.items.map(it => {
                     const showSection = it.section !== prevSection && !(prevSection === null && it.section === '')
                     prevSection = it.section
                     const warn = warnings.get(it.id)
-                    const dead = it.status === 'キャンセル'
-                    const bg = warn ? 'bg-amber-50' : 'bg-white'
-                    const incl = lineIncl(it)
+                    const finished = it.done || it.status === '納品済' || it.status === 'キャンセル'
+                    const bg = openId === it.id ? 'bg-sky-50' : warn ? 'bg-amber-50' : 'bg-white'
                     return (
                       <Fragment key={it.id}>
                         {showSection && (
                           <tr>
-                            <td colSpan={COLS.length} className="bg-sky-100 px-2 py-1 border-b border-slate-200">
+                            <td colSpan={COLS.length} className="bg-white px-2 pt-3 pb-1 border-b border-slate-100">
                               <div className="sticky left-2 inline-flex items-center gap-2">
-                                <Txt value={it.section} onCommit={v => renameSection(it.category, it.section, v)} placeholder="（小見出しなし）" className="!w-56 !font-semibold !text-sky-900" />
+                                <Txt value={it.section} onCommit={v => renameSection(it.category, it.section, v)} placeholder="（小見出しなし）" className="!w-56 !font-semibold !text-slate-500 !text-[12.5px]" />
                               </div>
                             </td>
                           </tr>
                         )}
-                        <tr className={`${dead ? 'opacity-50' : ''} group`}>
-                          <td className={`sticky left-0 z-[1] ${bg} border-b border-slate-200 px-2 text-center text-slate-500 text-[12px]`}>
-                            <span title={warn?.join('\n')} className={warn ? 'text-amber-600 font-bold cursor-help' : ''}>{warn ? '⚠ ' : ''}{numberOf.get(it.id)}</span>
-                          </td>
-                          <td className={`sticky left-[56px] z-[1] ${bg} border-b border-slate-200 border-r`}><Txt value={it.name} onCommit={v => patch(it.id, { name: v })} placeholder="商品名" className={`font-medium ${dead ? 'line-through' : ''}`} /></td>
-                          <td className={`${bg} border-b border-slate-200 px-1`}>
-                            <select value={it.status} onChange={e => patch(it.id, { status: e.target.value })} className={`w-full text-[12px] rounded-full px-2 py-1 border-0 ${STATUS_CLS[it.status] ?? 'bg-slate-100 text-slate-700'}`}>
-                              {[...FFE_STATUSES, ...(FFE_STATUSES as readonly string[]).includes(it.status) ? [] : [it.status]].map(s => <option key={s}>{s}</option>)}
-                            </select>
-                          </td>
-                          <td className={`${bg} border-b border-slate-200`}><Txt value={it.orderer} list="ffe-orderers" onCommit={v => patch(it.id, { orderer: v.trim() })} /></td>
-                          <td className={`${bg} border-b border-slate-200 ${Number(it.qty) <= 0 && Number(it.unit_price) > 0 ? '!bg-rose-50' : ''}`}><Num value={it.qty} onCommit={v => patch(it.id, { qty: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200`}><Num money value={it.unit_price} onCommit={v => patch(it.id, { unit_price: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200 px-2 text-right tabular-nums font-semibold ${dead ? 'line-through' : ''}`} title={`税別 ${formatYen(exclOf(incl))}`}>{formatYen(incl)}</td>
-                          <td className={`${bg} border-b border-slate-200`}><Txt value={it.spec} onCommit={v => patch(it.id, { spec: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200`}><Txt value={it.vendor} list="ffe-vendors" onCommit={v => patch(it.id, { vendor: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200`}><Txt value={it.note} onCommit={v => patch(it.id, { note: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200`}>
-                            <div className="flex items-center">
-                              <Txt value={it.url} onCommit={v => patch(it.id, { url: v.trim() })} className="text-blue-700" />
-                              {/^https?:\/\//.test(it.url) && <a href={it.url} target="_blank" rel="noreferrer" onClick={() => { if (hasCheck) patch(it.id, { checked_at: todayYmd() }) }} className="px-1 text-blue-600 shrink-0" title="URLを開く（開いた日が「URL確認日」に入ります）">↗</a>}
-                            </div>
-                          </td>
-                          {hasCheck && (
-                            <td className={`${bg} border-b border-slate-200`}><DateCell value={it.checked_at ?? null} onCommit={v => patch(it.id, { checked_at: v })} /></td>
-                          )}
-                          <td className={`${bg} border-b border-slate-200`}><Txt value={it.staff} list="ffe-staff" onCommit={v => patch(it.id, { staff: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200`}><DateCell value={it.ordered_at} onCommit={v => patch(it.id, { ordered_at: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200`}><DateCell value={it.want_date} onCommit={v => patch(it.id, { want_date: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200`}><DateCell value={it.fixed_date} onCommit={v => patch(it.id, { fixed_date: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200 text-center`}><input type="checkbox" checked={it.done} onChange={e => patch(it.id, { done: e.target.checked })} /></td>
-                          <td className={`${bg} border-b border-slate-200`}><Txt value={it.pay_method} list="ffe-pay" onCommit={v => patch(it.id, { pay_method: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200`}><Txt value={it.pay_month} onCommit={v => patch(it.id, { pay_month: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200`}><Txt value={it.ship_to} list="ffe-ship" onCommit={v => patch(it.id, { ship_to: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200`}><Txt value={it.invoice_set} onCommit={v => patch(it.id, { invoice_set: v })} /></td>
-                          <td className={`${bg} border-b border-slate-200 px-1`}>
-                            <select value={it.investor_mode} onChange={e => patch(it.id, { investor_mode: e.target.value as InvestorMode })}
-                              title="見せない＝投資家用では表示せず、その金額を他の品目の単価に上乗せします。固定＝表示するが、上乗せは受けません"
-                              className={`w-full text-[12px] rounded px-1.5 py-1 border ${it.investor_mode === 'hide' ? 'bg-slate-800 text-white border-slate-800' : it.investor_mode === 'fixed' ? 'bg-violet-50 border-violet-200' : 'border-slate-200 bg-white'}`}>
-                              <option value="show">表示</option><option value="hide">見せない</option><option value="fixed">固定</option>
-                            </select>
-                          </td>
-                          <td className={`${bg} border-b border-slate-200 text-center whitespace-nowrap`}>
-                            <button onClick={() => move(it, -1)} className="px-1 text-slate-400 hover:text-slate-700" title="上へ">↑</button>
-                            <button onClick={() => move(it, 1)} className="px-1 text-slate-400 hover:text-slate-700" title="下へ">↓</button>
-                            <button onClick={() => removeItem(it)} className="px-1 text-slate-400 hover:text-rose-600" title="削除">×</button>
-                          </td>
-                        </tr>
+                        <tr className={`h-12 ${finished ? 'opacity-55' : ''}`}>{COLS.map(c => renderCell(c.k, it, bg, warn))}</tr>
                       </Fragment>
                     )
                   })}
-                  <tr>
-                    <td colSpan={COLS.length} className="bg-white border-b border-slate-300 px-2 py-1">
-                      <div className="sticky left-2 inline-block">
-                        <button onClick={() => addItem(g.category, all[all.length - 1]?.section ?? '')} className="text-[12.5px] px-2.5 py-1 rounded border border-dashed border-slate-300 text-slate-600 hover:bg-slate-50">＋ {g.category}に品目を追加</button>
-                      </div>
-                    </td>
-                  </tr>
+                  {!isCollapsed && (
+                    <tr>
+                      <td colSpan={COLS.length} className="bg-white border-b border-slate-200 px-2 py-1.5">
+                        <div className="sticky left-2 inline-block">
+                          <button onClick={() => addItem(g.category, all[all.length - 1]?.section ?? '')} className="text-[12.5px] px-2.5 py-1 rounded border border-dashed border-slate-300 text-slate-500 hover:bg-slate-50">＋ {g.category}に品目を追加</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </Fragment>
               )
             })}
@@ -552,9 +709,20 @@ export default function FfePage() {
               {FFE_STATUSES.map(s => <option key={s}>{s}</option>)}
             </select>
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="商品名・購入先などで検索" className="text-[13px] border border-slate-300 rounded-lg px-3 py-1.5 bg-white w-60" />
-            {(cat !== 'all' || orderer !== 'all' || statusF !== 'all' || q || warnOnly) && (
-              <button onClick={() => { setCat('all'); setOrderer('all'); setStatusF('all'); setQ(''); setWarnOnly(false) }} className="text-[13px] text-blue-600 underline">絞り込みを解除</button>
+            <button onClick={() => setHideDone(v => !v)} className={`text-[13px] px-3 py-1.5 rounded-lg border ${hideDone ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300'}`} title="納品済・完了・キャンセルの行を隠します">未完了のみ</button>
+            {(cat !== 'all' || orderer !== 'all' || statusF !== 'all' || q || warnOnly || hideDone) && (
+              <button onClick={() => { setCat('all'); setOrderer('all'); setStatusF('all'); setQ(''); setWarnOnly(false); setHideDone(false) }} className="text-[13px] text-blue-600 underline">絞り込みを解除</button>
             )}
+          </div>
+        )}
+
+        {view === 'internal' && items.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+            <span className="text-[12.5px] text-slate-500 mr-1">表示する列</span>
+            {PRESETS.map(pr => (
+              <button key={pr.k} onClick={() => setPreset(pr.k)} className={`text-[13px] px-3 py-1.5 rounded-full border ${preset === pr.k ? 'bg-emerald-800 text-white border-emerald-800' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>{pr.label}</button>
+            ))}
+            <span className="text-[12px] text-slate-400 ml-1">行の「詳細 ›」で、すべての項目を編集できます</span>
           </div>
         )}
 
@@ -638,6 +806,18 @@ export default function FfePage() {
         )}
       </div>
 
+      {openItem && (
+        <DetailPanel
+          item={openItem} warns={warnings.get(openItem.id)} hasCheck={hasCheck} cats={cats}
+          position={filtered.findIndex(i => i.id === openItem.id)} total={filtered.length}
+          onPrev={() => { const k = filtered.findIndex(i => i.id === openItem.id); if (k > 0) setOpenId(filtered[k - 1].id) }}
+          onNext={() => { const k = filtered.findIndex(i => i.id === openItem.id); if (k >= 0 && k < filtered.length - 1) setOpenId(filtered[k + 1].id) }}
+          onClose={() => setOpenId(null)}
+          patch={p => patch(openItem.id, p)}
+          onMove={d => move(openItem, d)}
+          onRemove={async () => { if (await removeItem(openItem)) setOpenId(null) }}
+        />
+      )}
       {dialog === 'import' && <ImportDialog onClose={() => setDialog(null)} onImport={bulkInsert} />}
       {dialog === 'copy' && <CopyDialog projectId={id} onClose={() => setDialog(null)} onCopied={items => bulkInsert(items)} />}
     </Shell>
