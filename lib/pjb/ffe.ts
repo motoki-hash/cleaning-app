@@ -96,6 +96,60 @@ export function summarize(items: FfeItem[]) {
   return { bns: by('bns'), designer: by('designer'), separate: by('separate'), total: sumItems(items), categories: [...categories, ...extraCats] }
 }
 
+// ---- 記入漏れ（進み具合ごとに、必要な項目を決める）----
+export type MissingKey = 'name' | 'orderer' | 'qty' | 'unit_price' | 'vendor' | 'url' | 'ordered_at' | 'want_date' | 'fixed_date' | 'done' | 'pay_method' | 'pay_month'
+export const MISSING_LABEL: Record<MissingKey, string> = {
+  name: '商品名', orderer: '発注者', qty: '数量', unit_price: '単価', vendor: '購入先', url: 'URL', ordered_at: '発注日',
+  want_date: '希望納品日', fixed_date: '確定納品日', done: '完了チェック', pay_method: '支払い方法', pay_month: '支払月',
+}
+// ステータスごとの必須項目（保留・キャンセルは対象外）
+export function requiredKeys(it: Pick<FfeItem, 'status'>): MissingKey[] {
+  switch (it.status) {
+    case 'キャンセル': case '保留': return []
+    case '選定済': return ['name', 'orderer', 'qty', 'unit_price', 'vendor', 'url']
+    case '発注済': return ['name', 'orderer', 'qty', 'unit_price', 'vendor', 'url', 'ordered_at', 'want_date']
+    case '納品済': return ['name', 'orderer', 'qty', 'unit_price', 'vendor', 'url', 'ordered_at', 'fixed_date', 'done', 'pay_method', 'pay_month']
+    default: return ['name', 'orderer']   // 未選定ほか
+  }
+}
+const isFilled = (it: FfeItem, k: MissingKey): boolean => {
+  switch (k) {
+    case 'qty': return Number(it.qty) > 0
+    case 'unit_price': return Number(it.unit_price) > 0
+    case 'done': return !!it.done
+    case 'ordered_at': return !!it.ordered_at
+    case 'want_date': return !!it.want_date
+    case 'fixed_date': return !!it.fixed_date
+    default: return String(it[k] ?? '').trim() !== ''
+  }
+}
+export const missingKeys = (it: FfeItem): MissingKey[] => requiredKeys(it).filter(k => !isFilled(it, k))
+export function completeness(items: FfeItem[]) {
+  let required = 0, filled = 0, rows = 0
+  for (const it of items) {
+    const req = requiredKeys(it)
+    const miss = req.filter(k => !isFilled(it, k))
+    required += req.length
+    filled += req.length - miss.length
+    if (miss.length) rows++
+  }
+  return { required, filled, rows, rate: required === 0 ? 1 : filled / required }
+}
+
+// URLのドメインから、購入先の候補を推測する（案件内で同じ綴りがあれば、それに合わせる）
+const VENDOR_BY_HOST: Array<[RegExp, string]> = [
+  [/(^|\.)amzn\.(asia|to|com)$|(^|\.)amazon\.(co\.jp|com)$/i, 'Amazon'], [/yamada-denkiweb\.com$/i, 'YAMADA'], [/monotaro\.com$/i, 'モノタロウ'],
+  [/rakuten\.co\.jp$/i, '楽天'], [/shopping\.yahoo\.co\.jp$|store\.shopping\.yahoo\.co\.jp$/i, 'Yahoo!ショッピング'], [/askul\.co\.jp$|lohaco\.jp$/i, 'ASKUL'],
+  [/nitori-net\.jp$/i, 'ニトリ'], [/ikea\.com$|ikea\.jp$/i, 'IKEA'], [/kakaku\.com$/i, '価格.com'], [/biccamera\.com$/i, 'ビックカメラ'], [/yodobashi\.com$/i, 'ヨドバシ'],
+]
+export function guessVendor(url: string, known: string[]): string {
+  let host = ''
+  try { host = new URL(url.trim()).hostname } catch { return '' }
+  const hit = VENDOR_BY_HOST.find(([re]) => re.test(host))
+  if (!hit) return ''
+  return known.find(k => k.toLowerCase() === hit[1].toLowerCase()) ?? hit[1]
+}
+
 // ---- 入力チェック ----
 export function warningsFor(items: FfeItem[]): Map<string, string[]> {
   const out = new Map<string, string[]>()

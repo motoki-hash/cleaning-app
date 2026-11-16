@@ -9,8 +9,8 @@ import { periodName, periodLabelOf } from '@/lib/pjb/periods'
 import { isCommitEnter } from '../../components/ui'
 import {
   FFE_CATEGORIES, FFE_STATUSES, FFE_ORDERERS, blankItem, counted, lineIncl, exclOf, sumItems, summarize, warningsFor, investorView,
-  internalCsv, investorCsv, downloadText,
-  type FfeItem, type FfeSettings, type InvestorMode,
+  internalCsv, investorCsv, downloadText, missingKeys, completeness, guessVendor, MISSING_LABEL,
+  type FfeItem, type FfeSettings, type InvestorMode, type MissingKey,
 } from '@/lib/pjb/ffe'
 import { ImportDialog, CopyDialog } from './FfeDialogs'
 import type { ProjectStatus } from '@/lib/pjb/types'
@@ -87,19 +87,61 @@ const groupByCategory = (list: FfeItem[]) => {
 }
 const isMissingTable = (m: string) => /pjb_ffe_|does not exist|schema cache/i.test(m)
 
+// ---- ステータスを変えたとき、足りない項目をその場で聞く小さな入力画面 ----
+function StatusAsk({ item: it, status, keys, patch, onClose }: { item: FfeItem; status: string; keys: MissingKey[]; patch: (p: Partial<FfeItem>) => void; onClose: () => void }) {
+  const input = (k: MissingKey) => {
+    switch (k) {
+      case 'qty': return <Num value={it.qty} onCommit={v => patch({ qty: v })} />
+      case 'unit_price': return <Num money value={it.unit_price} onCommit={v => patch({ unit_price: v })} />
+      case 'ordered_at': return <DateCell value={it.ordered_at} onCommit={v => patch({ ordered_at: v })} />
+      case 'want_date': return <DateCell value={it.want_date} onCommit={v => patch({ want_date: v })} />
+      case 'fixed_date': return <DateCell value={it.fixed_date} onCommit={v => patch({ fixed_date: v })} />
+      case 'done': return <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={it.done} onChange={e => patch({ done: e.target.checked })} />完了にする</label>
+      case 'vendor': return <Txt value={it.vendor} list="ffe-vendors" onCommit={v => patch({ vendor: v })} className={PIN} />
+      case 'orderer': return <Txt value={it.orderer} list="ffe-orderers" onCommit={v => patch({ orderer: v.trim() })} className={PIN} />
+      case 'pay_method': return <Txt value={it.pay_method} list="ffe-pay" onCommit={v => patch({ pay_method: v })} className={PIN} />
+      case 'url': return <Txt value={it.url} onCommit={v => patch({ url: v.trim() })} className={PIN} />
+      case 'name': return <Txt value={it.name} onCommit={v => patch({ name: v })} className={PIN} />
+      default: return <Txt value={String(it[k] ?? '')} onCommit={v => patch({ [k]: v } as Partial<FfeItem>)} className={PIN} />
+    }
+  }
+  const left = keys.filter(k => missingKeys(it).includes(k)).length
+  return (
+    <div className="print:hidden fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
+        <div className="text-[15px] font-semibold text-slate-900">「{status}」に必要な項目</div>
+        <div className="text-[13px] text-slate-500 mb-3 truncate">{it.name || '（商品名なし）'}</div>
+        <div className="grid gap-3">
+          {keys.map(k => (
+            <Field key={k} label={MISSING_LABEL[k]} need={missingKeys(it).includes(k)}>{input(k)}</Field>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 mt-5">
+          <div className="text-[12.5px] text-slate-500 mr-auto">{left === 0 ? '✓ すべて記入できました' : `あと${left}つ（あとで入力もできます）`}</div>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-emerald-800 text-white text-[14px] font-medium">{left === 0 ? '閉じる' : 'あとで入力する'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ---- 右に開く詳細パネル（1つの品目のすべての項目を、グループ分けして編集する）----
 const PIN = '!border-slate-300 bg-white'
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><div className="text-[12px] text-slate-500 mb-0.5">{label}</div>{children}</div>
+function Field({ label, need, children }: { label: string; need?: boolean; children: React.ReactNode }) {
+  return <div><div className={`text-[12px] mb-0.5 ${need ? 'text-rose-600 font-medium' : 'text-slate-500'}`}>{label}{need ? '（未記入）' : ''}</div>{children}</div>
 }
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return <div className="mt-5"><div className="text-[12.5px] font-semibold text-slate-700 mb-2 pb-1 border-b border-slate-100">{title}</div><div className="grid grid-cols-2 gap-x-3 gap-y-2.5">{children}</div></div>
 }
-function DetailPanel({ item: it, warns, hasCheck, cats, position, total, onPrev, onNext, onClose, patch, onMove, onRemove }: {
+function DetailPanel({ item: it, warns, hasCheck, cats, position, total, onPrev, onNext, onClose, patch, onMove, onRemove, onStatus, onUrl }: {
   item: FfeItem; warns?: string[]; hasCheck: boolean; cats: string[]; position: number; total: number
+  onStatus: (s: string) => void; onUrl: (v: string) => void
   onPrev: () => void; onNext: () => void; onClose: () => void; patch: (p: Partial<FfeItem>) => void; onMove: (d: -1 | 1) => void; onRemove: () => void
 }) {
   const incl = lineIncl(it)
+  const miss = missingKeys(it)
+  const m = (k: MissingKey) => miss.includes(k)
   return (
     <div className="print:hidden fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[440px] bg-white border-l border-slate-200 shadow-2xl overflow-y-auto">
       <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-2">
@@ -120,6 +162,12 @@ function DetailPanel({ item: it, warns, hasCheck, cats, position, total, onPrev,
           </div>
         )}
 
+        {miss.length > 0 && (
+          <div className="mt-3 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-[12.5px] text-rose-800">
+            「{it.status}」に必要な項目が、あと{miss.length}つ未記入です：{miss.map(k => MISSING_LABEL[k]).join('、')}
+          </div>
+        )}
+
         <Group title="基本">
           <Field label="区分">
             <select value={it.category} onChange={e => patch({ category: e.target.value })} className="w-full border border-slate-300 rounded px-2 py-1.5 text-[13px] bg-white">
@@ -128,22 +176,22 @@ function DetailPanel({ item: it, warns, hasCheck, cats, position, total, onPrev,
           </Field>
           <Field label="小見出し"><Txt value={it.section} onCommit={v => patch({ section: v })} className={PIN} /></Field>
           <Field label="ステータス">
-            <select value={it.status} onChange={e => patch({ status: e.target.value })} className={`w-full text-[13px] rounded px-2 py-1.5 border-0 ${STATUS_CLS[it.status] ?? 'bg-slate-100'}`}>
+            <select value={it.status} onChange={e => onStatus(e.target.value)} className={`w-full text-[13px] rounded px-2 py-1.5 border-0 ${STATUS_CLS[it.status] ?? 'bg-slate-100'}`}>
               {[...FFE_STATUSES, ...(FFE_STATUSES as readonly string[]).includes(it.status) ? [] : [it.status]].map(s => <option key={s}>{s}</option>)}
             </select>
           </Field>
-          <Field label="発注者"><Txt value={it.orderer} list="ffe-orderers" onCommit={v => patch({ orderer: v.trim() })} className={PIN} /></Field>
+          <Field label="発注者" need={m('orderer')}><Txt value={it.orderer} list="ffe-orderers" onCommit={v => patch({ orderer: v.trim() })} className={PIN} /></Field>
           <Field label="社内発注担当"><Txt value={it.staff} list="ffe-staff" onCommit={v => patch({ staff: v })} className={PIN} /></Field>
-          <Field label="購入先"><Txt value={it.vendor} list="ffe-vendors" onCommit={v => patch({ vendor: v })} className={PIN} /></Field>
+          <Field label="購入先" need={m('vendor')}><Txt value={it.vendor} list="ffe-vendors" onCommit={v => patch({ vendor: v })} className={PIN} /></Field>
           <Field label="規格・仕様"><Txt value={it.spec} onCommit={v => patch({ spec: v })} className={PIN} /></Field>
           <Field label="カラー"><Txt value={it.color} onCommit={v => patch({ color: v })} className={PIN} /></Field>
           <Field label="入数"><Txt value={it.pack_qty} onCommit={v => patch({ pack_qty: v })} className={PIN} /></Field>
         </Group>
 
         <div className="mt-3">
-          <Field label="URL">
+          <Field label="URL" need={m('url')}>
             <div className="flex items-center gap-1">
-              <Txt value={it.url} onCommit={v => patch({ url: v.trim() })} className={`${PIN} text-blue-700`} />
+              <Txt value={it.url} onCommit={v => onUrl(v.trim())} className={`${PIN} text-blue-700`} />
               {/^https?:\/\//.test(it.url) && <a href={it.url} target="_blank" rel="noreferrer" onClick={() => { if (hasCheck) patch({ checked_at: todayYmd() }) }} className="px-2 py-1 rounded border border-slate-200 text-blue-600 shrink-0" title="URLを開く（開いた日が「URL確認日」に入ります）">開く ↗</a>}
             </div>
           </Field>
@@ -151,21 +199,21 @@ function DetailPanel({ item: it, warns, hasCheck, cats, position, total, onPrev,
         </div>
 
         <Group title="金額（税込）">
-          <Field label="数量"><Num value={it.qty} onCommit={v => patch({ qty: v })} /></Field>
-          <Field label="単価（税込）"><Num money value={it.unit_price} onCommit={v => patch({ unit_price: v })} /></Field>
+          <Field label="数量" need={m('qty')}><Num value={it.qty} onCommit={v => patch({ qty: v })} /></Field>
+          <Field label="単価（税込）" need={m('unit_price')}><Num money value={it.unit_price} onCommit={v => patch({ unit_price: v })} /></Field>
         </Group>
 
         <Group title="発注・納品">
-          <Field label="発注日"><DateCell value={it.ordered_at} onCommit={v => patch({ ordered_at: v })} /></Field>
+          <Field label="発注日" need={m('ordered_at')}><DateCell value={it.ordered_at} onCommit={v => patch({ ordered_at: v })} /></Field>
           <Field label="商品発送先"><Txt value={it.ship_to} list="ffe-ship" onCommit={v => patch({ ship_to: v })} className={PIN} /></Field>
-          <Field label="希望納品日"><DateCell value={it.want_date} onCommit={v => patch({ want_date: v })} /></Field>
-          <Field label="確定納品日"><DateCell value={it.fixed_date} onCommit={v => patch({ fixed_date: v })} /></Field>
-          <label className="flex items-center gap-2 text-[13px] text-slate-700 col-span-2 mt-1"><input type="checkbox" checked={it.done} onChange={e => patch({ done: e.target.checked })} />完了（納品・確認まで済んだ）</label>
+          <Field label="希望納品日" need={m('want_date')}><DateCell value={it.want_date} onCommit={v => patch({ want_date: v })} /></Field>
+          <Field label="確定納品日" need={m('fixed_date')}><DateCell value={it.fixed_date} onCommit={v => patch({ fixed_date: v })} /></Field>
+          <label className={`flex items-center gap-2 text-[13px] col-span-2 mt-1 ${m('done') ? 'text-rose-600 font-medium' : 'text-slate-700'}`}><input type="checkbox" checked={it.done} onChange={e => patch({ done: e.target.checked })} />完了（納品・確認まで済んだ）{m('done') ? '（未記入）' : ''}</label>
         </Group>
 
         <Group title="支払">
-          <Field label="支払い方法"><Txt value={it.pay_method} list="ffe-pay" onCommit={v => patch({ pay_method: v })} className={PIN} /></Field>
-          <Field label="支払月"><Txt value={it.pay_month} onCommit={v => patch({ pay_month: v })} className={PIN} /></Field>
+          <Field label="支払い方法" need={m('pay_method')}><Txt value={it.pay_method} list="ffe-pay" onCommit={v => patch({ pay_method: v })} className={PIN} /></Field>
+          <Field label="支払月" need={m('pay_month')}><Txt value={it.pay_month} onCommit={v => patch({ pay_month: v })} className={PIN} /></Field>
           <Field label="請求書セット名"><Txt value={it.invoice_set} onCommit={v => patch({ invoice_set: v })} className={PIN} /></Field>
         </Group>
 
@@ -208,6 +256,8 @@ export default function FfePage() {
   const [q, setQ] = useState('')
   const [warnOnly, setWarnOnly] = useState(false)
   const [hideDone, setHideDone] = useState(false)
+  const [missOnly, setMissOnly] = useState(false)
+  const [ask, setAsk] = useState<{ id: string; status: string; keys: MissingKey[] } | null>(null)
   const [preset, setPresetState] = useState<Preset>('order')
   const [openId, setOpenId] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<string[]>([])
@@ -257,13 +307,14 @@ export default function FfePage() {
     if (orderer !== 'all' && it.orderer !== orderer) return false
     if (statusF !== 'all' && it.status !== statusF) return false
     if (warnOnly && !warnings.has(it.id)) return false
+    if (missOnly && missingKeys(it).length === 0) return false
     if (hideDone && (it.done || it.status === '納品済' || it.status === 'キャンセル')) return false
     if (q.trim()) {
       const hay = `${it.name} ${it.spec} ${it.vendor} ${it.note} ${it.section}`.toLowerCase()
       if (!hay.includes(q.trim().toLowerCase())) return false
     }
     return true
-  }), [ordered, cat, orderer, statusF, warnOnly, hideDone, q, warnings])
+  }), [ordered, cat, orderer, statusF, warnOnly, hideDone, missOnly, q, warnings])
 
   // ---- 保存系 ----
   const patch = async (itemId: string, p: Partial<FfeItem>) => {
@@ -272,10 +323,31 @@ export default function FfePage() {
     if (error) { alert(`保存に失敗しました：${error.message}`); load() }
   }
 
+  // ステータスを変える：発注日・完了を自動で入れ、まだ足りない項目があれば、その場で聞く
+  const changeStatus = (it: FfeItem, status: string) => {
+    if (status === it.status) return
+    const p: Partial<FfeItem> = { status }
+    if (status === '発注済' && !it.ordered_at) p.ordered_at = todayYmd()
+    if (status === '納品済' && !it.done) p.done = true
+    patch(it.id, p)
+    const keys = missingKeys({ ...it, ...p })
+    if (keys.length > 0 && (status === '選定済' || status === '発注済' || status === '納品済')) setAsk({ id: it.id, status, keys })
+  }
+  // URLを入れたとき、購入先が空なら、URLのドメインから推測して入れる
+  const commitUrl = (it: FfeItem, url: string) => {
+    const p: Partial<FfeItem> = { url }
+    if (!it.vendor.trim() && url) {
+      const v = guessVendor(url, Array.from(new Set(items.map(i => i.vendor.trim()).filter(Boolean))))
+      if (v) { p.vendor = v; say(`購入先を「${v}」と入れました（違う場合は直してください）`) }
+    }
+    patch(it.id, p)
+  }
+
   const nextSort = () => items.reduce((m, i) => Math.max(m, i.sort_order), 0) + 1
 
   const addItem = async (category: string, section: string) => {
-    const row = blankItem(id, category, section, nextSort(), orderer !== 'all' ? orderer : 'BNS')
+    const lastInCat = [...ordered].reverse().find(i => i.category === category)
+    const row = blankItem(id, category, section, nextSort(), orderer !== 'all' ? orderer : (lastInCat?.orderer.trim() || 'BNS'))
     // 同じ区分の末尾に入れる（小見出しの途中ではなく、その小見出しの最後に）
     const sameCat = items.filter(i => i.category === category)
     const lastOfSection = [...sameCat].reverse().find(i => i.section === section)
@@ -391,6 +463,7 @@ export default function FfePage() {
   const catCounts = (c: string) => items.filter(i => i.category === c).length
   const cats = Array.from(new Set([...FFE_CATEGORIES, ...items.map(i => i.category)]))
   const warnCount = warnings.size
+  const comp = completeness(items)
   const iMap = new Map(iv.lines.map(l => [l.id, l]))
   const openItem = openId ? items.find(i => i.id === openId) ?? null : null
 
@@ -405,8 +478,13 @@ export default function FfePage() {
         return (
           <td key={k} className={`sticky left-[56px] z-[1] ${base} border-r border-r-slate-100`}>
             <Txt value={it.name} onCommit={v => patch(it.id, { name: v })} placeholder="商品名" className={`font-medium ${it.status === 'キャンセル' ? 'line-through' : ''}`} />
-            {(preset !== 'all' && sub) || it.investor_mode !== 'show' ? (
+            {(preset !== 'all' && sub) || it.investor_mode !== 'show' || missingKeys(it).length > 0 ? (
               <div className="px-2 -mt-0.5 pb-1 text-[11.5px] text-slate-400 truncate">
+                {missingKeys(it).length > 0 && (
+                  <button onClick={() => setOpenId(it.id)} className="mr-1.5 px-1.5 rounded bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100" title="押すと、未記入の項目が開きます">
+                    あと{missingKeys(it).length}つ：{missingKeys(it).map(k => MISSING_LABEL[k]).join('・')}
+                  </button>
+                )}
                 {it.investor_mode === 'hide' && <span className="mr-1.5 px-1.5 rounded bg-slate-800 text-white">投資家には非表示</span>}
                 {it.investor_mode === 'fixed' && <span className="mr-1.5 px-1.5 rounded bg-violet-100 text-violet-800">投資家向け：金額固定</span>}
                 {preset !== 'all' ? sub : ''}
@@ -417,7 +495,7 @@ export default function FfePage() {
       case 'status':
         return (
           <td key={k} className={`${base} px-1`}>
-            <select value={it.status} onChange={e => patch(it.id, { status: e.target.value })} className={`w-full text-[12px] rounded-full px-2 py-1 border-0 ${STATUS_CLS[it.status] ?? 'bg-slate-100 text-slate-700'}`}>
+            <select value={it.status} onChange={e => changeStatus(it, e.target.value)} className={`w-full text-[12px] rounded-full px-2 py-1 border-0 ${STATUS_CLS[it.status] ?? 'bg-slate-100 text-slate-700'}`}>
               {[...FFE_STATUSES, ...(FFE_STATUSES as readonly string[]).includes(it.status) ? [] : [it.status]].map(s => <option key={s}>{s}</option>)}
             </select>
           </td>
@@ -433,7 +511,7 @@ export default function FfePage() {
         return (
           <td key={k} className={base}>
             <div className="flex items-center">
-              <Txt value={it.url} onCommit={v => patch(it.id, { url: v.trim() })} className="text-blue-700" />
+              <Txt value={it.url} onCommit={v => commitUrl(it, v.trim())} className="text-blue-700" />
               {/^https?:\/\//.test(it.url) && <a href={it.url} target="_blank" rel="noreferrer" onClick={() => { if (hasCheck) patch(it.id, { checked_at: todayYmd() }) }} className="px-1 text-blue-600 shrink-0" title="URLを開く（開いた日が「URL確認日」に入ります）">↗</a>}
             </div>
           </td>
@@ -668,6 +746,16 @@ export default function FfePage() {
                     return <button key={s} onClick={() => setStatusF(statusF === s ? 'all' : s)} className={`text-[12.5px] px-2.5 py-1 rounded-full ${STATUS_CLS[s]} ${statusF === s ? 'ring-2 ring-slate-700' : ''}`}>{s} {n}</button>
                   })}
                 </div>
+                <div className="mb-3">
+                  <div className="flex items-baseline justify-between text-[12.5px] mb-1">
+                    <span className="text-slate-600">記入状況（ステータスに必要な項目）</span>
+                    <span className="font-semibold tabular-nums text-slate-800">{Math.round(comp.rate * 100)}%</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden"><div className={`h-full ${comp.rate >= 1 ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${Math.round(comp.rate * 100)}%` }} /></div>
+                  <button onClick={() => setMissOnly(v => !v)} className={`mt-2 text-[13px] px-3 py-1.5 rounded-lg border ${comp.rows > 0 ? 'border-rose-300 bg-rose-50 text-rose-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'} ${missOnly ? 'ring-2 ring-rose-400' : ''}`}>
+                    {comp.rows > 0 ? `記入漏れ ${comp.rows}件（押すと、その行だけ表示）` : '✓ 記入漏れはありません'}
+                  </button>
+                </div>
                 <button onClick={() => setWarnOnly(w => !w)} className={`text-[13px] px-3 py-1.5 rounded-lg border ${warnCount > 0 ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-slate-200 text-slate-500'} ${warnOnly ? 'ring-2 ring-amber-400' : ''}`}>
                   {warnCount > 0 ? `⚠ 要確認 ${warnCount}件（押すと、その行だけ表示）` : '要確認の行はありません'}
                 </button>
@@ -710,8 +798,8 @@ export default function FfePage() {
             </select>
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="商品名・購入先などで検索" className="text-[13px] border border-slate-300 rounded-lg px-3 py-1.5 bg-white w-60" />
             <button onClick={() => setHideDone(v => !v)} className={`text-[13px] px-3 py-1.5 rounded-lg border ${hideDone ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300'}`} title="納品済・完了・キャンセルの行を隠します">未完了のみ</button>
-            {(cat !== 'all' || orderer !== 'all' || statusF !== 'all' || q || warnOnly || hideDone) && (
-              <button onClick={() => { setCat('all'); setOrderer('all'); setStatusF('all'); setQ(''); setWarnOnly(false); setHideDone(false) }} className="text-[13px] text-blue-600 underline">絞り込みを解除</button>
+            {(cat !== 'all' || orderer !== 'all' || statusF !== 'all' || q || warnOnly || hideDone || missOnly) && (
+              <button onClick={() => { setCat('all'); setOrderer('all'); setStatusF('all'); setQ(''); setWarnOnly(false); setHideDone(false); setMissOnly(false) }} className="text-[13px] text-blue-600 underline">絞り込みを解除</button>
             )}
           </div>
         )}
@@ -814,9 +902,14 @@ export default function FfePage() {
           onNext={() => { const k = filtered.findIndex(i => i.id === openItem.id); if (k >= 0 && k < filtered.length - 1) setOpenId(filtered[k + 1].id) }}
           onClose={() => setOpenId(null)}
           patch={p => patch(openItem.id, p)}
+          onStatus={s => changeStatus(openItem, s)}
+          onUrl={v => commitUrl(openItem, v)}
           onMove={d => move(openItem, d)}
           onRemove={async () => { if (await removeItem(openItem)) setOpenId(null) }}
         />
+      )}
+      {ask && items.find(i => i.id === ask.id) && (
+        <StatusAsk item={items.find(i => i.id === ask.id)!} status={ask.status} keys={ask.keys} patch={p => patch(ask.id, p)} onClose={() => setAsk(null)} />
       )}
       {dialog === 'import' && <ImportDialog onClose={() => setDialog(null)} onImport={bulkInsert} />}
       {dialog === 'copy' && <CopyDialog projectId={id} onClose={() => setDialog(null)} onCopied={items => bulkInsert(items)} />}
