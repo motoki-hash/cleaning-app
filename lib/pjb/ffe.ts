@@ -46,8 +46,7 @@ export type FfeItem = {
   invoice_set: string
   pay_month: string
   investor_mode: InvestorMode
-  checked_price?: number | null   // サイト（URLの先）で確認した単価（税込）。空＝未確認（SQLパッチ029）
-  checked_at?: string | null      // 確認した日
+  checked_at?: string | null      // URLを開いた日（URLの「↗」を押すと、その日付が自動で入る。SQLパッチ029）
 }
 
 export type FfeSettings = {
@@ -66,12 +65,6 @@ export const blankItem = (projectId: string, category: string, section: string, 
 
 // ---- 金額 ----
 export const counted = (it: FfeItem) => it.status !== 'キャンセル'   // キャンセルは合計に入れない
-// サイトで確認した金額と、リストの単価の差（確認額 − 単価）。未確認なら null。0.5円までの差（小数の端数）は一致とみなす
-export const priceGap = (it: Pick<FfeItem, 'unit_price' | 'checked_price'>): number | null => {
-  if (it.checked_price === null || it.checked_price === undefined || !isFinite(Number(it.checked_price))) return null
-  const gap = Number(it.checked_price) - (Number(it.unit_price) || 0)
-  return Math.abs(gap) <= 0.5 ? 0 : gap
-}
 export const lineIncl = (it: Pick<FfeItem, 'qty' | 'unit_price'>) => Math.round((Number(it.qty) || 0) * (Number(it.unit_price) || 0))
 export const exclOf = (incl: number) => Math.round(incl / FFE_TAX)
 
@@ -119,8 +112,6 @@ export function warningsFor(items: FfeItem[]): Map<string, string[]> {
     if (!it.orderer.trim()) add(it.id, '発注者が未設定です')
     if (it.url.trim() && (urlCount.get(it.url.trim()) ?? 0) > 1) add(it.id, '同じURLの品目が他の行にもあります（二重登録の可能性）')
     if (!it.name.trim()) add(it.id, '商品名が空です')
-    const gap = priceGap(it)
-    if (gap !== null && gap !== 0) add(it.id, `サイトで確認した金額（¥${Number(it.checked_price).toLocaleString('ja-JP')}）と、単価（¥${u.toLocaleString('ja-JP')}）が違います（サイトのほうが ${gap > 0 ? '高い' : '安い'}）`)
   }
   return out
 }
@@ -224,12 +215,12 @@ export function downloadText(filename: string, text: string, mime = 'text/csv;ch
 }
 
 export function internalCsv(items: FfeItem[]): string {
-  const head = ['No', '区分', '小見出し', '発注者', '社内発注担当', 'ステータス', '発注日', '購入先', '商品', '規格・カラー', '色', '入数', '数量', '単価(税込)', '税別単価', '合計(税込)', '合計(税別)', 'URL', 'サイト確認額', '確認日', '備考', '商品発送先', '希望納品日', '確定納品日', '完了', '支払い方法', '請求書セット名', '支払月', '投資家表示']
+  const head = ['No', '区分', '小見出し', '発注者', '社内発注担当', 'ステータス', '発注日', '購入先', '商品', '規格・カラー', '色', '入数', '数量', '単価(税込)', '税別単価', '合計(税込)', '合計(税別)', 'URL', 'URL確認日', '備考', '商品発送先', '希望納品日', '確定納品日', '完了', '支払い方法', '請求書セット名', '支払月', '投資家表示']
   const rows = items.map((it, i) => {
     const incl = lineIncl(it)
     const live = counted(it)
     return [i + 1, it.category, it.section, it.orderer, it.staff, it.status, it.ordered_at ?? '', it.vendor, it.name, it.spec, it.color, it.pack_qty, it.qty, it.unit_price,
-      Math.round(it.unit_price / FFE_TAX), live ? incl : 0, live ? exclOf(incl) : 0, it.url, it.checked_price ?? '', it.checked_at ?? '', it.note, it.ship_to, it.want_date ?? '', it.fixed_date ?? '', it.done ? '済' : '', it.pay_method, it.invoice_set, it.pay_month,
+      Math.round(it.unit_price / FFE_TAX), live ? incl : 0, live ? exclOf(incl) : 0, it.url, it.checked_at ?? '', it.note, it.ship_to, it.want_date ?? '', it.fixed_date ?? '', it.done ? '済' : '', it.pay_method, it.invoice_set, it.pay_month,
       it.investor_mode === 'hide' ? '見せない' : it.investor_mode === 'fixed' ? '固定' : '表示']
   })
   const t = sumItems(items)

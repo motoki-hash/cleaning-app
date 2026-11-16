@@ -125,7 +125,7 @@ export function CopyDialog({ projectId, onClose, onCopied }: { projectId: string
     const items = ((data || []) as FfeItem[]).map(({ id, project_id, sort_order, ...rest }) => {
       void id; void project_id; void sort_order
       return reset
-        ? { ...rest, status: '未選定', ordered_at: null, want_date: null, fixed_date: null, done: false, pay_method: '', invoice_set: '', pay_month: '', ...('checked_price' in rest ? { checked_price: null, checked_at: null } : {}) }
+        ? { ...rest, status: '未選定', ordered_at: null, want_date: null, fixed_date: null, done: false, pay_method: '', invoice_set: '', pay_month: '', ...('checked_at' in rest ? { checked_price: null, checked_at: null } : {}) }
         : rest
     })
     const msg = await onCopied(items)
