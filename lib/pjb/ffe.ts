@@ -66,11 +66,11 @@ export const blankItem = (projectId: string, category: string, section: string, 
 
 // ---- 金額 ----
 export const counted = (it: FfeItem) => it.status !== 'キャンセル'   // キャンセルは合計に入れない
-// サイトで確認した金額と、リストの単価の差（確認額 − 単価）。未確認なら null。0.5円未満の差（小数の端数）は一致とみなす
+// サイトで確認した金額と、リストの単価の差（確認額 − 単価）。未確認なら null。0.5円までの差（小数の端数）は一致とみなす
 export const priceGap = (it: Pick<FfeItem, 'unit_price' | 'checked_price'>): number | null => {
   if (it.checked_price === null || it.checked_price === undefined || !isFinite(Number(it.checked_price))) return null
   const gap = Number(it.checked_price) - (Number(it.unit_price) || 0)
-  return Math.abs(gap) < 0.5 ? 0 : gap
+  return Math.abs(gap) <= 0.5 ? 0 : gap
 }
 export const lineIncl = (it: Pick<FfeItem, 'qty' | 'unit_price'>) => Math.round((Number(it.qty) || 0) * (Number(it.unit_price) || 0))
 export const exclOf = (incl: number) => Math.round(incl / FFE_TAX)
