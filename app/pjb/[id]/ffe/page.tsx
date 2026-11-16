@@ -207,8 +207,14 @@ export default function FfePage() {
   }
 
   // 取り込み・コピー共通：末尾に追加する
-  const bulkInsert = async (list: NewItem[]): Promise<string | null> => {
-    let sort = nextSort()
+  const bulkInsert = async (list: NewItem[], replaceAll = false): Promise<string | null> => {
+    if (replaceAll) {
+      if (!confirm(`この案件の品目 ${items.length}件を、すべて削除してから取り込みます。よろしいですか？\n（削除したものは元に戻せません）`)) return '取り込みをやめました'
+      const { error } = await supabase.from('pjb_ffe_items').delete().eq('project_id', id)
+      if (error) return `削除に失敗しました：${error.message}`
+      setItems([])
+    }
+    let sort = replaceAll ? 1 : nextSort()
     const rows = list.map(it => ({ ...it, project_id: id, sort_order: sort++ }))
     for (let i = 0; i < rows.length; i += 200) {
       const { error } = await supabase.from('pjb_ffe_items').insert(rows.slice(i, i + 200))
@@ -624,7 +630,7 @@ export default function FfePage() {
       </div>
 
       {dialog === 'import' && <ImportDialog onClose={() => setDialog(null)} onImport={bulkInsert} />}
-      {dialog === 'copy' && <CopyDialog projectId={id} onClose={() => setDialog(null)} onCopied={bulkInsert} />}
+      {dialog === 'copy' && <CopyDialog projectId={id} onClose={() => setDialog(null)} onCopied={items => bulkInsert(items)} />}
     </Shell>
   )
 }

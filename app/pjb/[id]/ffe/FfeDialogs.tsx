@@ -17,8 +17,9 @@ const Backdrop = ({ children, onClose, busy }: { children: React.ReactNode; onCl
 // ---- Googleスプレッドシートから取り込む（タブごとにCSVで保存したファイル）----
 type FileState = { name: string; category: string; text: string; result: ImportResult }
 
-export function ImportDialog({ onClose, onImport }: { onClose: () => void; onImport: (items: NewItem[]) => Promise<string | null> }) {
+export function ImportDialog({ onClose, onImport }: { onClose: () => void; onImport: (items: NewItem[], replaceAll: boolean) => Promise<string | null> }) {
   const [files, setFiles] = useState<FileState[]>([])
+  const [replaceAll, setReplaceAll] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -39,7 +40,7 @@ export function ImportDialog({ onClose, onImport }: { onClose: () => void; onImp
   const run = async () => {
     setBusy(true)
     setError('')
-    const msg = await onImport(files.flatMap(f => f.result.items))
+    const msg = await onImport(files.flatMap(f => f.result.items), replaceAll)
     setBusy(false)
     if (msg) setError(msg)
     else onClose()
@@ -67,10 +68,23 @@ export function ImportDialog({ onClose, onImport }: { onClose: () => void; onImp
           {f.result.error
             ? <div className="text-[12.5px] text-rose-600 mt-1">{f.result.error}</div>
             : <div className="text-[12.5px] text-slate-500 mt-1">{f.result.items.length}品目（小見出し {f.result.sections}個）を取り込みます{f.result.skipped > 0 ? `／商品名がなく読み飛ばした行 ${f.result.skipped}` : ''}</div>}
+          {f.result.mismatches.length > 0 && (
+            <div className="mt-1.5 rounded bg-amber-50 border border-amber-200 px-2 py-1.5 text-[12.5px] text-amber-900">
+              <div className="font-medium">シートの「合計（税込）」と、単価×数量が合わない行があります（シート側の式が上書きされている可能性）</div>
+              {f.result.mismatches.map((m, k) => (
+                <div key={k}>・{m.name}：単価 ¥{m.unit.toLocaleString('ja-JP')} × {m.qty} ＝ ¥{Math.round(m.unit * m.qty).toLocaleString('ja-JP')}、シートの合計は ¥{m.sheetTotal.toLocaleString('ja-JP')}</div>
+              ))}
+              <div className="mt-0.5">取り込みでは「単価×数量」を使います。取り込み後に、正しい方へ直してください。</div>
+            </div>
+          )}
         </div>
       ))}
       {files.length > 0 && <p className="text-[12px] text-slate-400 mb-2">※ 家具-BNSと家具-デザイナーのように、同じ品目が2つのタブにある場合は、取り込み後に重複を整理してください。</p>}
-      {error && <p className="text-[13px] text-rose-600 mb-2">{error}</p>}
+      <label className="flex items-start gap-2 text-[13px] text-slate-700 mt-2">
+        <input type="checkbox" checked={replaceAll} onChange={e => setReplaceAll(e.target.checked)} className="mt-1" />
+        <span>取り込む前に、この案件の品目をすべて削除する（取り込み直し用。2回目の取り込みで二重にならないように）</span>
+      </label>
+      {error && <p className="text-[13px] text-rose-600 mb-2 mt-2">{error}</p>}
       <div className="flex gap-2 mt-3">
         <button onClick={onClose} disabled={busy} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-[14px] text-slate-600">キャンセル</button>
         <button onClick={run} disabled={busy || total === 0} className="flex-1 py-2.5 rounded-lg bg-emerald-700 text-white text-[14px] font-medium disabled:opacity-40">

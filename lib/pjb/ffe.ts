@@ -271,18 +271,23 @@ const toDate = (s: string): string | null => {
   return null
 }
 
-export type ImportResult = { items: Array<Omit<FfeItem, 'id' | 'project_id' | 'sort_order'>>; sections: number; skipped: number; error?: string }
+// シートの「合計（税込）」と、単価×数量が合わない行（シート側の式の上書きなど）
+export type ImportMismatch = { name: string; unit: number; qty: number; sheetTotal: number }
+export type ImportResult = { items: Array<Omit<FfeItem, 'id' | 'project_id' | 'sort_order'>>; sections: number; skipped: number; mismatches: ImportMismatch[]; error?: string }
 
 export function parseSheetCsv(text: string, category: string): ImportResult {
   const rows = parseCsv(text)
   const hi = rows.findIndex(r => { const n = r.map(norm); return n.includes('商品') && n.includes('数量') })
-  if (hi < 0) return { items: [], sections: 0, skipped: 0, error: '見出しの行（「商品」「数量」がある行）が見つかりませんでした。シートのタブを、そのままCSVで保存したファイルを選んでください' }
+  if (hi < 0) return { items: [], sections: 0, skipped: 0, mismatches: [], error: '見出しの行（「商品」「数量」がある行）が見つかりませんでした。シートのタブを、そのままCSVで保存したファイルを選んでください' }
   const idx = new Map<keyof FfeItem, number>()
   rows[hi].forEach((h, c) => { const f = FIELD_BY_HEADER[norm(h)]; if (f && !idx.has(f)) idx.set(f, c) })
+  // 「合計（税込）」の列（単価の小数点以下が、CSVでは丸めて出力されるのを補うために読む）
+  const totalCol = rows[hi].findIndex(h => norm(h) === '合計(税込)')
   const cell = (r: string[], f: keyof FfeItem) => { const c = idx.get(f); return c === undefined ? '' : (r[c] ?? '').trim() }
 
   const items: ImportResult['items'] = []
   let section = '', sections = 0, skipped = 0
+  const mismatches: ImportMismatch[] = []
   for (const r of rows.slice(hi + 1)) {
     const filled = r.map(x => x.trim()).filter(Boolean)
     if (filled.length === 0) continue
@@ -296,16 +301,26 @@ export function parseSheetCsv(text: string, category: string): ImportResult {
     }
     if (!name) { skipped++; continue }
     const status = cell(r, 'status') || '未選定'
+    const qty = toNum(cell(r, 'qty'))
+    let unit = toNum(cell(r, 'unit_price'))
+    // シートの単価は 1,567.5円 のように小数を持っていても、CSVでは ¥1,568 に丸めて出る。
+    // 合計（税込）が単価×数量と1〜2円ずれるだけなら、合計÷数量を単価として使う。大きくずれる行は、確認用に知らせる
+    if (totalCol >= 0 && qty > 0 && (r[totalCol] ?? '').trim() !== '') {
+      const sheetTotal = toNum(r[totalCol])
+      const diff = sheetTotal - unit * qty
+      if (diff !== 0 && Math.abs(diff) <= qty) unit = Math.round((sheetTotal / qty) * 100) / 100
+      else if (Math.abs(diff) > qty) mismatches.push({ name, unit, qty, sheetTotal })
+    }
     items.push({
       category, section, orderer: cell(r, 'orderer'), staff: cell(r, 'staff'), status, ordered_at: toDate(cell(r, 'ordered_at')),
-      vendor: cell(r, 'vendor'), name, spec: cell(r, 'spec'), color: cell(r, 'color'), pack_qty: cell(r, 'pack_qty'), qty: toNum(cell(r, 'qty')),
-      url: cell(r, 'url'), note: cell(r, 'note'), unit_price: toNum(cell(r, 'unit_price')), ship_to: cell(r, 'ship_to'),
+      vendor: cell(r, 'vendor'), name, spec: cell(r, 'spec'), color: cell(r, 'color'), pack_qty: cell(r, 'pack_qty'), qty,
+      url: cell(r, 'url'), note: cell(r, 'note'), unit_price: unit, ship_to: cell(r, 'ship_to'),
       want_date: toDate(cell(r, 'want_date')), fixed_date: toDate(cell(r, 'fixed_date')),
       done: /^(true|✓|☑|済|1)$/i.test(cell(r, 'done')), pay_method: cell(r, 'pay_method'), invoice_set: cell(r, 'invoice_set'), pay_month: cell(r, 'pay_month'),
       investor_mode: 'show',
     })
   }
-  return { items, sections, skipped }
+  return { items, sections, skipped, mismatches }
 }
 
 // ファイル名から、区分（カテゴリ）を推測する
