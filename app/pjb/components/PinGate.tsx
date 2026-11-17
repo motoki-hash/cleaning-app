@@ -7,7 +7,7 @@ import { PIN_LENGTH, AUTO_LOCK_MS, isUnlocked, markUnlocked, lockNow } from '@/l
 type Phase = 'loading' | 'login' | 'open'
 
 // PJ予算管理の入口。PIN（6桁）だけでログインする。メールアドレス・パスワードは不要。
-// 一定時間（AUTO_LOCK_MS）操作がなければ、自動でログアウトしてPIN入力に戻る。
+// 長期間（AUTO_LOCK_MS）まったく使わなかったときだけ、PIN入力に戻る。使うたびに期限は延びる。
 export default function PinGate({ children }: { children: React.ReactNode }) {
   const [phase, setPhase] = useState<Phase>('loading')
 
