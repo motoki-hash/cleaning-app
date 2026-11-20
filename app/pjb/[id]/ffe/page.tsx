@@ -13,6 +13,7 @@ import {
   type FfeItem, type FfeSettings, type InvestorMode, type MissingKey,
 } from '@/lib/pjb/ffe'
 import { ImportDialog, CopyDialog } from './FfeDialogs'
+import { toJpegBlob, uploadFfeImage, fetchImageFromUrl } from '@/lib/pjb/ffeImage'
 import type { ProjectStatus } from '@/lib/pjb/types'
 
 type ProjectLite = { id: string; name: string; status: ProjectStatus; period_no: number | null; period_label: string | null }
@@ -56,7 +57,7 @@ function DateCell({ value, onCommit }: { value: string | null; onCommit: (v: str
 }
 
 const COLS_ALL: Array<{ k: string; label: string; w: number }> = [
-  { k: 'no', label: 'No', w: 56 }, { k: 'name', label: '商品', w: 270 }, { k: 'status', label: 'ステータス', w: 104 }, { k: 'orderer', label: '発注者', w: 104 },
+  { k: 'no', label: 'No', w: 56 }, { k: 'name', label: '商品', w: 320 }, { k: 'status', label: 'ステータス', w: 104 }, { k: 'orderer', label: '発注者', w: 104 },
   { k: 'qty', label: '数量', w: 66 }, { k: 'unit', label: '単価（税込）', w: 108 }, { k: 'incl', label: '合計（税込）', w: 112 },
   { k: 'spec', label: '規格・カラー', w: 160 }, { k: 'vendor', label: '購入先', w: 116 }, { k: 'note', label: '備考', w: 180 }, { k: 'url', label: 'URL', w: 160 }, { k: 'cat', label: 'URL確認日', w: 132 },
   { k: 'staff', label: '社内発注担当', w: 96 }, { k: 'ordered_at', label: '発注日', w: 132 }, { k: 'want', label: '希望納品日', w: 132 }, { k: 'fixed', label: '確定納品日', w: 132 },
@@ -128,20 +129,81 @@ function StatusAsk({ item: it, status, keys, patch, onClose }: { item: FfeItem; 
 
 // ---- 右に開く詳細パネル（1つの品目のすべての項目を、グループ分けして編集する）----
 const PIN = '!border-slate-300 bg-white'
+
+// URLから画像を自動で取れるか（URLがあり、Amazonではない）。Amazonは規約上、自動では取らない
+const autoFetchable = (url: string) => /^https?:\/\//.test(url) && !/amazon\.|amzn\.|\/\/a\.co\//i.test(url)
+
+// 商品画像の小さな表示（一覧用）。画像がないときは、線画の印を出す
+function Thumb({ url, busy, onClick }: { url?: string; busy: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} title={url ? '押すと、詳細で大きく見られます' : '画像なし（押すと、詳細で貼り付けられます）'}
+      className="shrink-0 w-9 h-9 rounded-md border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center text-slate-400 hover:border-blue-300">
+      {url
+        // eslint-disable-next-line @next/next/no-img-element
+        ? <img src={url} alt="" loading="lazy" className="w-full h-full object-cover" />
+        : busy ? <span className="text-[10px]">取得中</span>
+        : <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="M21 16l-5-5-8 9" /></svg>}
+    </button>
+  )
+}
+
+// 詳細パネルの画像の欄：大きく表示。⌘V（Ctrl+V）で貼り付け、ドラッグ、ファイル選択、URLから取得ができる
+function ImageBox({ url, busy, hasUrl, onFile, onFromUrl, onRemove }: {
+  url?: string; busy: boolean; hasUrl: boolean
+  onFile: (f: Blob) => void; onFromUrl: () => void; onRemove: () => void
+}) {
+  const [over, setOver] = useState(false)
+  const pick = (files: FileList | null) => { const f = files && Array.from(files).find(x => x.type.startsWith('image/')); if (f) onFile(f) }
+  return (
+    <div
+      onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
+      onDrop={e => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files) }}
+      className={`mt-3 rounded-lg border ${over ? 'border-blue-400 bg-blue-50' : url ? 'border-slate-200' : 'border-dashed border-slate-300 bg-slate-50'} p-3`}
+    >
+      {url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="mx-auto max-h-56 max-w-full object-contain rounded" />
+      )}
+      {!url && <div className="text-[12.5px] text-slate-500 text-center py-2">{busy ? '画像を取得中…' : <>商品画像をコピーして、<b>⌘V（Ctrl+V）</b>で貼り付け<br />（ドラッグ＆ドロップ、ファイル選択もできます）</>}</div>}
+      <div className="flex flex-wrap justify-center gap-1.5 mt-2">
+        <label className="text-[12px] px-2.5 py-1 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer">
+          ファイルを選ぶ<input type="file" accept="image/*" className="hidden" onChange={e => { pick(e.target.files); e.target.value = '' }} />
+        </label>
+        {hasUrl && <button onClick={onFromUrl} disabled={busy} className="text-[12px] px-2.5 py-1 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40">{busy ? '取得中…' : 'URLから取得'}</button>}
+        {url && <button onClick={onRemove} className="text-[12px] px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-rose-600">画像を外す</button>}
+      </div>
+    </div>
+  )
+}
 function Field({ label, need, children }: { label: string; need?: boolean; children: React.ReactNode }) {
   return <div><div className={`text-[12px] mb-0.5 ${need ? 'text-rose-600 font-medium' : 'text-slate-500'}`}>{label}{need ? '（未記入）' : ''}</div>{children}</div>
 }
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return <div className="mt-5"><div className="text-[12.5px] font-semibold text-slate-700 mb-2 pb-1 border-b border-slate-100">{title}</div><div className="grid grid-cols-2 gap-x-3 gap-y-2.5">{children}</div></div>
 }
-function DetailPanel({ item: it, warns, hasCheck, cats, position, total, onPrev, onNext, onClose, patch, onMove, onRemove, onStatus, onUrl }: {
-  item: FfeItem; warns?: string[]; hasCheck: boolean; cats: string[]; position: number; total: number
+function DetailPanel({ item: it, warns, hasCheck, hasImg, imgBusy, cats, position, total, onPrev, onNext, onClose, patch, onMove, onRemove, onStatus, onUrl, onImageFile, onImageFromUrl }: {
+  item: FfeItem; warns?: string[]; hasCheck: boolean; hasImg: boolean; imgBusy: boolean; cats: string[]; position: number; total: number
+  onImageFile: (f: Blob) => void; onImageFromUrl: () => void
   onStatus: (s: string) => void; onUrl: (v: string) => void
   onPrev: () => void; onNext: () => void; onClose: () => void; patch: (p: Partial<FfeItem>) => void; onMove: (d: -1 | 1) => void; onRemove: () => void
 }) {
   const incl = lineIncl(it)
   const miss = missingKeys(it)
   const m = (k: MissingKey) => miss.includes(k)
+  // 画像をコピーして、⌘V（Ctrl+V）で貼り付ける（文字の入力欄に文字を貼るときは、邪魔しない）
+  useEffect(() => {
+    if (!hasImg) return
+    const onPaste = (e: ClipboardEvent) => {
+      const file = Array.from(e.clipboardData?.files ?? []).find(f => f.type.startsWith('image/'))
+      if (!file) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') && e.clipboardData?.getData('text')) return
+      e.preventDefault()
+      onImageFile(file)
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [hasImg, onImageFile])
   return (
     <div className="print:hidden fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[440px] bg-white border-l border-slate-200 shadow-2xl overflow-y-auto">
       <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-2">
@@ -156,6 +218,7 @@ function DetailPanel({ item: it, warns, hasCheck, cats, position, total, onPrev,
           <div className="text-[22px] font-bold tabular-nums text-slate-900">{formatYen(incl)}</div>
           <div className="text-[12.5px] text-slate-500">税込（税別 {formatYen(exclOf(incl))}）</div>
         </div>
+        {hasImg && <ImageBox url={it.image_url} busy={imgBusy} hasUrl={/^https?:\/\//.test(it.url)} onFile={onImageFile} onFromUrl={onImageFromUrl} onRemove={() => patch({ image_url: '' })} />}
         {warns && warns.length > 0 && (
           <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[12.5px] text-amber-900">
             {warns.map((w, i) => <div key={i}>⚠ {w}</div>)}
@@ -260,6 +323,8 @@ export default function FfePage() {
   const [ask, setAsk] = useState<{ id: string; status: string; keys: MissingKey[] } | null>(null)
   const [preset, setPresetState] = useState<Preset>('order')
   const [openId, setOpenId] = useState<string | null>(null)
+  const [imgBusy, setImgBusy] = useState<string[]>([])        // 画像を取得・保存中の品目
+  const [bulkImg, setBulkImg] = useState<string>('')          // まとめて取得の進み具合（空＝していない）
   const [collapsed, setCollapsed] = useState<string[]>([])
   const setPreset = (p: Preset) => { setPresetState(p); try { localStorage.setItem('pjb-ffe-preset', p) } catch { /* 保存できなくても動く */ } }
   useEffect(() => { try { const v = localStorage.getItem('pjb-ffe-preset'); if (v === 'order' || v === 'delivery' || v === 'pay' || v === 'all') setPresetState(v) } catch { /* 読めなくても動く */ } }, [])
@@ -341,6 +406,42 @@ export default function FfePage() {
       if (v) { p.vendor = v; say(`購入先を「${v}」と入れました（違う場合は直してください）`) }
     }
     patch(it.id, p)
+    // 画像がまだなければ、URLのページから自動で取る
+    if (hasImg && !it.image_url && /^https?:\/\//.test(url)) fetchImage({ ...it, url })
+  }
+
+  // ---- 商品画像 ----
+  const hasImg = items.length === 0 || 'image_url' in items[0]
+  const withBusy = async <T,>(itemId: string, fn: () => Promise<T>): Promise<T> => {
+    setImgBusy(b => [...b, itemId])
+    try { return await fn() } finally { setImgBusy(b => b.filter(x => x !== itemId)) }
+  }
+  // URLのページから画像を取る。quiet のときは、メッセージを出さない（まとめて取得用）
+  const fetchImage = async (it: FfeItem, quiet = false): Promise<'ok' | 'amazon' | 'fail'> => {
+    const r = await withBusy(it.id, () => fetchImageFromUrl(it.url, id, it.id))
+    if (r.url) { await patch(it.id, { image_url: r.url }); if (!quiet) say('画像を取得しました'); return 'ok' }
+    if (!quiet) say(r.error || '画像を取得できませんでした')
+    return r.amazon ? 'amazon' : 'fail'
+  }
+  // コピーして貼り付けた画像・選んだファイルを保存する
+  const putImage = async (it: FfeItem, file: Blob) => {
+    const r = await withBusy(it.id, async () => {
+      try { return await uploadFfeImage(id, it.id, await toJpegBlob(file)) } catch (e) { return { error: e instanceof Error ? e.message : '画像を保存できませんでした' } }
+    })
+    if (r.url) { await patch(it.id, { image_url: r.url }); say('画像を入れました') } else say(r.error || '画像を保存できませんでした')
+  }
+  // 画像のない品目の画像を、URLからまとめて取る（Amazonなど取れないものは飛ばす）
+  const fetchAllImages = async () => {
+    const todo = items.filter(i => !i.image_url && autoFetchable(i.url))
+    if (todo.length === 0) return
+    let ok = 0
+    for (let k = 0; k < todo.length; k++) {
+      setBulkImg(`画像を取得中… ${k + 1} / ${todo.length}`)
+      if ((await fetchImage(todo[k], true)) === 'ok') ok++
+    }
+    setBulkImg('')
+    const left = items.filter(i => !i.image_url).length - ok
+    say(`${ok}件の画像を取得しました。${left > 0 ? `残り${left}件（Amazonなど自動で取れないもの）は、詳細を開いて、画像をコピーして貼り付けてください。` : ''}`)
   }
 
   const nextSort = () => items.reduce((m, i) => Math.max(m, i.sort_order), 0) + 1
@@ -446,6 +547,7 @@ export default function FfePage() {
   const projName = periodName(project.name, periodLabelOf(project))
   // URL確認日の列は、SQLパッチ029が済んでいるときだけ出す
   const hasCheck = items.length === 0 || 'checked_at' in items[0]
+  const missingImages = items.filter(i => !i.image_url && autoFetchable(i.url)).length   // 自動で取れる（Amazon以外でURLがある）画像なしの品目
   const presetKeys = PRESETS.find(p => p.k === preset)?.keys ?? COLS_ALL.map(c => c.k)
   const COLS = COLS_ALL.filter(c => presetKeys.includes(c.k) && (hasCheck || c.k !== 'cat'))
 
@@ -477,6 +579,9 @@ export default function FfePage() {
       case 'name':
         return (
           <td key={k} className={`sticky left-[56px] z-[1] ${base} border-r border-r-slate-100`}>
+            <div className="flex items-center gap-1.5 pl-1.5">
+            {hasImg && <Thumb url={it.image_url} busy={imgBusy.includes(it.id)} onClick={() => setOpenId(it.id)} />}
+            <div className="min-w-0 flex-1">
             <Txt value={it.name} onCommit={v => patch(it.id, { name: v })} placeholder="商品名" className={`font-medium ${it.status === 'キャンセル' ? 'line-through' : ''}`} />
             {(preset !== 'all' && sub) || it.investor_mode !== 'show' || missingKeys(it).length > 0 ? (
               <div className="px-2 -mt-0.5 pb-1 text-[11.5px] text-slate-400 truncate">
@@ -490,6 +595,8 @@ export default function FfePage() {
                 {preset !== 'all' ? sub : ''}
               </div>
             ) : null}
+            </div>
+            </div>
           </td>
         )
       case 'status':
@@ -691,11 +798,17 @@ export default function FfePage() {
           </div>
           <button onClick={() => setDialog('import')} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">スプレッドシートから取り込む</button>
           <button onClick={() => setDialog('copy')} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">他の案件からコピー</button>
+          {hasImg && missingImages > 0 && (
+            <button onClick={fetchAllImages} disabled={!!bulkImg} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+              {bulkImg || `URLから画像を自動取得（画像なし ${missingImages}件）`}
+            </button>
+          )}
           <button onClick={exportCsv} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">CSV出力</button>
           <button onClick={() => window.print()} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">印刷／PDF</button>
         </div>
 
         {!hasCheck && <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[13px] px-3 py-2">「URL確認日」の欄を使うには、<code className="px-1 bg-white rounded">supabase-pj-budget-patch-029.sql</code> を Supabase で実行してください。</div>}
+        {!hasImg && <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[13px] px-3 py-2">商品画像を使うには、<code className="px-1 bg-white rounded">supabase-pj-budget-patch-031.sql</code> を Supabase で実行してください。</div>}
         {msg && <div className="mb-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[13px] px-3 py-2">{msg}</div>}
         {trash && (
           <div className="mb-3 rounded-lg bg-slate-800 text-white text-[13px] px-3 py-2 flex items-center gap-3">
@@ -896,7 +1009,8 @@ export default function FfePage() {
 
       {openItem && (
         <DetailPanel
-          item={openItem} warns={warnings.get(openItem.id)} hasCheck={hasCheck} cats={cats}
+          item={openItem} warns={warnings.get(openItem.id)} hasCheck={hasCheck} hasImg={hasImg} imgBusy={imgBusy.includes(openItem.id)} cats={cats}
+          onImageFile={f => putImage(openItem, f)} onImageFromUrl={() => fetchImage(openItem)}
           position={filtered.findIndex(i => i.id === openItem.id)} total={filtered.length}
           onPrev={() => { const k = filtered.findIndex(i => i.id === openItem.id); if (k > 0) setOpenId(filtered[k - 1].id) }}
           onNext={() => { const k = filtered.findIndex(i => i.id === openItem.id); if (k >= 0 && k < filtered.length - 1) setOpenId(filtered[k + 1].id) }}

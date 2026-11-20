@@ -46,6 +46,7 @@ export type FfeItem = {
   invoice_set: string
   pay_month: string
   investor_mode: InvestorMode
+  image_url?: string              // 商品画像のアドレス（SQLパッチ031）
   checked_at?: string | null      // URLを開いた日（URLの「↗」を押すと、その日付が自動で入る。SQLパッチ029）
 }
 
