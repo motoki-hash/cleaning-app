@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import BcsMark from './BcsMark'
 import { PIN_LENGTH, AUTO_LOCK_MS, isUnlocked, markUnlocked, lockNow } from '@/lib/pjb/pin'
 
 type Phase = 'loading' | 'login' | 'open'
@@ -123,6 +124,7 @@ function PinScreen({ onSubmit }: { onSubmit: (pin: string) => Promise<string | n
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4">
       <div className="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-sm px-6 py-8 text-center">
+        <BcsMark size={44} className="mx-auto mb-3" />
         <div className="text-[12px] font-mono tracking-wide text-slate-400">BARE NOTE STUDIO</div>
         <h1 className="text-[20px] font-bold text-slate-900 mt-1">PINを入力</h1>
         <p className="text-[13.5px] text-slate-500 mt-2 mb-6">Budget Control Systemを開くには、{PIN_LENGTH}桁のPINが必要です</p>

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { authState } from '@/lib/pjb/authState'
 import { supabase } from '@/lib/supabase'
 import { NavIcon } from './Shell'
+import BcsMark from './BcsMark'
 
 // 案件を開く前の、トップ側のページ（案件一覧・年度の売上分析・リソース管理）の共通の枠。
 // 案件の中の画面（Shell）と同じ、左のメニューを持つ。
@@ -35,7 +36,10 @@ export default function TopShell({ active, children }: { active: typeof TOP_TABS
       <aside className="hidden lg:flex print:!hidden fixed inset-y-0 left-0 w-60 flex-col bg-[#17382f] border-r border-[#0f2a22] z-20">
         <div className="px-4 pt-5 pb-4 border-b border-white/10">
           <div className="text-[11px] font-mono tracking-wide text-emerald-100/50">BARE NOTE STUDIO</div>
-          <div className="mt-1 text-[17px] font-semibold text-white">Budget Control System</div>
+          <div className="mt-2 flex items-center gap-2.5">
+            <BcsMark size={32} />
+            <div className="text-[16px] font-semibold text-white leading-tight">Budget Control System</div>
+          </div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-3">
           <div className="px-2 mb-1 text-[12px] font-medium text-emerald-100/50">全体</div>
@@ -55,7 +59,7 @@ export default function TopShell({ active, children }: { active: typeof TOP_TABS
 
       {/* スマホ・タブレット: 上のタブ */}
       <header className="lg:hidden print:hidden sticky top-0 z-20 bg-white border-b border-slate-200">
-        <div className="px-3 h-12 flex items-center text-[15px] font-semibold text-slate-900">Budget Control System</div>
+        <div className="px-3 h-12 flex items-center gap-2 text-[15px] font-semibold text-slate-900"><BcsMark size={24} />Budget Control System</div>
         <nav className="flex gap-1.5 px-3 pb-2 overflow-x-auto no-scrollbar">
           {TOP_TABS.map(t => (
             <Link
