@@ -45,14 +45,18 @@ export async function POST(req: Request) {
     let candidates: string[] = []
     let finalUrl = page.toString()
     let lastErr = ''
+    const started = Date.now()
     for (const ua of UA_LIST) {
+      // 全体で20秒を超えないようにする（超えると、理由が返せないまま、時間切れになる）
+      const left = 20000 - (Date.now() - started)
+      if (left < 3000) break
       try {
-        const got = await safeFetch(page.toString(), MAX_HTML, 'text/html,application/xhtml+xml', ua)
+        const got = await safeFetch(page.toString(), MAX_HTML, 'text/html,application/xhtml+xml', ua, undefined, Math.min(7000, left))
         finalUrl = got.finalUrl
         candidates = imageCandidates(new TextDecoder('utf-8').decode(got.bytes), finalUrl)
         if (candidates.length > 0) break
         lastErr = ''
-      } catch (e) { lastErr = e instanceof Error ? e.message : '' }
+      } catch (e) { const n = e instanceof Error ? e.name : ''; lastErr = n === 'AbortError' ? '時間内に返事がありませんでした' : (e instanceof Error ? e.message : '') }
     }
     if (candidates.length === 0) {
       if (lastErr) return reply({ error: `ページを読み込めませんでした（${lastErr}）。商品画像をコピーして、詳細で貼り付けてください。` })

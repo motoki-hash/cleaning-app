@@ -37,7 +37,7 @@ export async function fetchImageFromUrl(url: string, projectId: string, itemId: 
     })
     const json = await res.json().catch(() => ({}))
     if (json.url) return { url: json.url }
-    return { error: json.error || '画像を取得できませんでした', amazon: !!json.amazon }
+    return { error: json.error || `サーバーから返事がありませんでした（${res.status}）。時間切れの可能性があります。商品画像をコピーして、詳細で貼り付けてください。`, amazon: !!json.amazon }
   } catch {
     return { error: '通信に失敗しました。ネットワークを確認してください' }
   }

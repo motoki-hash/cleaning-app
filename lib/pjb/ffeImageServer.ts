@@ -36,13 +36,13 @@ export async function assertPublic(u: URL) {
 }
 
 // 公開アドレスだけに接続する。転送（リダイレクト）先も、そのつど確かめる
-export async function safeFetch(url: string, maxBytes: number, accept: string, ua: string = UA_LIST[0], referer?: string): Promise<{ res: Response; bytes: Uint8Array; finalUrl: string }> {
+export async function safeFetch(url: string, maxBytes: number, accept: string, ua: string = UA_LIST[0], referer?: string, timeoutMs = 12000): Promise<{ res: Response; bytes: Uint8Array; finalUrl: string }> {
   let current = url
   for (let hop = 0; hop < 5; hop++) {
     const u = new URL(current)
     await assertPublic(u)
     const ctl = new AbortController()
-    const timer = setTimeout(() => ctl.abort(), 12000)
+    const timer = setTimeout(() => ctl.abort(), timeoutMs)
     try {
       const res = await fetch(u, { headers: { 'User-Agent': ua, 'Accept-Language': 'ja,en;q=0.8', Accept: accept, ...(referer ? { Referer: referer } : {}) }, redirect: 'manual', signal: ctl.signal })
       if (res.status >= 300 && res.status < 400 && res.headers.get('location')) { current = new URL(res.headers.get('location')!, u).toString(); continue }
