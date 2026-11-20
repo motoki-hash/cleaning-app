@@ -11,6 +11,7 @@ import BcsMark from './BcsMark'
 // 案件を開く前の、トップ側のページ（案件一覧・年度の売上分析・リソース管理）の共通の枠。
 // 案件の中の画面（Shell）と同じ、左のメニューを持つ。
 export const TOP_TABS = [
+  { key: 'dashboard', label: 'ダッシュボード', href: '/pjb/dashboard', icon: 'dashboard' },
   { key: 'home', label: '案件一覧', href: '/pjb', icon: 'home' },
   { key: 'fy', label: '年度の売上分析', href: '/pjb/fy', icon: 'fy' },
   { key: 'resources', label: 'リソース管理', href: '/pjb/resources', icon: 'resources' },
