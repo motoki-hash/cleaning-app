@@ -230,7 +230,7 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
   const gapStatus = kpi ? budgetGapStatus(data.totalBudget, data.budgetGap) : 'unset'
 
   return (
-    <Link href={`/pjb/${project.id}`} className={`block rounded-xl border bg-white p-4 hover:shadow-sm transition-shadow ${tone}`}>
+    <Link href={`/pjb/${project.id}`} data-tone={over ? 'over' : project.status} className={`pjb-card block rounded-xl border bg-white p-4 ${tone}`}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
           <div className="text-[15px] font-semibold text-slate-900 truncate">{project.name}</div>
@@ -312,7 +312,7 @@ function GroupCard({ members }: { members: ProjectCardData[] }) {
   const kpi = hasBudgetKpi(first.business)
 
   return (
-    <div className={`rounded-xl border bg-white p-4 ${over ? 'border-rose-300' : 'border-slate-200'}`}>
+    <div data-tone={over ? 'over' : members.some(c => c.project.status === '進行中') ? '進行中' : members.every(c => c.project.status === '完了') ? '完了' : members[0].project.status} className={`pjb-card rounded-xl border bg-white p-4 ${over ? 'border-rose-300' : 'border-slate-200'}`}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
           <Link href={`/pjb/${first.project.id}/all`} className="block text-[15px] font-semibold text-slate-900 truncate hover:underline">{first.project.name}</Link>
