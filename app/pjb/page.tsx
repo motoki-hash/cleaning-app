@@ -20,9 +20,9 @@ import type { Project } from '@/lib/pjb/types'
 
 
 
-type SortKey = 'newest' | 'name' | 'budget' | 'sell' | 'profit' | 'margin'
+type SortKey = 'newest' | 'business' | 'name' | 'budget' | 'sell' | 'profit' | 'margin'
 const SORT_LABELS: Record<SortKey, string> = {
-  newest: '登録が新しい順', name: '案件名順', budget: '総予算が大きい順', sell: '売上が大きい順', profit: '利益が大きい順', margin: '利益率が高い順',
+  newest: '登録が新しい順', business: '事業別（illi → Kyo → Setup）', name: '案件名順', budget: '総予算が大きい順', sell: '売上が大きい順', profit: '利益が大きい順', margin: '利益率が高い順',
 }
 
 type Filter = '全て' | '未着手' | '進行中' | '完了' | '予算超過' | '要対応あり' | '今期売上'
@@ -71,6 +71,8 @@ export default function PjbHomePage() {
     const margin = (c: ProjectCardData) => (c.bnsSell > 0 ? c.grossProfit / c.bnsSell : -Infinity)
     const cmp: Record<SortKey, (a: ProjectCardData, b: ProjectCardData) => number> = {
       newest: (a, b) => b.project.created_at.localeCompare(a.project.created_at),
+      // 事業の並び（illi → Kyo → Setup → 未分類）。同じ事業の中は、登録が新しい順
+      business: (a, b) => businessOrder(a.business) - businessOrder(b.business) || b.project.created_at.localeCompare(a.project.created_at),
       name: (a, b) => a.project.name.localeCompare(b.project.name, 'ja'),
       budget: (a, b) => b.totalBudget - a.totalBudget,
       sell: (a, b) => b.bnsSell - a.bnsSell,
@@ -303,6 +305,8 @@ function Assignees({ pm, qa }: { pm: string[]; qa: string[] }) {
 // 事業ごとの色（カードの上端のラインと、事業の絞り込みボタンの点）
 const BIZ_COLOR: Record<string, string> = { 'illi Stays & Hotels': '#008CE3', 'Kyo Residence': '#796EFF', 'Setup Office': '#059669' }
 const bizColor = (name: string) => BIZ_COLOR[name] ?? '#94A3B8'
+
+const businessOrder = (name: string) => { const i = (BUSINESSES as readonly string[]).indexOf(name); return i < 0 ? BUSINESSES.length : i }
 
 const uniqueNames = (names: string[]) => Array.from(new Set(names))
 
