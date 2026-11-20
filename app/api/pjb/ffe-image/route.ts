@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { MAX_HTML, MAX_IMAGE, UUID, EXT, safeFetch, imageCandidates } from '@/lib/pjb/ffeImageServer'
+import { MAX_HTML, MAX_IMAGE, UUID, EXT, UA_LIST, safeFetch, imageCandidates } from '@/lib/pjb/ffeImageServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -41,15 +41,27 @@ export async function POST(req: Request) {
   }
 
   try {
-    // 一時的に失敗することがあるので、1回だけやり直す
-    const { bytes: htmlBytes, finalUrl } = await safeFetch(page.toString(), MAX_HTML, 'text/html,application/xhtml+xml').catch(async () => safeFetch(page.toString(), MAX_HTML, 'text/html,application/xhtml+xml'))
-    const html = new TextDecoder('utf-8').decode(htmlBytes)
-    const candidates = imageCandidates(html, finalUrl)
-    if (candidates.length === 0) return reply({ error: 'このページには、商品画像の情報がありませんでした。商品画像をコピーして、詳細で貼り付けてください。' })
+    // ブラウザのふり → リンクのプレビュー用ボット、の順に試す（サイトによって、通してくれる相手が違う）
+    let candidates: string[] = []
+    let finalUrl = page.toString()
+    let lastErr = ''
+    for (const ua of UA_LIST) {
+      try {
+        const got = await safeFetch(page.toString(), MAX_HTML, 'text/html,application/xhtml+xml', ua)
+        finalUrl = got.finalUrl
+        candidates = imageCandidates(new TextDecoder('utf-8').decode(got.bytes), finalUrl)
+        if (candidates.length > 0) break
+        lastErr = ''
+      } catch (e) { lastErr = e instanceof Error ? e.message : '' }
+    }
+    if (candidates.length === 0) {
+      if (lastErr) return reply({ error: `ページを読み込めませんでした（${lastErr}）。商品画像をコピーして、詳細で貼り付けてください。` })
+      return reply({ error: 'このページには、商品画像の情報がありませんでした。商品画像をコピーして、詳細で貼り付けてください。' })
+    }
 
     for (const c of candidates) {
       try {
-        const { res, bytes } = await safeFetch(c, MAX_IMAGE, 'image/avif,image/webp,image/*')
+        const { res, bytes } = await safeFetch(c, MAX_IMAGE, 'image/avif,image/webp,image/*', UA_LIST[0], page.origin + '/')
         const type = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
         const ext = EXT[type]
         if (!ext || bytes.length < 500) continue

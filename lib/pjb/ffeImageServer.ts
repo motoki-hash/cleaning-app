@@ -7,7 +7,12 @@ import net from 'net'
 
 export const MAX_HTML = 1_000_000
 export const MAX_IMAGE = 5 * 1024 * 1024
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+export const UA_LIST = [
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+  // リンクのプレビュー用ボット（SNSでURLを貼ったときの表示と同じ）。商品画像の情報を出してくれるサイトが多い
+  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+  'Twitterbot/1.0',
+]
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' }
 
@@ -31,7 +36,7 @@ export async function assertPublic(u: URL) {
 }
 
 // 公開アドレスだけに接続する。転送（リダイレクト）先も、そのつど確かめる
-export async function safeFetch(url: string, maxBytes: number, accept: string): Promise<{ res: Response; bytes: Uint8Array; finalUrl: string }> {
+export async function safeFetch(url: string, maxBytes: number, accept: string, ua: string = UA_LIST[0], referer?: string): Promise<{ res: Response; bytes: Uint8Array; finalUrl: string }> {
   let current = url
   for (let hop = 0; hop < 5; hop++) {
     const u = new URL(current)
@@ -39,7 +44,7 @@ export async function safeFetch(url: string, maxBytes: number, accept: string): 
     const ctl = new AbortController()
     const timer = setTimeout(() => ctl.abort(), 12000)
     try {
-      const res = await fetch(u, { headers: { 'User-Agent': UA, 'Accept-Language': 'ja,en;q=0.8', Accept: accept }, redirect: 'manual', signal: ctl.signal })
+      const res = await fetch(u, { headers: { 'User-Agent': ua, 'Accept-Language': 'ja,en;q=0.8', Accept: accept, ...(referer ? { Referer: referer } : {}) }, redirect: 'manual', signal: ctl.signal })
       if (res.status >= 300 && res.status < 400 && res.headers.get('location')) { current = new URL(res.headers.get('location')!, u).toString(); continue }
       if (!res.ok || !res.body) throw new Error(`ページを開けませんでした（${res.status}）`)
       const reader = res.body.getReader()
