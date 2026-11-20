@@ -36,9 +36,9 @@ export default function TopShell({ active, children }: { active: typeof TOP_TABS
       <aside className="hidden lg:flex print:!hidden fixed inset-y-0 left-0 w-60 flex-col bg-[#17382f] border-r border-[#0f2a22] z-20">
         <div className="px-4 pt-5 pb-4 border-b border-white/10">
           <div className="text-[11px] font-mono tracking-wide text-emerald-100/50">BARE NOTE STUDIO</div>
-          <div className="mt-2 flex items-center gap-2.5">
-            <BcsMark size={32} />
-            <div className="text-[16px] font-semibold text-white leading-tight">Budget Control System</div>
+          <div className="mt-2 flex items-center gap-2">
+            <BcsMark size={28} />
+            <div className="text-[14px] font-semibold text-white leading-tight tracking-[-0.01em] whitespace-nowrap">Budget Control System</div>
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-3">
