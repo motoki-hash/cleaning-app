@@ -5,6 +5,8 @@ import { MAX_HTML, MAX_IMAGE, UUID, EXT, safeFetch, imageCandidates } from '@/li
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
+// 日本のサイトから取るので、サーバーも東京で動かす（アメリカのサーバーだと、遅くなったり、断られたりする）
+export const preferredRegion = 'hnd1'
 
 // 商品ページのURLから、商品画像を取ってきて、画像の保存場所（ffe-images）に入れる。
 //  - ログイン中の人だけが使える（ブラウザから送られたログインの証明を確かめる）
@@ -39,10 +41,11 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { bytes: htmlBytes, finalUrl } = await safeFetch(page.toString(), MAX_HTML, 'text/html,application/xhtml+xml')
+    // 一時的に失敗することがあるので、1回だけやり直す
+    const { bytes: htmlBytes, finalUrl } = await safeFetch(page.toString(), MAX_HTML, 'text/html,application/xhtml+xml').catch(async () => safeFetch(page.toString(), MAX_HTML, 'text/html,application/xhtml+xml'))
     const html = new TextDecoder('utf-8').decode(htmlBytes)
     const candidates = imageCandidates(html, finalUrl)
-    if (candidates.length === 0) return reply({ error: 'このページからは、画像を見つけられませんでした。商品画像をコピーして、詳細で貼り付けてください。' })
+    if (candidates.length === 0) return reply({ error: 'このページには、商品画像の情報がありませんでした。商品画像をコピーして、詳細で貼り付けてください。' })
 
     for (const c of candidates) {
       try {

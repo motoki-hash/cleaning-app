@@ -134,9 +134,9 @@ const PIN = '!border-slate-300 bg-white'
 const autoFetchable = (url: string) => /^https?:\/\//.test(url) && !/amazon\.|amzn\.|\/\/a\.co\//i.test(url)
 
 // 商品画像の小さな表示（一覧用）。画像がないときは、線画の印を出す
-function Thumb({ url, busy, onClick }: { url?: string; busy: boolean; onClick: () => void }) {
+function Thumb({ url, busy, onClick }: { url?: string; busy: boolean; onClick: () => void }) {  // 画像があれば拡大、なければ詳細を開く
   return (
-    <button onClick={onClick} title={url ? '押すと、詳細で大きく見られます' : '画像なし（押すと、詳細で貼り付けられます）'}
+    <button onClick={onClick} title={url ? '押すと、大きく表示します' : '画像なし（押すと、詳細で貼り付けられます）'}
       className="shrink-0 w-9 h-9 rounded-md border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center text-slate-400 hover:border-blue-300">
       {url
         // eslint-disable-next-line @next/next/no-img-element
@@ -148,8 +148,8 @@ function Thumb({ url, busy, onClick }: { url?: string; busy: boolean; onClick: (
 }
 
 // 詳細パネルの画像の欄：大きく表示。⌘V（Ctrl+V）で貼り付け、ドラッグ、ファイル選択、URLから取得ができる
-function ImageBox({ url, busy, hasUrl, onFile, onFromUrl, onRemove }: {
-  url?: string; busy: boolean; hasUrl: boolean
+function ImageBox({ url, busy, hasUrl, onFile, onFromUrl, onRemove, onZoom }: {
+  url?: string; busy: boolean; hasUrl: boolean; onZoom: () => void
   onFile: (f: Blob) => void; onFromUrl: () => void; onRemove: () => void
 }) {
   const [over, setOver] = useState(false)
@@ -162,7 +162,7 @@ function ImageBox({ url, busy, hasUrl, onFile, onFromUrl, onRemove }: {
     >
       {url && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="" className="mx-auto max-h-56 max-w-full object-contain rounded" />
+        <img src={url} alt="" onClick={onZoom} title="押すと、大きく表示します" className="mx-auto max-h-56 max-w-full object-contain rounded cursor-zoom-in" />
       )}
       {!url && <div className="text-[12.5px] text-slate-500 text-center py-2">{busy ? '画像を取得中…' : <>商品画像をコピーして、<b>⌘V（Ctrl+V）</b>で貼り付け<br />（ドラッグ＆ドロップ、ファイル選択もできます）</>}</div>}
       <div className="flex flex-wrap justify-center gap-1.5 mt-2">
@@ -175,15 +175,35 @@ function ImageBox({ url, busy, hasUrl, onFile, onFromUrl, onRemove }: {
     </div>
   )
 }
+// 商品画像の拡大表示。外側を押す・Escで閉じる
+function ImageZoom({ item, onClose, onOpenDetail }: { item: FfeItem; onClose: () => void; onOpenDetail: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
+    window.addEventListener('keydown', onKey, true)   // 詳細パネルのEscより先に受ける
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [onClose])
+  return (
+    <div className="print:hidden fixed inset-0 z-[70] flex flex-col items-center justify-center bg-black/75 p-4" onClick={onClose}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={item.image_url} alt={item.name} onClick={e => e.stopPropagation()} className="max-h-[80vh] max-w-[92vw] object-contain rounded-lg bg-white shadow-2xl" />
+      <div className="mt-3 flex items-center gap-3 text-white" onClick={e => e.stopPropagation()}>
+        <span className="text-[14px] font-medium max-w-[60vw] truncate">{item.name}{item.spec ? `　${item.spec}` : ''}</span>
+        <button onClick={onOpenDetail} className="text-[13px] px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25">詳細を開く</button>
+        <button onClick={onClose} className="text-[13px] px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25">閉じる（Esc）</button>
+      </div>
+    </div>
+  )
+}
+
 function Field({ label, need, children }: { label: string; need?: boolean; children: React.ReactNode }) {
   return <div><div className={`text-[12px] mb-0.5 ${need ? 'text-rose-600 font-medium' : 'text-slate-500'}`}>{label}{need ? '（未記入）' : ''}</div>{children}</div>
 }
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return <div className="mt-5"><div className="text-[12.5px] font-semibold text-slate-700 mb-2 pb-1 border-b border-slate-100">{title}</div><div className="grid grid-cols-2 gap-x-3 gap-y-2.5">{children}</div></div>
 }
-function DetailPanel({ item: it, warns, hasCheck, hasImg, imgBusy, cats, position, total, onPrev, onNext, onClose, patch, onMove, onRemove, onStatus, onUrl, onImageFile, onImageFromUrl }: {
+function DetailPanel({ item: it, warns, hasCheck, hasImg, imgBusy, cats, position, total, onPrev, onNext, onClose, patch, onMove, onRemove, onStatus, onUrl, onImageFile, onImageFromUrl, onImageZoom }: {
   item: FfeItem; warns?: string[]; hasCheck: boolean; hasImg: boolean; imgBusy: boolean; cats: string[]; position: number; total: number
-  onImageFile: (f: Blob) => void; onImageFromUrl: () => void
+  onImageFile: (f: Blob) => void; onImageFromUrl: () => void; onImageZoom: () => void
   onStatus: (s: string) => void; onUrl: (v: string) => void
   onPrev: () => void; onNext: () => void; onClose: () => void; patch: (p: Partial<FfeItem>) => void; onMove: (d: -1 | 1) => void; onRemove: () => void
 }) {
@@ -218,7 +238,7 @@ function DetailPanel({ item: it, warns, hasCheck, hasImg, imgBusy, cats, positio
           <div className="text-[22px] font-bold tabular-nums text-slate-900">{formatYen(incl)}</div>
           <div className="text-[12.5px] text-slate-500">税込（税別 {formatYen(exclOf(incl))}）</div>
         </div>
-        {hasImg && <ImageBox url={it.image_url} busy={imgBusy} hasUrl={/^https?:\/\//.test(it.url)} onFile={onImageFile} onFromUrl={onImageFromUrl} onRemove={() => patch({ image_url: '' })} />}
+        {hasImg && <ImageBox url={it.image_url} busy={imgBusy} hasUrl={/^https?:\/\//.test(it.url)} onFile={onImageFile} onFromUrl={onImageFromUrl} onRemove={() => patch({ image_url: '' })} onZoom={onImageZoom} />}
         {warns && warns.length > 0 && (
           <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[12.5px] text-amber-900">
             {warns.map((w, i) => <div key={i}>⚠ {w}</div>)}
@@ -324,6 +344,8 @@ export default function FfePage() {
   const [preset, setPresetState] = useState<Preset>('order')
   const [openId, setOpenId] = useState<string | null>(null)
   const [imgBusy, setImgBusy] = useState<string[]>([])        // 画像を取得・保存中の品目
+  const [zoomId, setZoomId] = useState<string | null>(null)   // 拡大表示している品目
+  const [imgReport, setImgReport] = useState<Array<{ name: string; reason: string }>>([])   // まとめて取得で取れなかった品目
   const [bulkImg, setBulkImg] = useState<string>('')          // まとめて取得の進み具合（空＝していない）
   const [collapsed, setCollapsed] = useState<string[]>([])
   const setPreset = (p: Preset) => { setPresetState(p); try { localStorage.setItem('pjb-ffe-preset', p) } catch { /* 保存できなくても動く */ } }
@@ -417,11 +439,11 @@ export default function FfePage() {
     try { return await fn() } finally { setImgBusy(b => b.filter(x => x !== itemId)) }
   }
   // URLのページから画像を取る。quiet のときは、メッセージを出さない（まとめて取得用）
-  const fetchImage = async (it: FfeItem, quiet = false): Promise<'ok' | 'amazon' | 'fail'> => {
+  const fetchImage = async (it: FfeItem, quiet = false): Promise<{ state: 'ok' | 'amazon' | 'fail'; reason: string }> => {
     const r = await withBusy(it.id, () => fetchImageFromUrl(it.url, id, it.id))
-    if (r.url) { await patch(it.id, { image_url: r.url }); if (!quiet) say('画像を取得しました'); return 'ok' }
+    if (r.url) { await patch(it.id, { image_url: r.url }); if (!quiet) say('画像を取得しました'); return { state: 'ok', reason: '' } }
     if (!quiet) say(r.error || '画像を取得できませんでした')
-    return r.amazon ? 'amazon' : 'fail'
+    return { state: r.amazon ? 'amazon' : 'fail', reason: r.error || '画像を取得できませんでした' }
   }
   // コピーして貼り付けた画像・選んだファイルを保存する
   const putImage = async (it: FfeItem, file: Blob) => {
@@ -435,13 +457,17 @@ export default function FfePage() {
     const todo = items.filter(i => !i.image_url && autoFetchable(i.url))
     if (todo.length === 0) return
     let ok = 0
+    const failed: Array<{ name: string; reason: string }> = []
+    setImgReport([])
     for (let k = 0; k < todo.length; k++) {
       setBulkImg(`画像を取得中… ${k + 1} / ${todo.length}`)
-      if ((await fetchImage(todo[k], true)) === 'ok') ok++
+      const r = await fetchImage(todo[k], true)
+      if (r.state === 'ok') ok++
+      else failed.push({ name: `${todo[k].name || '（商品名なし）'}${todo[k].spec ? `（${todo[k].spec}）` : ''}`, reason: r.reason })
     }
     setBulkImg('')
-    const left = items.filter(i => !i.image_url).length - ok
-    say(`${ok}件の画像を取得しました。${left > 0 ? `残り${left}件（Amazonなど自動で取れないもの）は、詳細を開いて、画像をコピーして貼り付けてください。` : ''}`)
+    setImgReport(failed)
+    say(`${ok}件の画像を取得しました。${failed.length > 0 ? `${failed.length}件は取れませんでした（下に理由を出しています）。` : ''}`)
   }
 
   const nextSort = () => items.reduce((m, i) => Math.max(m, i.sort_order), 0) + 1
@@ -580,7 +606,7 @@ export default function FfePage() {
         return (
           <td key={k} className={`sticky left-[56px] z-[1] ${base} border-r border-r-slate-100`}>
             <div className="flex items-center gap-1.5 pl-1.5">
-            {hasImg && <Thumb url={it.image_url} busy={imgBusy.includes(it.id)} onClick={() => setOpenId(it.id)} />}
+            {hasImg && <Thumb url={it.image_url} busy={imgBusy.includes(it.id)} onClick={() => it.image_url ? setZoomId(it.id) : setOpenId(it.id)} />}
             <div className="min-w-0 flex-1">
             <Txt value={it.name} onCommit={v => patch(it.id, { name: v })} placeholder="商品名" className={`font-medium ${it.status === 'キャンセル' ? 'line-through' : ''}`} />
             {(preset !== 'all' && sub) || it.investor_mode !== 'show' || missingKeys(it).length > 0 ? (
@@ -809,6 +835,13 @@ export default function FfePage() {
 
         {!hasCheck && <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[13px] px-3 py-2">「URL確認日」の欄を使うには、<code className="px-1 bg-white rounded">supabase-pj-budget-patch-029.sql</code> を Supabase で実行してください。</div>}
         {!hasImg && <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[13px] px-3 py-2">商品画像を使うには、<code className="px-1 bg-white rounded">supabase-pj-budget-patch-031.sql</code> を Supabase で実行してください。</div>}
+        {imgReport.length > 0 && (
+          <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[13px] px-3 py-2">
+            <div className="flex items-center gap-2 font-medium">画像が取れなかった品目（{imgReport.length}件）<button onClick={() => setImgReport([])} className="ml-auto text-[12px] font-normal text-amber-800 hover:underline">閉じる</button></div>
+            {imgReport.map((r, i) => <div key={i} className="mt-0.5">・{r.name}：{r.reason}</div>)}
+            <div className="mt-1 text-[12px] text-amber-800">取れなかった品目は、商品ページの画像をコピーして、品目の「詳細」で ⌘V（Ctrl+V）を押して貼り付けてください。</div>
+          </div>
+        )}
         {msg && <div className="mb-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[13px] px-3 py-2">{msg}</div>}
         {trash && (
           <div className="mb-3 rounded-lg bg-slate-800 text-white text-[13px] px-3 py-2 flex items-center gap-3">
@@ -1010,7 +1043,7 @@ export default function FfePage() {
       {openItem && (
         <DetailPanel
           item={openItem} warns={warnings.get(openItem.id)} hasCheck={hasCheck} hasImg={hasImg} imgBusy={imgBusy.includes(openItem.id)} cats={cats}
-          onImageFile={f => putImage(openItem, f)} onImageFromUrl={() => fetchImage(openItem)}
+          onImageFile={f => putImage(openItem, f)} onImageFromUrl={() => fetchImage(openItem)} onImageZoom={() => setZoomId(openItem.id)}
           position={filtered.findIndex(i => i.id === openItem.id)} total={filtered.length}
           onPrev={() => { const k = filtered.findIndex(i => i.id === openItem.id); if (k > 0) setOpenId(filtered[k - 1].id) }}
           onNext={() => { const k = filtered.findIndex(i => i.id === openItem.id); if (k >= 0 && k < filtered.length - 1) setOpenId(filtered[k + 1].id) }}
@@ -1021,6 +1054,9 @@ export default function FfePage() {
           onMove={d => move(openItem, d)}
           onRemove={async () => { if (await removeItem(openItem)) setOpenId(null) }}
         />
+      )}
+      {zoomId && items.find(i => i.id === zoomId)?.image_url && (
+        <ImageZoom item={items.find(i => i.id === zoomId)!} onClose={() => setZoomId(null)} onOpenDetail={() => { setOpenId(zoomId); setZoomId(null) }} />
       )}
       {ask && items.find(i => i.id === ask.id) && (
         <StatusAsk item={items.find(i => i.id === ask.id)!} status={ask.status} keys={ask.keys} patch={p => patch(ask.id, p)} onClose={() => setAsk(null)} />

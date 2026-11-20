@@ -37,7 +37,7 @@ export async function safeFetch(url: string, maxBytes: number, accept: string): 
     const u = new URL(current)
     await assertPublic(u)
     const ctl = new AbortController()
-    const timer = setTimeout(() => ctl.abort(), 10000)
+    const timer = setTimeout(() => ctl.abort(), 12000)
     try {
       const res = await fetch(u, { headers: { 'User-Agent': UA, 'Accept-Language': 'ja,en;q=0.8', Accept: accept }, redirect: 'manual', signal: ctl.signal })
       if (res.status >= 300 && res.status < 400 && res.headers.get('location')) { current = new URL(res.headers.get('location')!, u).toString(); continue }
