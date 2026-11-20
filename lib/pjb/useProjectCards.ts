@@ -21,6 +21,8 @@ export type ProjectCardData = {
   bnsCost: number
   business: string
   alertCount: number
+  pmNames: string[]          // 進行管理の担当者（担当者の割り当てから。複数名OK）
+  qaNames: string[]          // 品質管理の担当者
 }
 
 // 前に読み込んだ一覧を覚えておき、ページを切り替えたとき空の「読み込み中」を挟まず、すぐ表示して裏で更新する
@@ -36,13 +38,22 @@ export function useProjectCards(enabled: boolean) {
     if (list.length === 0) { cardsCache = []; setCards([]); setLoading(false); return }
 
     const ids = list.map(p => p.id)
-    const [catRes, orderRes, workRes, veRes, salesRes] = await Promise.all([
+    const [catRes, orderRes, workRes, veRes, salesRes, asgRes, staffRes] = await Promise.all([
       supabase.from('pjb_budget_categories').select('*').in('project_id', ids),
       supabase.from('pjb_orders').select('*').in('project_id', ids),
       supabase.from('pjb_additional_works').select('*').in('project_id', ids),
       supabase.from('pjb_ve_items').select('*').in('project_id', ids),
       supabase.from('pjb_sales_items').select('*').in('project_id', ids),
+      supabase.from('pjb_assignments').select('project_id, staff_id, role').order('created_at'),
+      supabase.from('pjb_staff').select('id, name'),
     ])
+    // 担当者のテーブルがまだないとき（パッチ021の前）は、案件に直接入れた名前だけを使う
+    const staffName = new Map(((staffRes.error ? [] : staffRes.data) || []).map((s: { id: string; name: string }) => [s.id, s.name]))
+    const assignments = (asgRes.error ? [] : (asgRes.data || [])) as Array<{ project_id: string; staff_id: string; role: string }>
+    const namesOf = (projectId: string, role: string, fallback?: string | null) => {
+      const list = assignments.filter(a => a.project_id === projectId && a.role === role).map(a => staffName.get(a.staff_id)).filter((n): n is string => !!n)
+      return list.length > 0 ? list : fallback ? [fallback] : []
+    }
     // 売上の内訳のテーブルがまだないときは null（従来どおり、項目に直接入れた売上を使う）
     const salesAll: SalesItem[] | null = salesRes.error ? null : ((salesRes.data || []) as SalesItem[])
     const categories = (catRes.data || []) as BudgetCategory[]
@@ -69,6 +80,8 @@ export function useProjectCards(enabled: boolean) {
         bnsCost: totals.bnsCost,
         business: normalizeBusiness(project.business),
         alertCount: alerts.length,
+        pmNames: namesOf(project.id, '進行管理', project.pm_name),
+        qaNames: namesOf(project.id, '品質管理', project.qa_name),
       }
     })
     cardsCache = result

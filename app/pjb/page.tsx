@@ -276,12 +276,7 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
         </div>
       </div>
 
-      {(project.pm_name || project.qa_name) && (
-        <div className="text-[12px] text-slate-500 mb-2">
-          {project.pm_name && <span className="mr-3">進行 {project.pm_name}</span>}
-          {project.qa_name && <span>品質 {project.qa_name}</span>}
-        </div>
-      )}
+      <Assignees pm={data.pmNames} qa={data.qaNames} />
       <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
         <div
           className={`h-full ${over ? 'bg-rose-500' : 'bg-emerald-500'}`}
@@ -294,6 +289,19 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
 }
 
 // 期のある案件のカード：全期の合計と、期ごとの行（期を押すと、その期の案件ページへ）
+// 進行管理・品質管理の担当者（複数名OK）。ない役割は出さない
+function Assignees({ pm, qa }: { pm: string[]; qa: string[] }) {
+  if (pm.length === 0 && qa.length === 0) return null
+  return (
+    <div className="text-[12px] text-slate-500 mb-2">
+      {pm.length > 0 && <span className="mr-3">進行 {pm.join('・')}</span>}
+      {qa.length > 0 && <span>品質 {qa.join('・')}</span>}
+    </div>
+  )
+}
+
+const uniqueNames = (names: string[]) => Array.from(new Set(names))
+
 function GroupCard({ members }: { members: ProjectCardData[] }) {
   const first = members[0]
   const sum = (f: (c: ProjectCardData) => number) => members.reduce((s, c) => s + f(c), 0)
@@ -336,6 +344,9 @@ function GroupCard({ members }: { members: ProjectCardData[] }) {
           <div className={`font-medium tabular-nums ${remaining < 0 ? 'text-rose-600' : ''}`}>{formatSignedYen(remaining)}</div>
         </div>
       </div>
+
+      {/* 期のある案件は、どの期かに関わらず、全期の担当者をまとめて出す */}
+      <Assignees pm={uniqueNames(members.flatMap(c => c.pmNames))} qa={uniqueNames(members.flatMap(c => c.qaNames))} />
 
       <div className="rounded-lg border border-slate-100 divide-y divide-slate-100">
         {members.map(c => {
