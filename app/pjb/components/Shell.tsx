@@ -32,6 +32,7 @@ const TABS = [
 const NAV_GROUPS = ['全体', '予算', '工程', '発注・支払', '請求', 'その他'] as const
 
 const STATUS_PILL: Record<ProjectStatus, string> = {
+  '未着手': 'bg-slate-100 text-slate-600 border-slate-300',
   '進行中': 'bg-blue-50 text-blue-700 border-blue-200',
   '完了': 'bg-emerald-50 text-emerald-700 border-emerald-200',
   '保留': 'bg-amber-50 text-amber-700 border-amber-200',
@@ -162,6 +163,7 @@ export default function Shell({
       aria-label="案件ステータス"
       className={`text-[13px] px-2.5 py-1 rounded-full border font-medium whitespace-nowrap ${STATUS_PILL[status]}`}
     >
+      <option value="未着手">未着手</option>
       <option value="進行中">進行中</option>
       <option value="完了">完了</option>
       <option value="保留">保留</option>

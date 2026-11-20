@@ -1,6 +1,6 @@
 // PJ予算管理アプリ Phase 1 — 型定義
 
-export type ProjectStatus = '進行中' | '完了' | '保留'
+export type ProjectStatus = '未着手' | '進行中' | '完了' | '保留'
 
 export type Project = {
   id: string

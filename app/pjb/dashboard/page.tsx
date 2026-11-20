@@ -46,7 +46,8 @@ export default function DashboardPage() {
         {loading && <p className="text-[14px] text-slate-400 py-6">読み込み中…</p>}
 
         {/* 案件の状況（押すと、その条件で案件一覧を開く） */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <SummaryTile label="未着手" value={`${summary.notStarted}件`} sub="まだ動いていない案件（売上などの集計には入れません）" onClick={() => goList('filter=' + encodeURIComponent('未着手'))} />
           <SummaryTile label="進行中の案件" value={`${summary.active}件`} sub={`総予算 ${formatYen(summary.budget)}`} onClick={() => goList('filter=' + encodeURIComponent('進行中'))} />
           <SummaryTile label="要対応あり" value={`${summary.alert}件`} tone={summary.alert > 0 ? 'warning' : 'default'}
             sub="確認が必要な項目がある案件" onClick={() => goList('filter=' + encodeURIComponent('要対応あり'))} />

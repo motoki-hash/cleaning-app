@@ -25,7 +25,7 @@ const SORT_LABELS: Record<SortKey, string> = {
   newest: '登録が新しい順', name: '案件名順', budget: '総予算が大きい順', sell: '売上が大きい順', profit: '利益が大きい順', margin: '利益率が高い順',
 }
 
-type Filter = '全て' | '進行中' | '完了' | '予算超過' | '要対応あり' | '今期売上'
+type Filter = '全て' | '未着手' | '進行中' | '完了' | '予算超過' | '要対応あり' | '今期売上'
 
 export default function PjbHomePage() {
   const router = useRouter()
@@ -41,7 +41,7 @@ export default function PjbHomePage() {
   useEffect(() => {
     const q = new URLSearchParams(window.location.search)
     const f = q.get('filter') as Filter | null
-    if (f && ['進行中', '完了', '予算超過', '要対応あり', '今期売上'].includes(f)) setFilter(f)
+    if (f && ['未着手', '進行中', '完了', '予算超過', '要対応あり', '今期売上'].includes(f)) setFilter(f)
     const bz = q.get('biz')
     if (bz) setBusinessFilter(bz)
   }, [])
@@ -60,11 +60,12 @@ export default function PjbHomePage() {
     const list = cards.filter(c => {
       if (businessFilter !== 'すべて' && c.business !== businessFilter) return false
       if (query && !c.project.name.includes(query)) return false
+      if (filter === '未着手') return c.project.status === '未着手'
       if (filter === '進行中') return c.project.status === '進行中'
       if (filter === '完了') return c.project.status === '完了'
       if (filter === '予算超過') return isOver(c)
       if (filter === '要対応あり') return c.alertCount > 0
-      if (filter === '今期売上') return fiscalYearOf(c.project.sales_month) === currentFiscal().year
+      if (filter === '今期売上') return c.project.status !== '未着手' && fiscalYearOf(c.project.sales_month) === currentFiscal().year
       return true
     })
     const margin = (c: ProjectCardData) => (c.bnsSell > 0 ? c.grossProfit / c.bnsSell : -Infinity)
@@ -134,7 +135,7 @@ export default function PjbHomePage() {
             className="w-full sm:w-64 border border-slate-200 bg-white rounded-lg px-3 py-2 text-[14px]"
           />
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-            {(['全て', '進行中', '完了', '予算超過', '要対応あり', '今期売上'] as Filter[]).map(f => (
+            {(['全て', '未着手', '進行中', '完了', '予算超過', '要対応あり', '今期売上'] as Filter[]).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -215,6 +216,7 @@ export default function PjbHomePage() {
 }
 
 const STATUS_PILL: Record<Project['status'], string> = {
+  '未着手': 'bg-slate-100 text-slate-600 border-slate-300',
   '進行中': 'bg-blue-50 text-blue-700 border-blue-200',
   '完了': 'bg-emerald-50 text-emerald-700 border-emerald-200',
   '保留': 'bg-amber-50 text-amber-700 border-amber-200',
@@ -238,7 +240,7 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
           <span className="inline-block mt-1 ml-1.5 text-[12px] px-2 py-0.5 rounded-full border border-slate-200 bg-white text-slate-600">
             {data.business}
           </span>
-          {fiscalYearOf(project.sales_month) === currentFiscal().year && (
+          {project.status !== '未着手' && fiscalYearOf(project.sales_month) === currentFiscal().year && (
             <span className="inline-block mt-1 ml-1.5 text-[12px] px-2 py-0.5 rounded-full border border-emerald-300 bg-white text-emerald-700 font-medium">今期売上</span>
           )}
         </div>

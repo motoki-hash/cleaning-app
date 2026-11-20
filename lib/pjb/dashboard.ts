@@ -19,8 +19,10 @@ export function makeIsOver(cards: ProjectCardData[]) {
 // 上の4つのタイル（進行中・要対応あり・予算超過・完了の件数）
 export function statusSummary(cards: ProjectCardData[]) {
   const isOver = makeIsOver(cards)
-  const openCards = cards.filter(c => c.project.status !== '完了')
+  // 未着手の案件は、要対応・予算超過の集計に入れない
+  const openCards = cards.filter(c => c.project.status !== '完了' && c.project.status !== '未着手')
   return {
+    notStarted: cards.filter(c => c.project.status === '未着手').length,
     active: cards.filter(c => c.project.status === '進行中').length,
     budget: cards.filter(c => c.project.status === '進行中').reduce((s, c) => s + c.totalBudget, 0),
     alert: openCards.filter(c => c.alertCount > 0).length,
@@ -31,10 +33,12 @@ export function statusSummary(cards: ProjectCardData[]) {
 }
 
 // 集計の対象。今期売上＝売上計上月が今期（4月始まり）の案件。期ごとに売上月が違うので、期（1期・2期…）単位で判定する
+// 未着手の案件（まだ動いていない案件）は、売上・原価・利益などの集計に入れない
 export function poolOf(cards: ProjectCardData[], scope: Scope) {
   const nowFy = currentFiscal().year
-  return scope === 'active' ? cards.filter(c => c.project.status === '進行中')
-    : scope === 'fy' ? cards.filter(c => fiscalYearOf(c.project.sales_month) === nowFy) : cards
+  const started = cards.filter(c => c.project.status !== '未着手')
+  return scope === 'active' ? started.filter(c => c.project.status === '進行中')
+    : scope === 'fy' ? started.filter(c => fiscalYearOf(c.project.sales_month) === nowFy) : started
 }
 
 // 予実管理のKPIは「PJ総予算（手入力）と実行費用（自動）の差が、総予算の±1%以内」。

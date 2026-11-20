@@ -63,6 +63,7 @@ export default function FyPage() {
     const m = new Map<string, { done: { sales: number; cost: number }; fc: { sales: number; cost: number } }>()
     const key = (b: string, i: number) => `${b}|${i}`
     for (const c of cards) {
+      if (c.project.status === '未着手') continue   // まだ動いていない案件は、売上に入れない
       if (fiscalYearOf(c.project.sales_month) !== fy) continue
       const i = fiscalMonthIndex(c.project.sales_month)!
       const kk = key(c.business, i)
@@ -132,7 +133,7 @@ export default function FyPage() {
               <Tile label="通期の利益達成（見込）" value={formatPercent(rate(kpi.fyP, kpi.fyPlanP), 1)} sub={`${formatYen(kpi.fyP)} / 計画 ${formatYen(kpi.fyPlanP)}`} />
               <Tile label="通期の利益率（見込）" value={formatPercent(rate(kpi.fyP, kpi.fyS), 1)} sub={`計画 ${formatPercent(rate(kpi.fyPlanP, kpi.fyPlanS), 1)}`} />
               <Tile label="利益差額（通期・計画比）" value={formatYen(kpi.fyP - kpi.fyPlanP)} sub="見込 − 計画" tone={kpi.fyP - kpi.fyPlanP < 0 ? 'bad' : 'good'} />
-              <Tile label="今期売上の案件" value={`${cards.filter(c => fiscalYearOf(c.project.sales_month) === fy).length}件`} sub={`うち完了 ${cards.filter(c => fiscalYearOf(c.project.sales_month) === fy && c.project.status === '完了').length}件`} />
+              <Tile label="今期売上の案件" value={`${cards.filter(c => c.project.status !== '未着手' && fiscalYearOf(c.project.sales_month) === fy).length}件`} sub={`うち完了 ${cards.filter(c => fiscalYearOf(c.project.sales_month) === fy && c.project.status === '完了').length}件`} />
               <Tile label="売上計上月が未設定" value={`${cards.filter(c => !c.project.sales_month && c.project.status === '進行中').length}件`} sub="進行中の案件のうち" />
             </div>
 
