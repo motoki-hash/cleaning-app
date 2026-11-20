@@ -61,6 +61,25 @@ export default function SettingsView({
     setNewName('')
     onChanged()
   }
+  // 名前を直す。案件に保存している進行管理・品質管理の名前（文字）も、同じ人のものを新しい名前に書き換える
+  const renameStaff = async (s: StaffRow, input: HTMLInputElement) => {
+    const name = input.value.trim()
+    if (!name || name === s.name) { input.value = s.name; return }
+    if (staff.some(x => x.id !== s.id && x.name === name)) {
+      alert(`「${name}」という名前の人がすでにいます。同じ名前にはできません。`)
+      input.value = s.name
+      return
+    }
+    const { error } = await supabase.from('pjb_staff').update({ name }).eq('id', s.id)
+    if (error) { alert(`名前を変更できませんでした：${error.message}`); input.value = s.name; return }
+    const now = new Date().toISOString()
+    const [pm, qa] = await Promise.all([
+      supabase.from('pjb_projects').update({ pm_name: name, updated_at: now }).eq('pm_name', s.name),
+      supabase.from('pjb_projects').update({ qa_name: name, updated_at: now }).eq('qa_name', s.name),
+    ])
+    if (pm.error || qa.error) alert(`担当者の名前は変えましたが、案件側の名前の更新に失敗しました：${(pm.error || qa.error)?.message}`)
+    onChanged()
+  }
   const removeStaff = async (s: StaffRow) => {
     if (!confirm(`${s.name}さんを削除します。この人の案件への割り当ても消えます。\n退職・異動なら、削除せず「在籍の終了日」を入れてください。削除しますか？`)) return
     const { error } = await supabase.from('pjb_staff').delete().eq('id', s.id)
@@ -73,7 +92,7 @@ export default function SettingsView({
     <div>
       <section className={card}>
         <h2 className="text-[15px] font-semibold text-slate-900 mb-1">担当者</h2>
-        <p className="text-[12.5px] text-slate-500 mb-3">適正FTEは、その人が無理なく持てる負荷の目安です（社内の負荷を比べるための指標）。退職・異動は「在籍の終了日」、産休などで一時的に外れるときは「使わない」にします。</p>
+        <p className="text-[12.5px] text-slate-500 mb-3">名前は、表の名前をそのまま直せます（案件の進行管理・品質管理の名前も一緒に変わります）。適正FTEは、その人が無理なく持てる負荷の目安です（社内の負荷を比べるための指標）。退職・異動は「在籍の終了日」、産休などで一時的に外れるときは「使わない」にします。</p>
         <div className="overflow-x-auto">
           <table className="w-full text-[13.5px]">
             <thead>
@@ -84,7 +103,14 @@ export default function SettingsView({
             <tbody>
               {staff.map(s => (
                 <tr key={s.id} className="border-t border-slate-100">
-                  <td className="py-1.5 pr-3 font-medium text-slate-900 whitespace-nowrap">{s.name}</td>
+                  <td className="py-1.5 pr-3 whitespace-nowrap">
+                    <input
+                      key={s.id + s.name} defaultValue={s.name} aria-label={`${s.name}の名前`}
+                      onBlur={e => renameStaff(s, e.target)}
+                      onKeyDown={e => { if (isCommitEnter(e)) (e.target as HTMLInputElement).blur() }}
+                      className="w-36 border border-transparent hover:border-slate-200 focus:border-slate-300 rounded-md px-2 py-1 text-[13.5px] font-medium text-slate-900 bg-transparent focus:bg-white"
+                    />
+                  </td>
                   <td className="pr-3"><NumInput value={s.capacity_fte} onCommit={v => updateStaff(s, { capacity_fte: v ?? 0 })} /></td>
                   <td className="pr-3"><input type="date" defaultValue={s.joined_on ?? ''} onBlur={e => { if ((e.target.value || null) !== s.joined_on) updateStaff(s, { joined_on: e.target.value || null }) }} className="border border-slate-200 rounded-md px-2 py-1 text-[13px]" /></td>
                   <td className="pr-3"><input type="date" defaultValue={s.left_on ?? ''} onBlur={e => { if ((e.target.value || null) !== s.left_on) updateStaff(s, { left_on: e.target.value || null }) }} className="border border-slate-200 rounded-md px-2 py-1 text-[13px]" /></td>
