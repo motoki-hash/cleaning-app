@@ -167,7 +167,7 @@ export default function PjbHomePage() {
         <header className="bg-white border-b border-slate-200">
           <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
             <div className="flex items-baseline gap-3 min-w-0">
-              <h1 className="text-[18px] font-semibold text-slate-900 whitespace-nowrap">PJ予算管理</h1>
+              <h1 className="text-[18px] font-semibold text-slate-900 whitespace-nowrap">Budget Control System</h1>
               <span className="hidden sm:inline text-[12px] font-mono tracking-wide text-slate-400">BARE NOTE STUDIO</span>
             </div>
             <button

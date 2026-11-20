@@ -18,7 +18,7 @@ function LoginForm() {
   const redirectTo = searchParams.get('redirect')
   const isPjb = redirectTo?.startsWith('/pjb') ?? false
 
-  useEffect(() => { if (isPjb) document.title = 'BNS PJ管理システム' }, [isPjb])
+  useEffect(() => { if (isPjb) document.title = 'Budget Control System' }, [isPjb])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -78,7 +78,7 @@ function LoginForm() {
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
         <h1 className="text-2xl font-bold text-center text-gray-800 mb-2">
-          {isPjb ? 'PJ予算管理' : '清掃管理システム'}
+          {isPjb ? 'Budget Control System' : '清掃管理システム'}
         </h1>
         <p className="text-center text-gray-500 text-sm mb-6">ログイン</p>
 

@@ -6,7 +6,7 @@ import { PIN_LENGTH, AUTO_LOCK_MS, isUnlocked, markUnlocked, lockNow } from '@/l
 
 type Phase = 'loading' | 'login' | 'open'
 
-// PJ予算管理の入口。PIN（6桁）だけでログインする。メールアドレス・パスワードは不要。
+// Budget Control System（PJ予算管理）の入口。PIN（6桁）だけでログインする。メールアドレス・パスワードは不要。
 // 長期間（AUTO_LOCK_MS）まったく使わなかったときだけ、PIN入力に戻る。使うたびに期限は延びる。
 export default function PinGate({ children }: { children: React.ReactNode }) {
   const [phase, setPhase] = useState<Phase>('loading')
@@ -125,7 +125,7 @@ function PinScreen({ onSubmit }: { onSubmit: (pin: string) => Promise<string | n
       <div className="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-sm px-6 py-8 text-center">
         <div className="text-[12px] font-mono tracking-wide text-slate-400">BARE NOTE STUDIO</div>
         <h1 className="text-[20px] font-bold text-slate-900 mt-1">PINを入力</h1>
-        <p className="text-[13.5px] text-slate-500 mt-2 mb-6">BNS PJ管理システムを開くには、{PIN_LENGTH}桁のPINが必要です</p>
+        <p className="text-[13.5px] text-slate-500 mt-2 mb-6">Budget Control Systemを開くには、{PIN_LENGTH}桁のPINが必要です</p>
 
         <div className={`flex justify-center gap-3 mb-3 ${shake ? 'animate-pulse' : ''}`}>
           {Array.from({ length: PIN_LENGTH }).map((_, i) => (

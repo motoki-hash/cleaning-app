@@ -2,9 +2,9 @@ import type { Metadata } from 'next'
 import PinGate from './components/PinGate'
 
 export const metadata: Metadata = {
-  title: 'BNS PJ管理システム',
+  title: 'Budget Control System',
   description: 'BARE NOTE STUDIO プロジェクト予算管理',
-  appleWebApp: { capable: true, statusBarStyle: 'default', title: 'BNS PJ管理' },
+  appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Budget Control' },
 }
 
 export default function PjbLayout({ children }: { children: React.ReactNode }) {
