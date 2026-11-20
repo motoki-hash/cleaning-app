@@ -157,7 +157,7 @@ export default function PjbHomePage() {
                 className={`text-[13px] px-3 py-1.5 rounded-full whitespace-nowrap border ${
                   businessFilter === n ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200'
                 }`}>
-                {n}{n !== 'すべて' && <span className="ml-1 opacity-60">{cards.filter(c => c.business === n).length}</span>}
+                {n !== 'すべて' && <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: bizColor(n) }} />}{n}{n !== 'すべて' && <span className="ml-1 opacity-60">{cards.filter(c => c.business === n).length}</span>}
               </button>
             ))}
           </div>
@@ -230,7 +230,7 @@ function ProjectCard({ data }: { data: ProjectCardData }) {
   const gapStatus = kpi ? budgetGapStatus(data.totalBudget, data.budgetGap) : 'unset'
 
   return (
-    <Link href={`/pjb/${project.id}`} data-tone={over ? 'over' : project.status} className={`pjb-card block rounded-xl border bg-white p-4 ${tone}`}>
+    <Link href={`/pjb/${project.id}`} style={{ '--pjb-accent': bizColor(data.business) } as React.CSSProperties} className={`pjb-card block rounded-xl border bg-white p-4 ${tone}`}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
           <div className="text-[15px] font-semibold text-slate-900 truncate">{project.name}</div>
@@ -300,6 +300,10 @@ function Assignees({ pm, qa }: { pm: string[]; qa: string[] }) {
   )
 }
 
+// 事業ごとの色（カードの上端のラインと、事業の絞り込みボタンの点）
+const BIZ_COLOR: Record<string, string> = { 'illi Stays & Hotels': '#008CE3', 'Kyo Residence': '#796EFF', 'Setup Office': '#059669' }
+const bizColor = (name: string) => BIZ_COLOR[name] ?? '#94A3B8'
+
 const uniqueNames = (names: string[]) => Array.from(new Set(names))
 
 function GroupCard({ members }: { members: ProjectCardData[] }) {
@@ -312,7 +316,7 @@ function GroupCard({ members }: { members: ProjectCardData[] }) {
   const kpi = hasBudgetKpi(first.business)
 
   return (
-    <div data-tone={over ? 'over' : members.some(c => c.project.status === '進行中') ? '進行中' : members.every(c => c.project.status === '完了') ? '完了' : members[0].project.status} className={`pjb-card rounded-xl border bg-white p-4 ${over ? 'border-rose-300' : 'border-slate-200'}`}>
+    <div style={{ '--pjb-accent': bizColor(first.business) } as React.CSSProperties} className={`pjb-card rounded-xl border bg-white p-4 ${over ? 'border-rose-300' : 'border-slate-200'}`}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
           <Link href={`/pjb/${first.project.id}/all`} className="block text-[15px] font-semibold text-slate-900 truncate hover:underline">{first.project.name}</Link>

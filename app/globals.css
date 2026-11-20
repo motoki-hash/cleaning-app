@@ -119,7 +119,7 @@ input::placeholder, textarea::placeholder {
   box-shadow: 0 1px 2px rgba(30, 31, 33, 0.05), 0 2px 8px rgba(30, 31, 33, 0.04);
 }
 
-/* 案件カード：やわらかい影と、ごく淡いグラデーション。上端の細いラインで、ステータスが色でわかる。マウスを乗せると少し浮く */
+/* 案件カード：やわらかい影と、ごく淡いグラデーション。上端の細いラインで、事業が色でわかる（色は --pjb-accent で指定）。マウスを乗せると少し浮く */
 .pjb-theme .pjb-card.rounded-xl {
   --pjb-accent: #CBD5E1;
   background-image: linear-gradient(180deg, #FFFFFF 0%, #F7FAFC 100%);
@@ -129,12 +129,7 @@ input::placeholder, textarea::placeholder {
     0 8px 20px -10px rgba(30, 31, 33, 0.16);
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
-.pjb-theme .pjb-card[data-tone="進行中"] { --pjb-accent: #008CE3; }
-.pjb-theme .pjb-card[data-tone="完了"] { --pjb-accent: #059669; }
-.pjb-theme .pjb-card[data-tone="未着手"] { --pjb-accent: #94A3B8; }
-.pjb-theme .pjb-card[data-tone="保留"] { --pjb-accent: #FFB900; }
-.pjb-theme .pjb-card[data-tone="over"] { --pjb-accent: #F06A6A; }
-.pjb-theme a.pjb-card.rounded-xl:hover {
+.pjb-theme .pjb-card.rounded-xl:hover {
   transform: translateY(-2px);
   border-color: #B3DBF6;
   box-shadow:
