@@ -37,33 +37,71 @@ input::placeholder, textarea::placeholder {
 }
 
 /* ============================================================================
-   PJ予算管理（/pjb）専用テーマ：深いグリーンを基調に（落ち着いたグレーの背景に、白いカード）、角丸を控えめにする。
-   清掃管理アプリ側には影響しないよう、.pjb-theme の中だけに適用する。
+   PJ予算管理（/pjb）専用テーマ：Asana風の配色・フォント（指示書 THEME-ASANA-INSTRUCTIONS.md）。
+   背景は明るい灰白、カードは白＋細い枠線、サイドバーは #1E1F21、主ボタンと選択状態は #008CE3。
+   清掃管理アプリ側には影響しないよう、.pjb-theme の中だけに適用する（このブロックを外すと、元のTailwindの見た目に戻る）。
    スケジュールのバーの色（sky/emerald/rose/amber など）は変更しない。
    ============================================================================ */
 .pjb-theme {
-  --pjb-green: #17382f;
-  --pjb-green-dark: #0f2a22;
-  --pjb-mint: #e2efe8;
-  --pjb-mint-soft: #eef6f1;
-  --pjb-bg: #f3f5f3;
-  --pjb-ink: #14201c;
+  --pjb-bg: #F6F8F9;
+  --pjb-ink: #1E1F21;
+  --pjb-sub: #475569;
+  --pjb-sub2: #64748B;
+  --pjb-brand: #008CE3;
+  --pjb-brand-h: #1AAFD0;
+  --pjb-brand-soft: #E5F3FC;
+  --pjb-side: #1E1F21;
+  --pjb-side-on: #2E3033;
+  --pjb-side-hover: #2A2C2F;
+  --pjb-coral: #F06A6A;
   color: var(--pjb-ink);
+  font-family: 'Inter', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
 }
 .pjb-theme .min-h-screen.bg-slate-100 { background-color: var(--pjb-bg); }
-.pjb-theme .text-slate-900 { color: var(--pjb-ink); }
+.pjb-theme h1, .pjb-theme h2, .pjb-theme h3 { letter-spacing: -0.02em; }
 
-/* アクセントカラー（青 → グリーン） */
-.pjb-theme .bg-blue-600 { background-color: var(--pjb-green); }
-.pjb-theme .hover\:bg-blue-700:hover { background-color: var(--pjb-green-dark); }
-.pjb-theme .bg-blue-500 { background-color: var(--pjb-green); }
-.pjb-theme .text-blue-700, .pjb-theme .text-blue-800 { color: var(--pjb-green); }
-.pjb-theme .border-blue-600, .pjb-theme .border-blue-500 { border-color: var(--pjb-green); }
-.pjb-theme .ring-blue-600, .pjb-theme .ring-blue-500 { --tw-ring-color: var(--pjb-green); }
-.pjb-theme .bg-blue-50, .pjb-theme .hover\:bg-blue-50:hover { background-color: var(--pjb-mint); }
-.pjb-theme .bg-blue-50\/60 { background-color: var(--pjb-mint-soft); }
-.pjb-theme .bg-blue-100\/70 { background-color: var(--pjb-mint); }
-.pjb-theme .border-blue-200, .pjb-theme .hover\:border-blue-300:hover { border-color: #b9d6c8; }
+/* 太さ：ふだんは500、強調は600まで（700以上は使わない） */
+.pjb-theme .font-normal, .pjb-theme .font-medium { font-weight: 500; }
+.pjb-theme .font-semibold, .pjb-theme .font-bold, .pjb-theme .font-extrabold, .pjb-theme .font-black,
+.pjb-theme th, .pjb-theme b, .pjb-theme strong, .pjb-theme h1, .pjb-theme h2, .pjb-theme h3 { font-weight: 600; }
+
+/* 文字色：本文 #1E1F21、補足 #475569、さらに薄い補助 #64748B */
+.pjb-theme .text-slate-900 { color: var(--pjb-ink); }
+.pjb-theme .text-slate-500 { color: var(--pjb-sub); }
+.pjb-theme .text-slate-400 { color: var(--pjb-sub2); }
+.pjb-theme th { color: var(--pjb-sub); }
+
+/* 主ボタン・リンク・選択状態（青 → #008CE3） */
+.pjb-theme .bg-blue-600, .pjb-theme .bg-blue-500, .pjb-theme .bg-emerald-700 { background-color: var(--pjb-brand); }
+.pjb-theme .hover\:bg-blue-700:hover { background-color: var(--pjb-brand-h); }
+.pjb-theme .text-blue-600, .pjb-theme .text-blue-700, .pjb-theme .text-blue-800 { color: var(--pjb-brand); }
+.pjb-theme .border-blue-600, .pjb-theme .border-blue-500, .pjb-theme .border-emerald-700 { border-color: var(--pjb-brand); }
+.pjb-theme .ring-blue-600, .pjb-theme .ring-blue-500 { --tw-ring-color: var(--pjb-brand); }
+.pjb-theme .bg-blue-50, .pjb-theme .hover\:bg-blue-50:hover { background-color: var(--pjb-brand-soft); }
+.pjb-theme .bg-blue-50\/60, .pjb-theme .bg-blue-100\/70 { background-color: var(--pjb-brand-soft); }
+.pjb-theme .border-blue-200, .pjb-theme .hover\:border-blue-300:hover { border-color: #B3DBF6; }
+
+/* 色を直接指定している箇所（元は深い緑）：サイドバーは #1E1F21、ボタン・選択状態は #008CE3 */
+.pjb-theme aside.bg-\[\#17382f\] { background-color: var(--pjb-side); border-color: var(--pjb-side-on); }
+.pjb-theme .bg-\[\#17382f\] { background-color: var(--pjb-brand); }
+.pjb-theme .hover\:bg-\[\#0f2a22\]:hover { background-color: var(--pjb-brand-h); }
+.pjb-theme .border-\[\#17382f\] { border-color: var(--pjb-brand); }
+.pjb-theme .bg-\[\#e2efe8\] { background-color: var(--pjb-side-on); }          /* サイドバーの選択中 */
+.pjb-theme .text-\[\#17382f\] { color: #fff; }
+.pjb-theme aside .text-emerald-100\/50 { color: #94A3B8; }                        /* サイドバーの見出し */
+.pjb-theme aside .text-emerald-100\/70 { color: #CBD5E1; }
+.pjb-theme aside .text-emerald-50\/90 { color: #CBD5E1; }                         /* サイドバーの文字 */
+.pjb-theme aside .hover\:bg-white\/10:hover { background-color: var(--pjb-side-hover); }
+
+/* 件数バッジ・警告の強調（コーラル）、特別な属性（パープル） */
+.pjb-theme .bg-rose-500, .pjb-theme .bg-rose-600 { background-color: var(--pjb-coral); }
+.pjb-theme .bg-violet-50 { background-color: #F5F3FF; }
+.pjb-theme .border-violet-200 { border-color: #DDD6FE; }
 
 /* 角丸を少し控えめに（丸いピル型 rounded-full はそのまま） */
 .pjb-theme .rounded-2xl { border-radius: 10px; }
@@ -75,23 +113,8 @@ input::placeholder, textarea::placeholder {
   .pjb-theme .sm\:rounded-2xl { border-radius: 10px; }
 }
 
-/* 面と線の色を、背景のグレーと同じ「わずかに緑がかったグレー」にそろえる（色味が混在して見えないように） */
-.pjb-theme .bg-slate-100 { background-color: #f1f4f2; }
-.pjb-theme .bg-slate-50, .pjb-theme .bg-slate-50\/60 { background-color: #f8faf8; }
-.pjb-theme .border-slate-200 { border-color: #e1e6e2; }
-.pjb-theme .border-slate-300 { border-color: #cfd6d1; }
-.pjb-theme .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #e9edea; }
-.pjb-theme .border-slate-100 { border-color: #e9edea; }
-
-/* 色つきの左ライン（KPIカードなど）は、上の「線の色」の上書きに負けないように指定し直す */
-.pjb-theme .border-l-amber-400 { border-left-color: #fbbf24; }
-.pjb-theme .border-l-rose-500 { border-left-color: #f43f5e; }
-.pjb-theme .border-l-emerald-500 { border-left-color: #10b981; }
-.pjb-theme .border-l-sky-400 { border-left-color: #38bdf8; }
-.pjb-theme .border-l-transparent { border-left-color: transparent; }
-
-/* カードを背景から浮かせる（白い面＋うすい影）。背景と見分けやすくする */
+/* カードを背景から浮かせる（白い面＋うすい影） */
 .pjb-theme .bg-white.rounded-xl,
 .pjb-theme .bg-white.rounded-lg {
-  box-shadow: 0 1px 3px rgba(20, 32, 28, 0.08), 0 1px 2px rgba(20, 32, 28, 0.04);
+  box-shadow: 0 1px 2px rgba(30, 31, 33, 0.05), 0 2px 8px rgba(30, 31, 33, 0.04);
 }

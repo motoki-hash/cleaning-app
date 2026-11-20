@@ -343,7 +343,7 @@ function Tile({ label, value, sub, tone }: { label: string; value: string; sub?:
 function Chart({ rows }: { rows: { planS: number; planP: number; sales: number; profit: number }[] }) {
   const lines = [
     { label: '売上計画', data: cumulative(rows.map(r => r.planS)), color: '#94a3b8', dash: '5 4' },
-    { label: '売上 実績/見込', data: cumulative(rows.map(r => r.sales)), color: '#17382f' },
+    { label: '売上 実績/見込', data: cumulative(rows.map(r => r.sales)), color: '#008CE3' },
     { label: '利益計画', data: cumulative(rows.map(r => r.planP)), color: '#cbd5e1', dash: '5 4' },
     { label: '利益 実績/見込', data: cumulative(rows.map(r => r.profit)), color: '#10b981' },
   ]

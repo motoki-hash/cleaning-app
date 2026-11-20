@@ -686,8 +686,8 @@ export default function FfePage() {
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <h1 className="text-[20px] font-bold text-slate-900 mr-auto">FFE・OSE発注リスト</h1>
           <div className="inline-flex rounded-lg border border-slate-300 overflow-hidden bg-white text-[13.5px]">
-            <button onClick={() => setView('internal')} className={`px-3.5 py-2 ${view === 'internal' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>社内用</button>
-            <button onClick={() => setView('investor')} className={`px-3.5 py-2 ${view === 'investor' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>投資家用</button>
+            <button onClick={() => setView('internal')} className={`px-3.5 py-2 ${view === 'internal' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>社内用</button>
+            <button onClick={() => setView('investor')} className={`px-3.5 py-2 ${view === 'investor' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>投資家用</button>
           </div>
           <button onClick={() => setDialog('import')} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">スプレッドシートから取り込む</button>
           <button onClick={() => setDialog('copy')} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">他の案件からコピー</button>
@@ -783,9 +783,9 @@ export default function FfePage() {
         {view === 'internal' && (
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <div className="flex flex-wrap gap-1.5">
-              <button onClick={() => setCat('all')} className={`text-[13px] px-3 py-1.5 rounded-full border ${cat === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200'}`}>すべて {items.length}</button>
+              <button onClick={() => setCat('all')} className={`text-[13px] px-3 py-1.5 rounded-full border ${cat === 'all' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200'}`}>すべて {items.length}</button>
               {cats.map(c => (
-                <button key={c} onClick={() => setCat(c)} className={`text-[13px] px-3 py-1.5 rounded-full border ${cat === c ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200'}`}>{c} {catCounts(c)}</button>
+                <button key={c} onClick={() => setCat(c)} className={`text-[13px] px-3 py-1.5 rounded-full border ${cat === c ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200'}`}>{c} {catCounts(c)}</button>
               ))}
             </div>
             <select value={orderer} onChange={e => setOrderer(e.target.value)} className="text-[13px] border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white">
@@ -797,7 +797,7 @@ export default function FfePage() {
               {FFE_STATUSES.map(s => <option key={s}>{s}</option>)}
             </select>
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="商品名・購入先などで検索" className="text-[13px] border border-slate-300 rounded-lg px-3 py-1.5 bg-white w-60" />
-            <button onClick={() => setHideDone(v => !v)} className={`text-[13px] px-3 py-1.5 rounded-lg border ${hideDone ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300'}`} title="納品済・完了・キャンセルの行を隠します">未完了のみ</button>
+            <button onClick={() => setHideDone(v => !v)} className={`text-[13px] px-3 py-1.5 rounded-lg border ${hideDone ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300'}`} title="納品済・完了・キャンセルの行を隠します">未完了のみ</button>
             {(cat !== 'all' || orderer !== 'all' || statusF !== 'all' || q || warnOnly || hideDone || missOnly) && (
               <button onClick={() => { setCat('all'); setOrderer('all'); setStatusF('all'); setQ(''); setWarnOnly(false); setHideDone(false); setMissOnly(false) }} className="text-[13px] text-blue-600 underline">絞り込みを解除</button>
             )}
