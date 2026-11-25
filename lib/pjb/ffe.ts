@@ -10,6 +10,7 @@ export const FFE_TAX = 1.1
 
 export const FFE_CATEGORIES = ['家具', '家電', '客室備品', '運営関係', '諸経費', '分離発注'] as const
 export const FFE_STATUSES = ['未選定', '選定済', '発注済', '納品済', '保留', 'キャンセル'] as const
+export const FFE_ROOM_COMMON = '共通'
 export const FFE_ORDERERS = ['BNS', 'デザイナー', 'セカイズ'] as const
 
 export type InvestorMode = 'show' | 'hide' | 'fixed'
@@ -47,6 +48,7 @@ export type FfeItem = {
   pay_month: string
   investor_mode: InvestorMode
   image_url?: string              // 商品画像のアドレス（SQLパッチ031）
+  room?: string                   // どの部屋の品目か。「共通」＝全部屋共通、空＝未設定（SQLパッチ032）
   checked_at?: string | null      // URLを開いた日（URLの「↗」を押すと、その日付が自動で入る。SQLパッチ029）
 }
 
@@ -270,12 +272,12 @@ export function downloadText(filename: string, text: string, mime = 'text/csv;ch
 }
 
 export function internalCsv(items: FfeItem[]): string {
-  const head = ['No', '区分', '小見出し', '発注者', '社内発注担当', 'ステータス', '発注日', '購入先', '商品', '規格・カラー', '色', '入数', '数量', '単価(税込)', '税別単価', '合計(税込)', '合計(税別)', 'URL', 'URL確認日', '備考', '商品発送先', '希望納品日', '確定納品日', '完了', '支払い方法', '請求書セット名', '支払月', '投資家表示']
+  const head = ['No', '区分', '小見出し', '発注者', '社内発注担当', 'ステータス', '発注日', '購入先', '商品', '規格・カラー', '色', '入数', '数量', '単価(税込)', '税別単価', '合計(税込)', '合計(税別)', 'URL', 'URL確認日', '備考', '部屋', '商品発送先', '希望納品日', '確定納品日', '完了', '支払い方法', '請求書セット名', '支払月', '投資家表示']
   const rows = items.map((it, i) => {
     const incl = lineIncl(it)
     const live = counted(it)
     return [i + 1, it.category, it.section, it.orderer, it.staff, it.status, it.ordered_at ?? '', it.vendor, it.name, it.spec, it.color, it.pack_qty, it.qty, it.unit_price,
-      Math.round(it.unit_price / FFE_TAX), live ? incl : 0, live ? exclOf(incl) : 0, it.url, it.checked_at ?? '', it.note, it.ship_to, it.want_date ?? '', it.fixed_date ?? '', it.done ? '済' : '', it.pay_method, it.invoice_set, it.pay_month,
+      Math.round(it.unit_price / FFE_TAX), live ? incl : 0, live ? exclOf(incl) : 0, it.url, it.checked_at ?? '', it.note, it.room ?? '', it.ship_to, it.want_date ?? '', it.fixed_date ?? '', it.done ? '済' : '', it.pay_method, it.invoice_set, it.pay_month,
       it.investor_mode === 'hide' ? '見せない' : it.investor_mode === 'fixed' ? '固定' : '表示']
   })
   const t = sumItems(items)
@@ -314,7 +316,7 @@ const norm = (s: string) => s.replace(/[\s　]/g, '').replace(/（/g, '(').repla
 const FIELD_BY_HEADER: Record<string, keyof FfeItem> = {
   '発注者': 'orderer', '社内発注担当': 'staff', 'ステータス': 'status', '発注日': 'ordered_at', '購入先': 'vendor', '購入元': 'vendor',
   '商品': 'name', '規格・カラー': 'spec', '仕様/用途': 'spec', '規格': 'spec', '仕様': 'spec', 'カラー': 'color', '入数': 'pack_qty', '数量': 'qty',
-  'url': 'url', '備考': 'note', '単価(税込)': 'unit_price', '商品発送先': 'ship_to', '希望納品日': 'want_date', '確定納品日': 'fixed_date',
+  'url': 'url', '備考': 'note', '単価(税込)': 'unit_price', '商品発送先': 'ship_to', '部屋': 'room', '設置場所': 'room', '設置部屋': 'room', '希望納品日': 'want_date', '確定納品日': 'fixed_date',
   '完了': 'done', '支払い方法': 'pay_method', '支払方法': 'pay_method', '請求書セット名': 'invoice_set', 'bns支払月': 'pay_month', '支払月': 'pay_month',
 }
 const toNum = (s: string) => { const n = Number(s.replace(/[¥￥,\s円]/g, '')); return isFinite(n) ? n : 0 }
@@ -371,6 +373,7 @@ export function parseSheetCsv(text: string, category: string): ImportResult {
       category, section, orderer: cell(r, 'orderer'), staff: cell(r, 'staff'), status, ordered_at: toDate(cell(r, 'ordered_at')),
       vendor: cell(r, 'vendor'), name, spec: cell(r, 'spec'), color: cell(r, 'color'), pack_qty: cell(r, 'pack_qty'), qty,
       url: cell(r, 'url'), note: cell(r, 'note'), unit_price: unit, ship_to: cell(r, 'ship_to'),
+      ...(cell(r, 'room') ? { room: cell(r, 'room') } : {}),
       want_date: toDate(cell(r, 'want_date')), fixed_date: toDate(cell(r, 'fixed_date')),
       done: /^(true|✓|☑|済|1)$/i.test(cell(r, 'done')), pay_method: cell(r, 'pay_method'), invoice_set: cell(r, 'invoice_set'), pay_month: cell(r, 'pay_month'),
       investor_mode: 'show',
