@@ -51,8 +51,9 @@ export default function RoughPrintSheet({
     const h1 = h0 + HALF_WEEKS
     const inHalf = (b: ScheduleBar) => b.start_week! < h1 && b.start_week! + b.length_weeks! > h0
     const rows = tasks
-      .map((t, i) => ({ t, no: i + 1, bars: roughBars.filter(b => b.task_id === t.id && inHalf(b)) }))
+      .map(t => ({ t, bars: roughBars.filter(b => b.task_id === t.id && inHalf(b)) }))
       .filter(r => r.bars.length > 0)
+      .map((r, i) => ({ ...r, no: i + 1 }))   // 番号は、その段に出る工程だけで、1から順に振る
     const groups = bandGroups.map(g => ({ n: g.n, month: g.month, year: g.year, from: g.start - h0, span: g.span }))
     const first = bandGroups[0].n, last = bandGroups[bandGroups.length - 1].n
     return { h0, rows, groups, HALF_WEEKS, first, last }
