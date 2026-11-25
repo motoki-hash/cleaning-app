@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { periodName, periodLabelOf } from '@/lib/pjb/periods'
+import { templateItems, TEMPLATE_CATEGORIES, type FurnitureBy } from '@/lib/pjb/ffeTemplate'
 import { FFE_CATEGORIES, guessCategory, parseSheetCsv, type FfeItem, type ImportResult } from '@/lib/pjb/ffe'
 
 type NewItem = Omit<FfeItem, 'id' | 'project_id' | 'sort_order'>
@@ -151,6 +152,67 @@ export function CopyDialog({ projectId, onClose, onCopied }: { projectId: string
       <div className="flex gap-2">
         <button onClick={onClose} disabled={busy} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-[14px] text-slate-600">キャンセル</button>
         <button onClick={run} disabled={busy || !src || !count} className="flex-1 py-2.5 rounded-lg bg-emerald-700 text-white text-[14px] font-medium disabled:opacity-40">{busy ? 'コピー中…' : 'コピーする'}</button>
+      </div>
+    </Backdrop>
+  )
+}
+
+
+// ---- 雛形から入れる（標準の品目を、まとめて追加する）----
+export function TemplateDialog({ existing, onClose, onAdd }: { existing: number; onClose: () => void; onAdd: (items: NewItem[]) => Promise<string | null> }) {
+  const [cats, setCats] = useState<string[]>([...TEMPLATE_CATEGORIES])
+  const [by, setBy] = useState<FurnitureBy>('BNS')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const preview = templateItems(cats, by)
+  const countOf = (c: string) => templateItems([c], by).length
+
+  const run = async () => {
+    if (preview.length === 0) return
+    setBusy(true)
+    setError('')
+    const msg = await onAdd(preview)
+    setBusy(false)
+    if (msg) setError(msg)
+    else onClose()
+  }
+
+  return (
+    <Backdrop onClose={onClose} busy={busy}>
+      <h2 className="text-[17px] font-bold text-slate-900 mb-1">雛形から入れる</h2>
+      <p className="text-[13px] text-slate-500 mb-4">標準の品目を、区分ごとにまとめて追加します。入れたあとで、品目の追加・削除・金額の変更ができます。</p>
+
+      <div className="text-[13px] font-medium text-slate-700 mb-1.5">入れる区分</div>
+      <div className="grid gap-1.5 mb-4">
+        {TEMPLATE_CATEGORIES.map(c => (
+          <label key={c} className="flex items-center gap-2 text-[14px] text-slate-800 cursor-pointer">
+            <input type="checkbox" checked={cats.includes(c)} onChange={e => setCats(e.target.checked ? [...cats, c] : cats.filter(x => x !== c))} />
+            {c}<span className="text-[12px] text-slate-400">{countOf(c)}品目</span>
+          </label>
+        ))}
+      </div>
+
+      {cats.includes('家具') && (
+        <div className="mb-4">
+          <div className="text-[13px] font-medium text-slate-700 mb-1.5">家具の手配</div>
+          <div className="inline-flex rounded-lg border border-slate-300 overflow-hidden bg-white text-[13.5px]">
+            {(['BNS', 'デザイナー'] as const).map(b => (
+              <button key={b} onClick={() => setBy(b)} className={`px-3.5 py-2 ${by === b ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>{b}が手配</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg bg-slate-50 border border-slate-200 text-[13px] text-slate-700 px-3 py-2 mb-4 leading-relaxed">
+        追加する品目：<b>{preview.length}</b>件
+        {existing > 0 && <><br />この案件には、すでに <b>{existing}</b> 件の品目があります。<b>いまの品目は消えず、その後ろに追加されます。</b></>}
+        <br />ステータスは「未選定」（一部は「選定済」）で入ります。
+      </div>
+
+      {error && <div className="mb-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[13px] px-3 py-2">{error}</div>}
+      <div className="flex justify-end gap-2">
+        <button onClick={onClose} disabled={busy} className="px-4 py-2 text-[14px] rounded-lg border border-slate-300 text-slate-700 bg-white">やめる</button>
+        <button onClick={run} disabled={busy || preview.length === 0} className="px-4 py-2 text-[14px] rounded-lg bg-blue-600 text-white disabled:opacity-40">{busy ? '追加中…' : `${preview.length}件を追加する`}</button>
       </div>
     </Backdrop>
   )

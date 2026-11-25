@@ -13,7 +13,7 @@ import {
   internalCsv, investorCsv, downloadText, missingKeys, completeness, guessVendor, MISSING_LABEL,
   type FfeItem, type FfeSettings, type InvestorMode, type MissingKey,
 } from '@/lib/pjb/ffe'
-import { ImportDialog, CopyDialog } from './FfeDialogs'
+import { ImportDialog, CopyDialog, TemplateDialog } from './FfeDialogs'
 import { toJpegBlob, uploadFfeImage, fetchImageFromUrl } from '@/lib/pjb/ffeImage'
 import type { ProjectStatus } from '@/lib/pjb/types'
 
@@ -361,7 +361,7 @@ export default function FfePage() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [openId])
-  const [dialog, setDialog] = useState<'import' | 'copy' | null>(null)
+  const [dialog, setDialog] = useState<'import' | 'copy' | 'template' | null>(null)
   const [trash, setTrash] = useState<FfeItem | null>(null)
   const [msg, setMsg] = useState('')
 
@@ -838,6 +838,7 @@ export default function FfePage() {
             <button onClick={() => setView('investor')} className={`px-3.5 py-2 ${view === 'investor' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>投資家用</button>
           </div>
           <button onClick={() => setDialog('import')} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">スプレッドシートから取り込む</button>
+          <button onClick={() => setDialog('template')} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">雛形から入れる</button>
           <button onClick={() => setDialog('copy')} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">他の案件からコピー</button>
           {hasImg && missingImages > 0 && (
             <button onClick={fetchAllImages} disabled={!!bulkImg} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50">
@@ -1087,6 +1088,7 @@ export default function FfePage() {
         <StatusAsk item={items.find(i => i.id === ask.id)!} status={ask.status} keys={ask.keys} patch={p => patch(ask.id, p)} onClose={() => setAsk(null)} />
       )}
       {dialog === 'import' && <ImportDialog onClose={() => setDialog(null)} onImport={bulkInsert} />}
+      {dialog === 'template' && <TemplateDialog existing={items.length} onClose={() => setDialog(null)} onAdd={list => bulkInsert(list)} />}
       {dialog === 'copy' && <CopyDialog projectId={id} onClose={() => setDialog(null)} onCopied={items => bulkInsert(items)} />}
     </Shell>
   )
