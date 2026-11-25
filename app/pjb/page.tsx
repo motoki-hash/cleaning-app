@@ -36,7 +36,6 @@ export default function PjbHomePage() {
   const [showNew, setShowNew] = useState(false)
   const [businessFilter, setBusinessFilter] = useState<string>('すべて')
   const [sortKey, setSortKey] = useState<SortKey>('newest')
-  const [groupByBusiness, setGroupByBusiness] = useState(false)
   // ダッシュボードのタイル・事業別の行から開いたときは、その条件で絞り込む（?filter=進行中 / ?biz=事業名）
   useEffect(() => {
     const q = new URLSearchParams(window.location.search)
@@ -169,10 +168,6 @@ export default function PjbHomePage() {
               {(Object.keys(SORT_LABELS) as SortKey[]).map(k => <option key={k} value={k}>{SORT_LABELS[k]}</option>)}
             </select>
           </label>
-          <label className="flex items-center gap-1.5 text-[13px] text-slate-600 cursor-pointer">
-            <input type="checkbox" checked={groupByBusiness} onChange={e => setGroupByBusiness(e.target.checked)} />
-            事業ごとにまとめて表示
-          </label>
         </div>
 
         {loading && <p className="text-center text-[14px] text-slate-400 py-10">読み込み中…</p>}
@@ -182,7 +177,7 @@ export default function PjbHomePage() {
           </div>
         )}
 
-        {filtered.length > 0 && groupByBusiness && (
+        {filtered.length > 0 && (
           <div className="grid gap-6">
             {businessNames.map(name => {
               const us = units.filter(u => u.members[0].business === name)
@@ -202,11 +197,6 @@ export default function PjbHomePage() {
                 </section>
               )
             })}
-          </div>
-        )}
-        {filtered.length > 0 && !groupByBusiness && (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {units.map(renderUnit)}
           </div>
         )}
       </main>
