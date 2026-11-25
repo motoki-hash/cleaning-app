@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import Shell from '../../components/Shell'
 import { supabase } from '@/lib/supabase'
@@ -57,7 +58,7 @@ function DateCell({ value, onCommit }: { value: string | null; onCommit: (v: str
 }
 
 const COLS_ALL: Array<{ k: string; label: string; w: number }> = [
-  { k: 'no', label: 'No', w: 56 }, { k: 'name', label: '商品', w: 320 }, { k: 'room', label: '部屋', w: 116 }, { k: 'status', label: 'ステータス', w: 104 }, { k: 'orderer', label: '発注者', w: 104 },
+  { k: 'no', label: 'No', w: 56 }, { k: 'name', label: '商品', w: 320 }, { k: 'room', label: '部屋', w: 116 }, { k: 'maker', label: 'メーカー', w: 116 }, { k: 'model_no', label: '品番', w: 130 }, { k: 'status', label: 'ステータス', w: 104 }, { k: 'orderer', label: '発注者', w: 104 },
   { k: 'qty', label: '数量', w: 66 }, { k: 'unit', label: '単価（税込）', w: 108 }, { k: 'incl', label: '合計（税込）', w: 112 },
   { k: 'spec', label: '規格・カラー', w: 160 }, { k: 'vendor', label: '購入先', w: 116 }, { k: 'note', label: '備考', w: 180 }, { k: 'url', label: 'URL', w: 160 }, { k: 'cat', label: 'URL確認日', w: 132 },
   { k: 'staff', label: '社内発注担当', w: 96 }, { k: 'ordered_at', label: '発注日', w: 132 }, { k: 'want', label: '希望納品日', w: 132 }, { k: 'fixed', label: '確定納品日', w: 132 },
@@ -201,8 +202,8 @@ function Field({ label, need, children }: { label: string; need?: boolean; child
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return <div className="mt-5"><div className="text-[12.5px] font-semibold text-slate-700 mb-2 pb-1 border-b border-slate-100">{title}</div><div className="grid grid-cols-2 gap-x-3 gap-y-2.5">{children}</div></div>
 }
-function DetailPanel({ item: it, warns, hasCheck, hasRoom, hasImg, imgBusy, cats, position, total, onPrev, onNext, onClose, patch, onMove, onRemove, onStatus, onUrl, onImageFile, onImageFromUrl, onImageZoom }: {
-  item: FfeItem; warns?: string[]; hasCheck: boolean; hasRoom: boolean; hasImg: boolean; imgBusy: boolean; cats: string[]; position: number; total: number
+function DetailPanel({ item: it, warns, hasCheck, hasRoom, hasMaker, hasImg, imgBusy, cats, position, total, onPrev, onNext, onClose, patch, onMove, onRemove, onStatus, onUrl, onImageFile, onImageFromUrl, onImageZoom }: {
+  item: FfeItem; warns?: string[]; hasCheck: boolean; hasRoom: boolean; hasMaker: boolean; hasImg: boolean; imgBusy: boolean; cats: string[]; position: number; total: number
   onImageFile: (f: Blob) => void; onImageFromUrl: () => void; onImageZoom: () => void
   onStatus: (s: string) => void; onUrl: (v: string) => void
   onPrev: () => void; onNext: () => void; onClose: () => void; patch: (p: Partial<FfeItem>) => void; onMove: (d: -1 | 1) => void; onRemove: () => void
@@ -267,6 +268,8 @@ function DetailPanel({ item: it, warns, hasCheck, hasRoom, hasImg, imgBusy, cats
           <Field label="発注者" need={m('orderer')}><Txt value={it.orderer} list="ffe-orderers" onCommit={v => patch({ orderer: v.trim() })} className={PIN} /></Field>
           <Field label="社内発注担当"><Txt value={it.staff} list="ffe-staff" onCommit={v => patch({ staff: v })} className={PIN} /></Field>
           <Field label="購入先" need={m('vendor')}><Txt value={it.vendor} list="ffe-vendors" onCommit={v => patch({ vendor: v })} className={PIN} /></Field>
+          {hasMaker && <Field label="メーカー"><Txt value={it.maker ?? ''} list="ffe-maker" onCommit={v => patch({ maker: v.trim() })} className={PIN} /></Field>}
+          {hasMaker && <Field label="品番"><Txt value={it.model_no ?? ''} onCommit={v => patch({ model_no: v.trim() })} className={PIN} /></Field>}
           <Field label="規格・仕様"><Txt value={it.spec} onCommit={v => patch({ spec: v })} className={PIN} /></Field>
           <Field label="カラー"><Txt value={it.color} onCommit={v => patch({ color: v })} className={PIN} /></Field>
           <Field label="入数"><Txt value={it.pack_qty} onCommit={v => patch({ pack_qty: v })} className={PIN} /></Field>
@@ -388,6 +391,7 @@ export default function FfePage() {
     return {
       orderers: Array.from(new Set([...FFE_ORDERERS, ...uniq(i => i.orderer)])),
       vendors: uniq(i => i.vendor), staff: uniq(i => i.staff), pay: uniq(i => i.pay_method), ship: uniq(i => i.ship_to),
+      makers: uniq(i => i.maker ?? ''),
       rooms: Array.from(new Set([FFE_ROOM_COMMON, ...uniq(i => i.room ?? '')])),
     }
   }, [items])
@@ -439,6 +443,7 @@ export default function FfePage() {
   // ---- 商品画像 ----
   const hasImg = items.length === 0 || 'image_url' in items[0]
   const hasRoom = items.length === 0 || 'room' in items[0]
+  const hasMaker = items.length === 0 || 'maker' in items[0]
   const withBusy = async <T,>(itemId: string, fn: () => Promise<T>): Promise<T> => {
     setImgBusy(b => [...b, itemId])
     try { return await fn() } finally { setImgBusy(b => b.filter(x => x !== itemId)) }
@@ -580,7 +585,7 @@ export default function FfePage() {
   const hasCheck = items.length === 0 || 'checked_at' in items[0]
   const missingImages = items.filter(i => !i.image_url && autoFetchable(i.url)).length   // 自動で取れる（Amazon以外でURLがある）画像なしの品目
   const presetKeys = PRESETS.find(p => p.k === preset)?.keys ?? COLS_ALL.map(c => c.k)
-  const COLS = COLS_ALL.filter(c => presetKeys.includes(c.k) && (hasCheck || c.k !== 'cat') && (hasRoom || c.k !== 'room'))
+  const COLS = COLS_ALL.filter(c => presetKeys.includes(c.k) && (hasCheck || c.k !== 'cat') && (hasRoom || c.k !== 'room') && (hasMaker || (c.k !== 'maker' && c.k !== 'model_no')))
 
   if (needPatch) {
     return (
@@ -663,6 +668,8 @@ export default function FfePage() {
       case 'pay_method': return <td key={k} className={base}><Txt value={it.pay_method} list="ffe-pay" onCommit={v => patch(it.id, { pay_method: v })} /></td>
       case 'pay_month': return <td key={k} className={base}><Txt value={it.pay_month} onCommit={v => patch(it.id, { pay_month: v })} /></td>
       case 'room': return <td key={k} className={base}><Txt value={it.room ?? ''} list="ffe-room" onCommit={v => patch(it.id, { room: v.trim() })} /></td>
+      case 'maker': return <td key={k} className={base}><Txt value={it.maker ?? ''} list="ffe-maker" onCommit={v => patch(it.id, { maker: v.trim() })} /></td>
+      case 'model_no': return <td key={k} className={base}><Txt value={it.model_no ?? ''} onCommit={v => patch(it.id, { model_no: v.trim() })} /></td>
       case 'ship_to': return <td key={k} className={base}><Txt value={it.ship_to} list="ffe-ship" onCommit={v => patch(it.id, { ship_to: v })} /></td>
       case 'invoice_set': return <td key={k} className={base}><Txt value={it.invoice_set} onCommit={v => patch(it.id, { invoice_set: v })} /></td>
       case 'investor':
@@ -819,6 +826,7 @@ export default function FfePage() {
       <datalist id="ffe-vendors">{lists.vendors.map(v => <option key={v} value={v} />)}</datalist>
       <datalist id="ffe-staff">{lists.staff.map(v => <option key={v} value={v} />)}</datalist>
       <datalist id="ffe-pay">{lists.pay.map(v => <option key={v} value={v} />)}</datalist>
+      <datalist id="ffe-maker">{lists.makers.map(v => <option key={v} value={v} />)}</datalist>
       <datalist id="ffe-room">{lists.rooms.map(v => <option key={v} value={v} />)}</datalist>
       <datalist id="ffe-ship">{lists.ship.map(v => <option key={v} value={v} />)}</datalist>
 
@@ -836,11 +844,13 @@ export default function FfePage() {
               {bulkImg || `URLから画像を自動取得（画像なし ${missingImages}件）`}
             </button>
           )}
+          <Link href={`/pjb/${id}/ffe/deliverables`} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">納品物一覧（PDF）</Link>
           <button onClick={exportCsv} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">CSV出力</button>
           <button onClick={() => window.print()} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">印刷／PDF</button>
         </div>
 
         {!hasCheck && <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[13px] px-3 py-2">「URL確認日」の欄を使うには、<code className="px-1 bg-white rounded">supabase-pj-budget-patch-029.sql</code> を Supabase で実行してください。</div>}
+        {!hasMaker && <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[13px] px-3 py-2">「メーカー」「品番」の列を使うには、<code className="px-1 bg-white rounded">supabase-pj-budget-patch-033.sql</code> を Supabase で実行してください。</div>}
         {!hasRoom && <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[13px] px-3 py-2">「部屋」の列を使うには、<code className="px-1 bg-white rounded">supabase-pj-budget-patch-032.sql</code> を Supabase で実行してください。</div>}
         {!hasImg && <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[13px] px-3 py-2">商品画像を使うには、<code className="px-1 bg-white rounded">supabase-pj-budget-patch-031.sql</code> を Supabase で実行してください。</div>}
         {imgReport.length > 0 && (
@@ -1057,7 +1067,7 @@ export default function FfePage() {
 
       {openItem && (
         <DetailPanel
-          item={openItem} warns={warnings.get(openItem.id)} hasCheck={hasCheck} hasRoom={hasRoom} hasImg={hasImg} imgBusy={imgBusy.includes(openItem.id)} cats={cats}
+          item={openItem} warns={warnings.get(openItem.id)} hasCheck={hasCheck} hasRoom={hasRoom} hasMaker={hasMaker} hasImg={hasImg} imgBusy={imgBusy.includes(openItem.id)} cats={cats}
           onImageFile={f => putImage(openItem, f)} onImageFromUrl={() => fetchImage(openItem)} onImageZoom={() => setZoomId(openItem.id)}
           position={filtered.findIndex(i => i.id === openItem.id)} total={filtered.length}
           onPrev={() => { const k = filtered.findIndex(i => i.id === openItem.id); if (k > 0) setOpenId(filtered[k - 1].id) }}

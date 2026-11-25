@@ -48,6 +48,8 @@ export type FfeItem = {
   pay_month: string
   investor_mode: InvestorMode
   image_url?: string              // 商品画像のアドレス（SQLパッチ031）
+  maker?: string                  // メーカー（SQLパッチ033）
+  model_no?: string               // 品番（SQLパッチ033）
   room?: string                   // どの部屋の品目か。「共通」＝全部屋共通、空＝未設定（SQLパッチ032）
   checked_at?: string | null      // URLを開いた日（URLの「↗」を押すと、その日付が自動で入る。SQLパッチ029）
 }
@@ -57,6 +59,8 @@ export type FfeSettings = {
   delivery_date: string | null
   fix_deadline: string | null
   notes: string
+  property_name?: string           // 納品物一覧の表紙：物件名（SQLパッチ033）
+  address?: string                // 納品物一覧の表紙：住所（SQLパッチ033）
 }
 
 // 新しい品目の初期値
@@ -272,16 +276,16 @@ export function downloadText(filename: string, text: string, mime = 'text/csv;ch
 }
 
 export function internalCsv(items: FfeItem[]): string {
-  const head = ['No', '区分', '小見出し', '発注者', '社内発注担当', 'ステータス', '発注日', '購入先', '商品', '規格・カラー', '色', '入数', '数量', '単価(税込)', '税別単価', '合計(税込)', '合計(税別)', 'URL', 'URL確認日', '備考', '部屋', '商品発送先', '希望納品日', '確定納品日', '完了', '支払い方法', '請求書セット名', '支払月', '投資家表示']
+  const head = ['No', '区分', '小見出し', '発注者', '社内発注担当', 'ステータス', '発注日', '購入先', 'メーカー', '商品', '品番', '規格・カラー', '色', '入数', '数量', '単価(税込)', '税別単価', '合計(税込)', '合計(税別)', 'URL', 'URL確認日', '備考', '部屋', '商品発送先', '希望納品日', '確定納品日', '完了', '支払い方法', '請求書セット名', '支払月', '投資家表示']
   const rows = items.map((it, i) => {
     const incl = lineIncl(it)
     const live = counted(it)
-    return [i + 1, it.category, it.section, it.orderer, it.staff, it.status, it.ordered_at ?? '', it.vendor, it.name, it.spec, it.color, it.pack_qty, it.qty, it.unit_price,
+    return [i + 1, it.category, it.section, it.orderer, it.staff, it.status, it.ordered_at ?? '', it.vendor, it.maker ?? '', it.name, it.model_no ?? '', it.spec, it.color, it.pack_qty, it.qty, it.unit_price,
       Math.round(it.unit_price / FFE_TAX), live ? incl : 0, live ? exclOf(incl) : 0, it.url, it.checked_at ?? '', it.note, it.room ?? '', it.ship_to, it.want_date ?? '', it.fixed_date ?? '', it.done ? '済' : '', it.pay_method, it.invoice_set, it.pay_month,
       it.investor_mode === 'hide' ? '見せない' : it.investor_mode === 'fixed' ? '固定' : '表示']
   })
   const t = sumItems(items)
-  return toCsv([head, ...rows, [], ['', '', '', '', '', '', '', '', '合計', '', '', '', '', '', '', t.incl, t.excl]])
+  return toCsv([head, ...rows, [], ['', '', '', '', '', '', '', '', '', '合計', '', '', '', '', '', '', '', t.incl, t.excl]])
 }
 
 export function investorCsv(items: FfeItem[], view: InvestorView): string {
@@ -316,7 +320,7 @@ const norm = (s: string) => s.replace(/[\s　]/g, '').replace(/（/g, '(').repla
 const FIELD_BY_HEADER: Record<string, keyof FfeItem> = {
   '発注者': 'orderer', '社内発注担当': 'staff', 'ステータス': 'status', '発注日': 'ordered_at', '購入先': 'vendor', '購入元': 'vendor',
   '商品': 'name', '規格・カラー': 'spec', '仕様/用途': 'spec', '規格': 'spec', '仕様': 'spec', 'カラー': 'color', '入数': 'pack_qty', '数量': 'qty',
-  'url': 'url', '備考': 'note', '単価(税込)': 'unit_price', '商品発送先': 'ship_to', '部屋': 'room', '設置場所': 'room', '設置部屋': 'room', '希望納品日': 'want_date', '確定納品日': 'fixed_date',
+  'url': 'url', '備考': 'note', '単価(税込)': 'unit_price', '商品発送先': 'ship_to', 'メーカー': 'maker', '品番': 'model_no', '型番': 'model_no', '部屋': 'room', '設置場所': 'room', '設置部屋': 'room', '希望納品日': 'want_date', '確定納品日': 'fixed_date',
   '完了': 'done', '支払い方法': 'pay_method', '支払方法': 'pay_method', '請求書セット名': 'invoice_set', 'bns支払月': 'pay_month', '支払月': 'pay_month',
 }
 const toNum = (s: string) => { const n = Number(s.replace(/[¥￥,\s円]/g, '')); return isFinite(n) ? n : 0 }
@@ -374,6 +378,8 @@ export function parseSheetCsv(text: string, category: string): ImportResult {
       vendor: cell(r, 'vendor'), name, spec: cell(r, 'spec'), color: cell(r, 'color'), pack_qty: cell(r, 'pack_qty'), qty,
       url: cell(r, 'url'), note: cell(r, 'note'), unit_price: unit, ship_to: cell(r, 'ship_to'),
       ...(cell(r, 'room') ? { room: cell(r, 'room') } : {}),
+      ...(cell(r, 'maker') ? { maker: cell(r, 'maker') } : {}),
+      ...(cell(r, 'model_no') ? { model_no: cell(r, 'model_no') } : {}),
       want_date: toDate(cell(r, 'want_date')), fixed_date: toDate(cell(r, 'fixed_date')),
       done: /^(true|✓|☑|済|1)$/i.test(cell(r, 'done')), pay_method: cell(r, 'pay_method'), invoice_set: cell(r, 'invoice_set'), pay_month: cell(r, 'pay_month'),
       investor_mode: 'show',
