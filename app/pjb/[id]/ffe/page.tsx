@@ -226,7 +226,7 @@ function DetailPanel({ item: it, warns, hasCheck, hasRoom, hasMaker, hasImg, img
     return () => window.removeEventListener('paste', onPaste)
   }, [hasImg, onImageFile])
   return (
-    <div className="print:hidden fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[440px] bg-white border-l border-slate-200 shadow-2xl overflow-y-auto">
+    <div data-ffe-detail className="print:hidden fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[440px] bg-white border-l border-slate-200 shadow-2xl overflow-y-auto">
       <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-2">
         <button onClick={onPrev} disabled={position <= 0} className="px-2 py-1 rounded border border-slate-200 text-slate-600 disabled:opacity-30" title="前の品目">‹</button>
         <button onClick={onNext} disabled={position < 0 || position >= total - 1} className="px-2 py-1 rounded border border-slate-200 text-slate-600 disabled:opacity-30" title="次の品目">›</button>
@@ -363,6 +363,23 @@ export default function FfePage() {
   }, [openId])
   const [dialog, setDialog] = useState<'import' | 'copy' | 'template' | null>(null)
   const [trash, setTrash] = useState<FfeItem | null>(null)
+  // 詳細パネルの外側を押したら閉じる（別の画面が前に出ているときは閉じない）
+  const overlayOpen = !!zoomId || !!ask || !!dialog || !!trash
+  useEffect(() => {
+    if (!openId || overlayOpen) return
+    let downInside = false
+    const inPanel = (t: EventTarget | null) => t instanceof Element && !!t.closest('[data-ffe-detail]')
+    const onDown = (e: MouseEvent) => { downInside = inPanel(e.target) }
+    // 入力欄の確定（フォーカスが外れたとき）を先に済ませるため、押した直後ではなく、クリック完了時に閉じる
+    const onClick = (e: MouseEvent) => {
+      if (downInside || inPanel(e.target)) return
+      if (e.target instanceof Element && !e.target.isConnected) return
+      setOpenId(null)
+    }
+    window.addEventListener('mousedown', onDown, true)
+    window.addEventListener('click', onClick, true)
+    return () => { window.removeEventListener('mousedown', onDown, true); window.removeEventListener('click', onClick, true) }
+  }, [openId, overlayOpen])
   const [msg, setMsg] = useState('')
 
   const say = useCallback((m: string) => { setMsg(m); setTimeout(() => setMsg(cur => (cur === m ? '' : cur)), 5000) }, [])
