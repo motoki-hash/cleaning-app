@@ -17,6 +17,13 @@ export type PeriodInfo = {
 export const periodName = (name: string, label?: string | null) => (label ? `${name} ${label}` : name)
 export const periodLabelOf = (p: { period_no?: number | null; period_label?: string | null }) => p.period_label || (p.period_no ? `${p.period_no}期` : '')
 
+// 期の並び順：売上計上月の早い順。月が未設定の期は後ろに、同じ月・未設定どうしは期の番号の順
+export const byPeriodOrder = (a: PeriodInfo, b: PeriodInfo) => {
+  const am = a.sales_month ? a.sales_month.slice(0, 7) : '9999-99'
+  const bm = b.sales_month ? b.sales_month.slice(0, 7) : '9999-99'
+  return am < bm ? -1 : am > bm ? 1 : (a.period_no ?? 99) - (b.period_no ?? 99)
+}
+
 const COLUMNS = 'id, name, status, group_id, period_no, period_label, sales_month'
 
 // その案件が属する期の一覧。ready=false は、パッチ022がまだ（列がない）
@@ -27,7 +34,7 @@ export async function loadPeriods(projectId: string): Promise<{ list: PeriodInfo
   const me = self as PeriodInfo
   if (!me.group_id) return { list: [me], ready: true }
   const { data } = await supabase.from('pjb_projects').select(COLUMNS).eq('group_id', me.group_id)
-  const list = ((data || []) as PeriodInfo[]).sort((a, b) => (a.period_no ?? 99) - (b.period_no ?? 99))
+  const list = ((data || []) as PeriodInfo[]).sort(byPeriodOrder)
   return { list: list.length ? list : [me], ready: true }
 }
 
