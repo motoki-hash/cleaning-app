@@ -1,8 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { periodName, periodLabelOf } from '@/lib/pjb/periods'
+import { applyFfeBudget, loadFfeBudgetState, planFfeBudget, type BudgetState } from '@/lib/pjb/ffeBudget'
+import { formatYen } from '@/lib/pjb/format'
 import { templateItems, TEMPLATE_CATEGORIES, type FurnitureBy } from '@/lib/pjb/ffeTemplate'
 import { FFE_CATEGORIES, guessCategory, parseSheetCsv, type FfeItem, type ImportResult } from '@/lib/pjb/ffe'
 
@@ -213,6 +216,74 @@ export function TemplateDialog({ existing, onClose, onAdd }: { existing: number;
       <div className="flex justify-end gap-2">
         <button onClick={onClose} disabled={busy} className="px-4 py-2 text-[14px] rounded-lg border border-slate-300 text-slate-700 bg-white">やめる</button>
         <button onClick={run} disabled={busy || preview.length === 0} className="px-4 py-2 text-[14px] rounded-lg bg-blue-600 text-white disabled:opacity-40">{busy ? '追加中…' : `${preview.length}件を追加する`}</button>
+      </div>
+    </Backdrop>
+  )
+}
+
+// ---- 予実管理へ反映する（売上＝BNS手配FFEの税別合計、原価＝発注済・納品済の購入先ごとの合計）----
+export function ReflectDialog({ projectId, items, onClose }: { projectId: string; items: FfeItem[]; onClose: () => void }) {
+  const plan = useMemo(() => planFfeBudget(items), [items])
+  const [state, setState] = useState<BudgetState | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+  useEffect(() => { loadFfeBudgetState(projectId).then(setState) }, [projectId])
+
+  const isFfe = (t: string) => t.startsWith('FFE｜')
+  const manualSales = state?.sales.filter(r => !isFfe(r.title)) ?? []
+  const manualOrders = state?.orders.filter(r => !isFfe(r.title)) ?? []
+  const run = async () => {
+    setBusy(true)
+    setError('')
+    const msg = await applyFfeBudget(projectId, items)
+    setBusy(false)
+    if (msg) setError(msg); else setDone(true)
+  }
+  const Row = ({ a, b, c }: { a: string; b?: string; c: string }) => (
+    <div className="flex items-baseline gap-2 py-1 border-b border-slate-100 text-[13px]">
+      <span className="flex-1 text-slate-800">{a}</span>
+      {b && <span className="text-[12px] text-slate-400">{b}</span>}
+      <span className="tabular-nums text-slate-900 w-28 text-right">{c}</span>
+    </div>
+  )
+
+  return (
+    <Backdrop onClose={onClose} busy={busy}>
+      <h2 className="text-[17px] font-bold text-slate-900 mb-1">予実管理へ反映する</h2>
+      <p className="text-[13px] text-slate-500 mb-4">「BNS予算」の「FFE・OSE費用」に、FFEの金額を入れます。金額はすべて税別です。FFEを直したら、もう一度押すと、入れ替わります。</p>
+
+      <div className="text-[13px] font-medium text-slate-700 mb-1">売上（BNS手配のFFE。キャンセルを除く）</div>
+      <div className="mb-1">
+        {plan.sales.length === 0 && <div className="text-[13px] text-slate-400 py-1">反映する売上がありません</div>}
+        {plan.sales.map(r => <Row key={r.title} a={r.title.replace('FFE｜', '')} b={`${r.count}品目`} c={formatYen(r.amount)} />)}
+        <Row a="売上の合計" c={formatYen(plan.salesTotal)} />
+      </div>
+      {manualSales.length > 0 && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[12.5px] px-3 py-2 mb-4 leading-relaxed">
+          いま手入力されている売上は、<b>消えて、FFEの金額に入れ替わります</b>：
+          {manualSales.map(r => <div key={r.id}>・{r.title}　{formatYen(r.amount)}</div>)}
+        </div>
+      )}
+
+      <div className="text-[13px] font-medium text-slate-700 mb-1 mt-3">原価（BNS手配のうち、発注済・納品済。購入先ごと）</div>
+      <div className="mb-1">
+        {plan.orders.length === 0 && <div className="text-[13px] text-slate-400 py-1">発注済・納品済の品目がまだありません（原価は入りません）</div>}
+        {plan.orders.map(r => <Row key={r.title} a={r.vendor || '（購入先が未設定）'} b={`${r.count}品目・${r.status === '完了' ? '納品済' : '発注済'}`} c={formatYen(r.amount)} />)}
+        <Row a="原価の合計" c={formatYen(plan.ordersTotal)} />
+      </div>
+      {manualOrders.length > 0 && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[12.5px] px-3 py-2 mb-4 leading-relaxed">
+          発注管理の「FFE・OSE費用」に、手入力の発注が {manualOrders.length} 件あります（消しません）。FFEの発注と二重になっていないか、確認してください。
+        </div>
+      )}
+      {state && !state.categoryId && <div className="mb-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[13px] px-3 py-2">この案件の予実管理に、「BNS予算」の「FFE・OSE費用」の項目がありません。</div>}
+      {error && <div className="mb-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[13px] px-3 py-2">{error}</div>}
+      {done && <div className="mb-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[13px] px-3 py-2">予実管理へ反映しました。<Link href={`/pjb/${projectId}/budget`} className="underline ml-1">予実管理を開く</Link></div>}
+
+      <div className="flex justify-end gap-2">
+        <button onClick={onClose} disabled={busy} className="px-4 py-2 text-[14px] rounded-lg border border-slate-300 text-slate-700 bg-white">{done ? '閉じる' : 'やめる'}</button>
+        {!done && <button onClick={run} disabled={busy || !state?.categoryId} className="px-4 py-2 text-[14px] rounded-lg bg-blue-600 text-white disabled:opacity-40">{busy ? '反映中…' : '予実管理へ反映する'}</button>}
       </div>
     </Backdrop>
   )

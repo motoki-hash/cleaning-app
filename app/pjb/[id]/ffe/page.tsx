@@ -13,7 +13,7 @@ import {
   internalCsv, investorCsv, downloadText, missingKeys, completeness, guessVendor, MISSING_LABEL,
   type FfeItem, type FfeSettings, type InvestorMode, type MissingKey,
 } from '@/lib/pjb/ffe'
-import { ImportDialog, CopyDialog, TemplateDialog } from './FfeDialogs'
+import { ImportDialog, CopyDialog, TemplateDialog, ReflectDialog } from './FfeDialogs'
 import { toJpegBlob, uploadFfeImage, fetchImageFromUrl } from '@/lib/pjb/ffeImage'
 import type { ProjectStatus } from '@/lib/pjb/types'
 
@@ -361,7 +361,7 @@ export default function FfePage() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [openId])
-  const [dialog, setDialog] = useState<'import' | 'copy' | 'template' | null>(null)
+  const [dialog, setDialog] = useState<'import' | 'copy' | 'template' | 'reflect' | null>(null)
   const [trash, setTrash] = useState<FfeItem | null>(null)
   // 詳細パネルの外側を押したら閉じる（別の画面が前に出ているときは閉じない）
   const overlayOpen = !!zoomId || !!ask || !!dialog || !!trash
@@ -862,6 +862,7 @@ export default function FfePage() {
               {bulkImg || `URLから画像を自動取得（画像なし ${missingImages}件）`}
             </button>
           )}
+          <button onClick={() => setDialog('reflect')} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">予実管理へ反映</button>
           <Link href={`/pjb/${id}/ffe/deliverables`} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">納品物一覧（PDF）</Link>
           <button onClick={exportCsv} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">CSV出力</button>
           <button onClick={() => window.print()} className="text-[13.5px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">印刷／PDF</button>
@@ -1105,6 +1106,7 @@ export default function FfePage() {
         <StatusAsk item={items.find(i => i.id === ask.id)!} status={ask.status} keys={ask.keys} patch={p => patch(ask.id, p)} onClose={() => setAsk(null)} />
       )}
       {dialog === 'import' && <ImportDialog onClose={() => setDialog(null)} onImport={bulkInsert} />}
+      {dialog === 'reflect' && <ReflectDialog projectId={id} items={items} onClose={() => setDialog(null)} />}
       {dialog === 'template' && <TemplateDialog existing={items.length} onClose={() => setDialog(null)} onAdd={list => bulkInsert(list)} />}
       {dialog === 'copy' && <CopyDialog projectId={id} onClose={() => setDialog(null)} onCopied={items => bulkInsert(items)} />}
     </Shell>
